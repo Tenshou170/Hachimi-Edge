@@ -8,7 +8,7 @@ use size::Size;
 use thread_priority::{ThreadBuilderExt, ThreadPriority};
 
 use crate::core::game::Region;
-use super::{gui::SimpleYesNoDialog, hachimi::LocalizedData, http::{self, ureq_config, AsyncRequest}, utils, Error, Gui, Hachimi};
+use super::{gui::{NotificationGuard, SimpleYesNoDialog}, hachimi::LocalizedData, http::{self, ureq_config, AsyncRequest}, utils, Error, Gui, Hachimi};
 use once_cell::sync::Lazy;
 
 #[derive(Deserialize)]
@@ -242,11 +242,16 @@ impl Updater {
         };
         let ld_dir_path = config.localized_data_dir.as_ref().map(|p| hachimi.get_data_path(p));
 
-        if !silent {
+        let checking_notif_id = if !silent {
             if let Some(mutex) = Gui::instance() {
-                mutex.lock().unwrap().show_notification(&t!("notification.checking_for_tl_updates"));
+                Some(mutex.lock().unwrap().show_persistent_notification(&t!("notification.checking_for_tl_updates")))
+            } else {
+                None
             }
-        }
+        } else {
+            None
+        };
+        let _guard = checking_notif_id.map(NotificationGuard);
 
         let cache_path = hachimi.get_data_path(REPO_CACHE_FILENAME);
         let repo_cache = if fs::metadata(&cache_path).is_ok() {
