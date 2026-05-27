@@ -1,5 +1,42 @@
+# Build output
 /build
 /target
+
+# Editor / IDE
 /.vscode
+/.idea
+*.iml
+
+# AI agent files
+GEMINI.md
+CLAUDE.md
+/.gemini
+/.claud/
+/.kiro
+
+
+# Plugins directory
 /plugins
-dump.cs
+
+# Android NDK symlink
+/ndk
+
+# Agent-created binaries / temp files
+/subprocess
+/subprocess.*
+/sys
+
+# Cargo xwin cache
+/.xwin-cache
+
+# Environment / secrets
+.env
+*.pem
+*.key
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

@@ -1,0 +1,30 @@
+[build]
+target = "x86_64-pc-windows-msvc"
+
+[alias]
+# Aliases to make using cargo-xwin easier
+xbuild = "xwin build --release"
+xcheck = "xwin check --release"
+xclippy = "xwin clippy"
+xtest = "xwin test"
+abuild = "build --target aarch64-linux-android --release"
+acheck = "check --target aarch64-linux-android --release"
+nfmt = "+nightly fmt"
+
+[target.aarch64-linux-android]
+linker = "ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
+rustflags = [
+    "-C", "link-args=-static-libstdc++", 
+    "-C", "link-args=-lc++abi",
+    "-C", "link-arg=-z",
+    "-C", "link-arg=max-page-size=16384"
+]
+
+[env]
+# Note: Requires a symbolic link named 'ndk' in the project root pointing to your Android NDK.
+# Example: ln -s /path/to/android-ndk-r27d ndk
+CC_aarch64_linux_android = { value = "ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang", relative = true }
+CXX_aarch64_linux_android = { value = "ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang++", relative = true }
+AR_aarch64_linux_android = { value = "ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar", relative = true }
+BINDGEN_EXTRA_CLANG_ARGS = { value = "--sysroot=ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot", relative = true }
+CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = { value = "ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang", relative = true }

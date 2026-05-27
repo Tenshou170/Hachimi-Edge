@@ -1,6 +1,6 @@
 [package]
 name = "hachimi"
-version = "0.25.4"
+version = "0.25.5"
 edition = "2021"
 
 [lib]
@@ -80,6 +80,7 @@ features = [
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_HiDpi",
     "Win32_UI_Input_Ime",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
@@ -109,3 +110,6 @@ FileDescription = "Game enhancement and translation mod"
 [patch.crates-io]
 dobby-sys = { git = "https://github.com/LeadRDRK/dobby-sys.git", rev = "e005f6abb0db1353b92ff58d50f59112f04dcad4" }
 embed-resource = { git = "https://github.com/nabijaczleweli/rust-embed-resource.git", rev = "e98e9aa28d66b0c2ff43516b41847cac372310dd" }
+egui = { git = "https://github.com/THShafi170/egui.git", rev = "2e6ff9a6c92f10a42037761f65eab267c569d794" }
+egui_extras = { git = "https://github.com/THShafi170/egui.git", rev = "2e6ff9a6c92f10a42037761f65eab267c569d794" }
+egui-directx11 = { git = "https://github.com/Nekomaru-PKU/egui-directx11.git", rev = "903043939a076dc81e122a1c8451755bfb3979c8" }
