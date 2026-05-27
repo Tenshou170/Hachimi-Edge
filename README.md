@@ -43,6 +43,9 @@ Do what you must, but we would respectfully request that you try to label the ga
 # Installation
 Please see the [Getting started](https://hachimi.noccu.art/docs/hachimi/getting-started.html) page.
 
+# Building
+See [BUILDING.md](BUILDING.md) for instructions on how to build Hachimi Edge from source.
+
 # Special thanks
 These projects have been the basis for Hachimi's development; without them, Hachimi would never have existed in its current form:
 

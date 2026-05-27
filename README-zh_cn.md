@@ -43,6 +43,9 @@
 # 安装指南
 请参阅[入门指南](https://hachimi.noccu.art/zh-cn/docs/hachimi/getting-started.html)。
 
+# 构建
+如需从源码构建 Hachimi Edge，请参阅 [BUILDING-zh_cn.md](BUILDING-zh_cn.md)。
+
 # 特别鸣谢
 以下项目为 Hachimi 的开发奠定了重要基础，如果没有它们，Hachimi 不会有今天如此成就：
 
