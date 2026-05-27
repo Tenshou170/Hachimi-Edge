@@ -23,6 +23,8 @@ default: "預設"
 off: "關閉"
 on: "開啟"
 enable: "啟用"
+disabled: "已停用"
+minutes: "分鐘"
 info: "資訊"
 warning: "警告"
 confirm_dialog_title: "確認"
@@ -55,6 +57,7 @@ menu:
   soft_restart: "\uf021 軟重啟"
   open_in_game_browser: "\uf0ac 開啟遊戲內瀏覽器"
   toggle_game_ui: "\uf06e 開啟/關閉遊戲 UI"
+  discord_rpc: "Discord RPC"
 
 notification:
   saved_localize_dump: "保存至 localize_dump.json"
@@ -69,6 +72,10 @@ notification:
   checking_for_updates: "檢查更新"
   no_updates: "無可用的更新。"
   ipc_softreset_exec: "已遠端軟重啟（IPC）。"
+  press_to_set_menu_key: "請在遊戲視窗按下新的按鍵以設為開啟選單按鍵。"
+  menu_open_key_set: "已設置開啟選單按鍵為 %{key}"
+  atlas_workaround_reset: "偵測到 Atlas 檔案更新：已重新套用 Atlas 翻譯修復。"
+  config_error: "設置檔案已損毀，將使用預設值..."
 
 first_time_setup:
   title: "設定精靈"
@@ -79,6 +86,8 @@ first_time_setup:
     您也可以隨時在設置編輯器中更改這些選項。
   translation_repo_heading: "翻譯資料庫"
   select_translation_repo: "選擇一個翻譯資料庫："
+  no_compatible_repo: "沒有與此遊戲版本相容的翻譯資料庫。"
+  skip_translation: "跳過翻譯設定。"
   complete_heading: "全部完成！"
   complete_content: >-
     已設置翻譯資料庫。
@@ -94,6 +103,13 @@ about:
 
 license:
   title: "許可證"
+  gpl_v3_only_notice: "GPL-3.0-only 許可證文本"
+  ofl_fonts_header: "本軟體包含以下字體，遵循 SIL Open Font License 1.1："
+  font_inter: "Inter: Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)"
+  font_font_awesome: "Font Awesome Version 4.7.0: Copyright Dave Gandy (https://fontawesome.com) 2016. All rights reserved."
+  ofl_notice: "SIL OFL 1.1 許可證文本"
+  font_alibaba_header: "阿里巴巴普惠體 3.0"
+  font_alibaba_body: "Copyright (c) 2020-2023 Alibaba (China) Co., Ltd. All rights reserved."
 
 tl_updater:
   title: "更新中"
@@ -107,6 +123,7 @@ config_editor:
   graphics_tab: "\uf03e 圖像"
   gameplay_tab: "\uf11b 遊戲"
   language: "語言"
+  restore_defaults: "還原預設值"
   disable_overlay: "禁用覆蓋層 (GUI)"
   disable_overlay_warning: >-
     此選項會在您重新啟動遊戲後停用 Hachimi 覆蓋層，
@@ -121,9 +138,24 @@ config_editor:
   skip_first_time_setup: "跳過設定精靈"
   lazy_translation_updates: "寬鬆翻譯更新檢查"
   disable_auto_update_check: "禁用自動更新檢查"
+  bg_update_mode: "背景更新模式"
+  bg_update_periodic: "定期（提示）"
+  bg_update_silent: "靜默（自動）"
+  bg_update_interval: "背景更新間隔"
   disable_translations: "禁用翻譯"
   enable_ipc: "啟用 IPC"
   ipc_listen_all: "監聽所有 IPC 地址"
+  notification_tp: "TP 恢復通知"
+  notification_rp: "RP 恢復通知"
+  notification_jobs: "任務完成通知"
+  taskbar_show_progress_on_download: "下載時顯示工作列進度"
+  taskbar_show_progress_on_connecting: "連線時顯示工作列進度"
+  dump_msgpack: "導出 MsgPack 回應"
+  dump_msgpack_request: "導出 MsgPack 請求"
+  msgpack_notifier: "啟用 MsgPack 通知器"
+  msgpack_notifier_request: "在通知器中包含請求"
+  msgpack_notifier_host: "通知器主機 URL"
+  msgpack_notifier_print_error: "將 HTTP 錯誤輸出至主控台"
   auto_translate_stories: "自動翻譯劇情"
   auto_tl_warning: >-
     注意：此功能無法獨立運行，需要外部設置。
@@ -156,6 +188,14 @@ config_editor:
   live_theater_allow_same_chara: "演唱會劇場中\n允許設置相同角色"
   physics_update_mode: "物理運算模式"
   disable_skill_name_translation: "停用技能名稱翻譯"
+  cyspring_mono_uncap_frame_scale: "CySpring Mono 幀率縮放解鎖"
+  cyspring_disable_native: "強制 CySpring Mono 路徑（停用原生插件）"
+  unlock_live_chara: "解鎖 Live 劇場角色/歌曲"
+  live_slider_always_show: "始終顯示 Live 進度條"
+  live_playback_loop: "循環播放 Live 演出"
+  champions_live_show_text: "覆蓋冠軍賽 Live 文字"
+  champions_live_resource_id: "冠軍賽標題"
+  champions_live_year: "冠軍賽年份"
   hide_ingame_ui_hotkey: "隱藏遊戲內 UI 快捷鍵"
   hide_ingame_ui_hotkey_info: >-
     此選項允許使用快捷鍵切換遊戲內介面（UI）的顯示。
@@ -170,6 +210,38 @@ config_editor:
   skill_info_dialog: "自訂技能資訊視窗"
   homescreen_bgseason: "主介面背景季節"
   shadow_resolution: "陰影解析度"
+  captions: "字幕"
+  caption_font_size: "字體大小"
+  caption_bg_alpha: "背景不透明度"
+  caption_pos_x: "位置 X"
+  caption_pos_y: "位置 Y"
+  caption_color: "文字顏色"
+  caption_outline_color: "描邊顏色"
+  caption_outline_size: "描邊大小"
+  enable_keyboard_shortcuts: "啟用遊戲內鍵盤快捷鍵"
+  discord_rpc: "Discord RPC"
+  enable_smtc: "啟用 Windows 媒體控制"
+  msaa: "MSAA"
+  advanced_tab: "\uf0ad 進階"
+  advanced_settings_heading: "進階"
+  experimental_settings_heading: "實驗性"
+  developer_settings_heading: "開發者"
+  text_debug: "文字除錯模式"
+  text_log: "記錄已處理的文字"
+  text_property_dump: "匯出 UI 屬性"
+  text_localize_dump: "匯出本地化字串"
+  text_position_debug: "記錄位置偏移"
+  text_path_debug: "記錄 UI 路徑"
+  sugoi_url: "自動翻譯伺服器 URL"
+  hide_now_loading: "隱藏載入畫面"
+  replace_to_builtin_font: "替換為內建字型"
+  custom_title_name: "自訂視窗標題"
+  msgpack_notifier_connection_timeout_ms: "通知器連線逾時（毫秒）"
+  hide_ingame_ui_hotkey_bind: "隱藏 UI 快捷鍵"
+  ui_loading_show_orientation_guide: "載入時顯示方向引導"
+  full_screen_res: "自訂全螢幕解析度"
+  localized_data_dir: "本地化資料目錄"
+  hook_libc_dlopen: "強制 libc dlopen 掛鉤（Waydroid/模擬器）"
 
 theme_editor:
   title: "界面主題編輯器"
@@ -199,3 +271,55 @@ update_prompt_dialog:
 updating_dialog:
   title: "更新中"
   content: "正在下載更新，遊戲將會在稍後重啟…"
+
+steam_overlay_conflict_dialog:
+  title: "注意"
+  content: >-
+    啟用 Hachimi GUI 時，遊戲內購功能可能無法正常運作。
+    如果 Steam 覆蓋層已正常顯示且您可以進行購買，請忽略此訊息並按「否」。
+    如果無法進行購買，請按「是」以暫時停用 Hachimi GUI 並關閉遊戲。
+    下次啟動遊戲時，Hachimi GUI 將被停用，此時您可以正常進行購買。
+    購買完成後，請重新啟動遊戲以重新啟用 Hachimi GUI。
+key_names:
+  left: "左方向鍵"
+  right: "右方向鍵"
+  up: "上方向鍵"
+  down: "下方向鍵"
+  insert: "Insert"
+  delete: "Delete"
+  home: "Home"
+  end: "End"
+  page_up: "Page Up"
+  page_down: "Page Down"
+  escape: "Escape"
+  tab: "Tab"
+  enter: "Enter"
+  space: "空格"
+  backspace: "退格"
+  clear: "清除"
+  pause: "暫停"
+  caps_lock: "Caps Lock"
+  scroll_lock: "Scroll Lock"
+  num_lock: "Num Lock"
+  print_screen: "Print Screen"
+  left_win: "左 Windows 鍵"
+  right_win: "右 Windows 鍵"
+  apps: "選單鍵"
+  alt: "Alt"
+  ctrl: "Ctrl"
+  shift: "Shift"
+  numpad_0: "小鍵盤 0"
+  numpad_1: "小鍵盤 1"
+  numpad_2: "小鍵盤 2"
+  numpad_3: "小鍵盤 3"
+  numpad_4: "小鍵盤 4"
+  numpad_5: "小鍵盤 5"
+  numpad_6: "小鍵盤 6"
+  numpad_7: "小鍵盤 7"
+  numpad_8: "小鍵盤 8"
+  numpad_9: "小鍵盤 9"
+  numpad_add: "小鍵盤 +"
+  numpad_subtract: "小鍵盤 -"
+  numpad_multiply: "小鍵盤 *"
+  numpad_divide: "小鍵盤 /"
+  numpad_decimal: "小鍵盤 ."
