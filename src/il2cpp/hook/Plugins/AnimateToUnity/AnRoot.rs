@@ -7,13 +7,13 @@ use widestring::Utf16Str;
 use crate::{
     core::{ext::Utf16StringExt, hachimi::AssetInfo, Hachimi},
     il2cpp::{
-        api::{il2cpp_class_get_type, il2cpp_type_get_object}, ext::{Il2CppStringExt, StringExt}, hook::{Plugins::AnimateToUnity::AnKeyParameter, UnityEngine_AssetBundleModule::AssetBundle, UnityEngine_CoreModule::Object}, symbols::{IList, get_field_from_name, get_field_object_value}, types::*, utils::replace_texture_with_diff
+        api::{il2cpp_class_get_type, il2cpp_type_get_object}, ext::{Il2CppStringExt, StringExt}, hook::{UnityEngine_AssetBundleModule::AssetBundle, UnityEngine_CoreModule::Object}, symbols::{get_field_from_name, get_field_object_value, IList}, types::*, utils::replace_texture_with_diff
     }
 };
 
 use super::{
-    AnMeshInfoParameterGroup, AnMeshParameter, AnMeshParameterGroup, AnMotionParameter, AnMotionParameterGroup,
-    AnObjectParameterBase, AnRootParameter, AnTextParameter
+    AnKeyParameter, AnMeshInfoParameterGroup, AnMeshParameter, AnMeshParameterGroup, AnMotionParameter,
+    AnMotionParameterGroup, AnObjectParameterBase, AnRootParameter, AnTextParameter
 };
 
 static mut TYPE_OBJECT: *mut Il2CppObject = 0 as _;
@@ -49,14 +49,22 @@ struct AnMotionParameterData {
     #[serde(default)]
     text_param_list: FnvHashMap<i32, AnTextParameterData>,
     #[serde(default)]
-    plane_param_list: FnvHashMap<i32, AnPlaneParameterData>
+    plane_param_list: FnvHashMap<i32, AnPlaneParameterData>,
+    #[serde(default)]
+    object_param_list: FnvHashMap<i32, AnObjectParameterData>
 }
 
 #[derive(Deserialize)]
 struct AnObjectParameterBaseData {
     position_offset: Option<Vector3_t>,
     scale: Option<Vector3_t>,
-    anim_pos_offset_adj: Option<Vector2_t>
+    rotate: Option<Vector3_t>,
+    #[serde(default)]
+    scale_key: Option<Vector3_t>,
+    #[serde(default)]
+    position_offset_key: Option<Vector3_t>,
+    #[serde(default)]
+    rotate_key: Option<Vector3_t>
 }
 
 #[derive(Deserialize)]
@@ -73,6 +81,12 @@ struct AnPlaneParameterData {
     base: AnObjectParameterBaseData
 }
 
+#[derive(Deserialize)]
+struct AnObjectParameterData {
+    #[serde(flatten)]
+    base: AnObjectParameterBaseData
+}
+
 pub fn on_LoadAsset(bundle: *mut Il2CppObject, this: *mut Il2CppObject, name: &Utf16Str) {
     // SAFETY: The asset path has been checked prior to this being called in GameObject::on_LoadAsset
     let base_path = name[AssetBundle::ASSET_PATH_PREFIX.len()..].path_basename();
@@ -84,6 +98,52 @@ pub fn on_LoadAsset(bundle: *mut Il2CppObject, this: *mut Il2CppObject, name: &U
     }
 
     patch_asset(this, asset_info.data.as_ref());
+}
+
+fn apply_key_multiply(
+    param: *mut Il2CppObject,
+    get_key_param_list: fn(*mut Il2CppObject) -> *mut Il2CppObject,
+    multiply: &Vector3_t
+) {
+    let Some(key_param_list) = IList::new(get_key_param_list(param)) else { return; };
+
+    let factors = [multiply.x, multiply.y, multiply.z];
+    for (axis, factor) in factors.iter().enumerate() {
+        if *factor == 1.0 { continue; }
+
+        let Some(key_param) = key_param_list.get(axis as i32) else { continue; };
+        let Some(key_list) = IList::<Vector2_t>::new(AnKeyParameter::get__keyList(key_param)) else { continue; };
+
+        for i in 0..key_list.count() {
+            if let Some(mut key) = key_list.get(i) {
+                key.y *= factor;
+                key_list.set(i, key);
+            }
+        }
+    }
+}
+
+fn apply_key_add(
+    param: *mut Il2CppObject,
+    get_key_param_list: fn(*mut Il2CppObject) -> *mut Il2CppObject,
+    add: &Vector3_t
+) {
+    let Some(key_param_list) = IList::new(get_key_param_list(param)) else { return; };
+
+    let offsets = [add.x, add.y, add.z];
+    for (axis, offset) in offsets.iter().enumerate() {
+        if *offset == 0.0 { continue; }
+
+        let Some(key_param) = key_param_list.get(axis as i32) else { continue; };
+        let Some(key_list) = IList::<Vector2_t>::new(AnKeyParameter::get__keyList(key_param)) else { continue; };
+
+        for i in 0..key_list.count() {
+            if let Some(mut key) = key_list.get(i) {
+                key.y += offset;
+                key_list.set(i, key);
+            }
+        }
+    }
 }
 
 pub fn patch_asset(this: *mut Il2CppObject, data_opt: Option<&AnRootData>) {
@@ -143,7 +203,7 @@ pub fn patch_asset(this: *mut Il2CppObject, data_opt: Option<&AnRootData>) {
 
         for (i, motion_param_data) in data.motion_parameter_list.iter() {
             // quick escape!!!11
-            if motion_param_data.text_param_list.is_empty() && motion_param_data.plane_param_list.is_empty() {
+            if motion_param_data.text_param_list.is_empty() && motion_param_data.plane_param_list.is_empty() && motion_param_data.object_param_list.is_empty() {
                 continue;
             }
 
@@ -175,6 +235,22 @@ pub fn patch_asset(this: *mut Il2CppObject, data_opt: Option<&AnRootData>) {
                     if let Some(scale) = &text_param_data.base.scale {
                         AnObjectParameterBase::set__scale(text_param, scale);
                     }
+
+                    if let Some(rotate) = &text_param_data.base.rotate {
+                        AnObjectParameterBase::set__rotate(text_param, rotate);
+                    }
+
+                    if let Some(multiply) = &text_param_data.base.scale_key {
+                        apply_key_multiply(text_param, AnObjectParameterBase::get__scaleKeyParamList, multiply);
+                    }
+
+                    if let Some(add) = &text_param_data.base.position_offset_key {
+                        apply_key_add(text_param, AnObjectParameterBase::get__positionOffsetKeyParamList, add);
+                    }
+
+                    if let Some(add) = &text_param_data.base.rotate_key {
+                        apply_key_add(text_param, AnObjectParameterBase::get__rotateKeyParamList, add);
+                    }
                 }
             }
 
@@ -193,34 +269,63 @@ pub fn patch_asset(this: *mut Il2CppObject, data_opt: Option<&AnRootData>) {
                     if let Some(position_offset) = &plane_param_data.base.position_offset {
                         AnObjectParameterBase::set__positionOffset(plane_param, position_offset);
                     }
+
                     if let Some(scale) = &plane_param_data.base.scale {
                         AnObjectParameterBase::set__scale(plane_param, scale);
                     }
-                    if let Some(anim_pos_offset) = &plane_param_data.base.anim_pos_offset_adj {
-                        // Count should be 3 if present, representing XYZ axes. We ignore Z.
-                        if let Some(pos_offset_keyparam_list) = IList::new(AnObjectParameterBase::get__positionOffsetKeyParamList(plane_param)) {
-                            if pos_offset_keyparam_list.count() > 1 {
-                                let x_axis_key_param = pos_offset_keyparam_list.get(0).unwrap();
-                                if let Some(x_axis_key_list) = IList::<Vector2_t>::new(AnKeyParameter::get__keyList(x_axis_key_param)) {
-                                    for k in 0..x_axis_key_list.count() {
-                                        let mut key_values = x_axis_key_list.get(k).unwrap();
-                                        key_values.y += anim_pos_offset.x;
-                                        x_axis_key_list.set(k, key_values);
-                                    }
-                                }
-                                let y_axis_key_param = pos_offset_keyparam_list.get(1).unwrap();
-                                if let Some(y_axis_key_list) = IList::<Vector2_t>::new(AnKeyParameter::get__keyList(y_axis_key_param)) {
-                                    for k in 0..y_axis_key_list.count() {
-                                        let mut key_values = y_axis_key_list.get(k).unwrap();
-                                        key_values.y += anim_pos_offset.y;
-                                        y_axis_key_list.set(k, key_values);
-                                    }
-                                }
-                            }
-                        }
-                        else {
-                            warn!("Failed to get pos_offset_keyparams for plane param {} of motion param {}", *j, *i);
-                        }
+
+                    if let Some(rotate) = &plane_param_data.base.rotate {
+                        AnObjectParameterBase::set__rotate(plane_param, rotate);
+                    }
+
+                    if let Some(multiply) = &plane_param_data.base.scale_key {
+                        apply_key_multiply(plane_param, AnObjectParameterBase::get__scaleKeyParamList, multiply);
+                    }
+
+                    if let Some(add) = &plane_param_data.base.position_offset_key {
+                        apply_key_add(plane_param, AnObjectParameterBase::get__positionOffsetKeyParamList, add);
+                    }
+
+                    if let Some(add) = &plane_param_data.base.rotate_key {
+                        apply_key_add(plane_param, AnObjectParameterBase::get__rotateKeyParamList, add);
+                    }
+                }
+            }
+
+            if !motion_param_data.object_param_list.is_empty() {
+                let Some(object_param_list) = IList::new(AnMotionParameter::get__objectParamList(motion_param)) else {
+                    warn!("Failed to get object_param_list for motion param {}", *i);
+                    continue;
+                };
+
+                for (j, object_param_data) in motion_param_data.object_param_list.iter() {
+                    let Some(object_param) = object_param_list.get(*j) else {
+                        warn!("object param {} of motion param {} out of range (max {})", *j, *i, object_param_list.count());
+                        continue;
+                    };
+
+                    if let Some(position_offset) = &object_param_data.base.position_offset {
+                        AnObjectParameterBase::set__positionOffset(object_param, position_offset);
+                    }
+
+                    if let Some(scale) = &object_param_data.base.scale {
+                        AnObjectParameterBase::set__scale(object_param, scale);
+                    }
+
+                    if let Some(rotate) = &object_param_data.base.rotate {
+                        AnObjectParameterBase::set__rotate(object_param, rotate);
+                    }
+
+                    if let Some(multiply) = &object_param_data.base.scale_key {
+                        apply_key_multiply(object_param, AnObjectParameterBase::get__scaleKeyParamList, multiply);
+                    }
+
+                    if let Some(add) = &object_param_data.base.position_offset_key {
+                        apply_key_add(object_param, AnObjectParameterBase::get__positionOffsetKeyParamList, add);
+                    }
+
+                    if let Some(add) = &object_param_data.base.rotate_key {
+                        apply_key_add(object_param, AnObjectParameterBase::get__rotateKeyParamList, add);
                     }
                 }
             }

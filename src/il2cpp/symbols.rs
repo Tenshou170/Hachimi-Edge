@@ -497,6 +497,10 @@ impl Thread {
             std::mem::transmute(get_exec_ctx_addr)
         };
         let exec_ctx = get_exec_ctx(self.0 as *mut Il2CppObject);
+        // exec_ctx can be null on native threads with no managed execution context
+        if exec_ctx.is_null() {
+            return null_mut();
+        }
         let exec_ctx_class = unsafe { (*exec_ctx).klass() };
 
         let sync_ctx_field = il2cpp_class_get_field_from_name(exec_ctx_class, c"_syncContext".as_ptr());
@@ -515,13 +519,27 @@ impl Thread {
         }
         let sync_ctx_class = unsafe { (*sync_ctx).klass() };
 
+        let post_addr = get_method_addr_cached(sync_ctx_class, c"Post", 2);
+        if post_addr == 0 {
+            error!("SynchronizationContext.Post not found, callback not scheduled");
+            return;
+        }
         let sync_ctx_post: extern "C" fn(*mut Il2CppObject, *mut Il2CppDelegate, *mut Il2CppObject) = unsafe {
-            std::mem::transmute(get_method_addr_cached(sync_ctx_class, c"Post", 2))
+            std::mem::transmute(post_addr)
         };
 
-        let mscorlib = get_assembly_image(c"mscorlib.dll").expect("mscorlib");
-        let delegate_class = get_class(mscorlib, c"System.Threading", c"SendOrPostCallback").expect("SendOrPostCallback");
-        let delegate = create_delegate(delegate_class, 1, callback).unwrap();
+        let mscorlib = match get_assembly_image(c"mscorlib.dll") {
+            Ok(v) => v,
+            Err(_) => { error!("mscorlib not found, callback not scheduled"); return; }
+        };
+        let delegate_class = match get_class(mscorlib, c"System.Threading", c"SendOrPostCallback") {
+            Ok(v) => v,
+            Err(_) => { error!("SendOrPostCallback not found, callback not scheduled"); return; }
+        };
+        let delegate = match create_delegate(delegate_class, 1, callback) {
+            Some(v) => v,
+            None => { error!("create_delegate failed, callback not scheduled"); return; }
+        };
 
         sync_ctx_post(sync_ctx, delegate, null_mut());
     }

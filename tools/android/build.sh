@@ -26,7 +26,7 @@ TOOLCHAIN_DIR="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/$OS-x86_64"
 SYSROOT="$TOOLCHAIN_DIR/sysroot"
 
 export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$SYSROOT"
-export RUSTFLAGS="-C link-args=-static-libstdc++ -C link-args=-lc++abi"
+export RUSTFLAGS="-C link-args=-static-libstdc++ -C link-args=-lc++abi -C link-arg=-z -C link-arg=max-page-size=16384"
 
 export CC_aarch64_linux_android="$TOOLCHAIN_DIR/bin/aarch64-linux-android24-clang"
 export CXX_aarch64_linux_android="$TOOLCHAIN_DIR/bin/aarch64-linux-android24-clang++"

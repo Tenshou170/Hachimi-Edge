@@ -11,7 +11,8 @@ static DISCORD_CLIENT: Lazy<Mutex<Option<DiscordIpcClient>>> = Lazy::new(|| {
 });
 
 pub fn start_rpc() -> Result<(), Error> {
-    let mut client_guard = DISCORD_CLIENT.lock().unwrap();
+    // --- W-13 fix: recover from poison ---
+    let mut client_guard = DISCORD_CLIENT.lock().unwrap_or_else(|e| e.into_inner());
     if client_guard.is_some() {
         return Ok(());
     }
@@ -37,7 +38,8 @@ pub fn start_rpc() -> Result<(), Error> {
 }
 
 pub fn stop_rpc() -> Result<(), Error> {
-    let mut client_guard = DISCORD_CLIENT.lock().unwrap();
+    // --- W-13 fix: recover from poison ---
+    let mut client_guard = DISCORD_CLIENT.lock().unwrap_or_else(|e| e.into_inner());
     
     if let Some(mut client) = client_guard.take() {
         info!("Stopping Discord RPC");

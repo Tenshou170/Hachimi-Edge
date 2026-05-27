@@ -26,8 +26,8 @@ extern "C" fn dlopen(filename: *const c_char, flags: c_int) -> *mut c_void {
         return handle;
     }
 
-    let filename_str = unsafe { CStr::from_ptr(filename).to_str().unwrap() };
-    if hachimi.on_dlopen(filename_str, handle as usize) {
+    let filename_str = unsafe { CStr::from_ptr(filename).to_string_lossy() };
+    if hachimi.on_dlopen(&filename_str, handle as usize) {
         hachimi.interceptor.unhook(dlopen as usize);
     }
 
@@ -46,8 +46,8 @@ extern "C" fn do_dlopen(filename: *const c_char, flags: c_int, extinfo: *const c
         return handle;
     }
 
-    let filename_str = unsafe { CStr::from_ptr(filename).to_str().unwrap() };
-    if hachimi.on_dlopen(filename_str, handle as usize) {
+    let filename_str = unsafe { CStr::from_ptr(filename).to_string_lossy() };
+    if hachimi.on_dlopen(&filename_str, handle as usize) {
         hachimi.interceptor.unhook(do_dlopen as usize);
     }
 
@@ -64,7 +64,8 @@ extern "C" fn JNINativeInterface_RegisterNatives(env: JNIEnv, class: jclass, met
 
     let methods = unsafe { std::slice::from_raw_parts(methods_, count as usize) };
     for method in methods {
-        let name = unsafe { CStr::from_ptr(method.name).to_str().unwrap() };
+        if method.name.is_null() { continue; }
+        let name = unsafe { CStr::from_ptr(method.name).to_string_lossy() };
         if name == "nativeInjectEvent" {
             info!("Got nativeInjectEvent address");
             unsafe { input_hook::NATIVE_INJECT_EVENT_ADDR = method.fnPtr as usize; };

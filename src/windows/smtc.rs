@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicU32, Ordering};
 use std::os::windows::ffi::OsStrExt;
 use once_cell::sync::Lazy;
 use windows::{
@@ -30,23 +30,23 @@ use crate::{
 };
 
 static SMTC_INSTANCE: Lazy<Mutex<Option<SystemMediaTransportControls>>> = Lazy::new(|| Mutex::new(None));
-static mut CURRENT_SCENE_HANDLE: i32 = -1;
-static mut CURRENT_MUSIC_ID: i32 = -1;
+// --- W-7 fix: replace all static mut with atomics ---
+static CURRENT_SCENE_HANDLE: AtomicI32 = AtomicI32::new(-1);
+static CURRENT_MUSIC_ID: AtomicI32 = AtomicI32::new(-1);
 static PENDING_BUTTON: AtomicU32 = AtomicU32::new(u32::MAX);
-static mut IS_LIVE_SCENE: bool = false;
-static mut IS_HOME_SCENE: bool = false;
-
-static mut TASKBAR_HWND: HWND = HWND(std::ptr::null_mut());
-
-static mut LAST_STATUS: MediaPlaybackStatus = MediaPlaybackStatus::Closed;
-static mut LAST_HOME_MUSIC_ID: i32 = 0;
+static IS_LIVE_SCENE: AtomicBool = AtomicBool::new(false);
+static IS_HOME_SCENE: AtomicBool = AtomicBool::new(false);
+// MediaPlaybackStatus is i32; store its raw value
+static LAST_STATUS: AtomicI32 = AtomicI32::new(MediaPlaybackStatus::Closed.0);
+static LAST_HOME_MUSIC_ID: AtomicI32 = AtomicI32::new(0);
+// HWND stored as isize
+static TASKBAR_HWND: AtomicIsize = AtomicIsize::new(0);
 
 fn set_playback_status(smtc: &SystemMediaTransportControls, status: MediaPlaybackStatus) {
-    unsafe {
-        if LAST_STATUS != status {
-            let _ = smtc.SetPlaybackStatus(status);
-            LAST_STATUS = status;
-        }
+    // --- W-7 fix: atomic compare-and-swap instead of static mut read/write ---
+    if LAST_STATUS.load(Ordering::Relaxed) != status.0 {
+        let _ = smtc.SetPlaybackStatus(status);
+        LAST_STATUS.store(status.0, Ordering::Relaxed);
     }
 }
 
@@ -54,9 +54,7 @@ pub fn init(hwnd: HWND) {
     if !Hachimi::instance().config.load().windows.enable_smtc {
         return;
     }
-    unsafe {
-        TASKBAR_HWND = hwnd;
-    }
+    TASKBAR_HWND.store(hwnd.0 as isize, Ordering::Release);
 }
 
 unsafe fn create_shortcut(name: &str) {
@@ -64,12 +62,24 @@ unsafe fn create_shortcut(name: &str) {
         let exe_path = crate::windows::utils::get_exec_path();
         let mut exe_path_u16: Vec<u16> = exe_path.as_os_str().encode_wide().collect();
         exe_path_u16.push(0);
-        shell_link.SetPath(PCWSTR::from_raw(exe_path_u16.as_ptr())).unwrap();
+        // --- SMTC-1 fix: COM SetPath/SetWorkingDirectory failures are non-fatal;
+        // the shortcut is cosmetic — SMTC still works without it. ---
+        if let Err(e) = shell_link.SetPath(PCWSTR::from_raw(exe_path_u16.as_ptr())) {
+            warn!("[smtc] create_shortcut: SetPath failed: {}", e);
+        }
 
-        let work_dir = exe_path.parent().unwrap();
+        let work_dir = match exe_path.parent() {
+            Some(p) => p.to_owned(),
+            None => {
+                warn!("[smtc] create_shortcut: exe path has no parent directory");
+                return;
+            }
+        };
         let mut work_dir_u16: Vec<u16> = work_dir.as_os_str().encode_wide().collect();
         work_dir_u16.push(0);
-        shell_link.SetWorkingDirectory(PCWSTR::from_raw(work_dir_u16.as_ptr())).unwrap();
+        if let Err(e) = shell_link.SetWorkingDirectory(PCWSTR::from_raw(work_dir_u16.as_ptr())) {
+            warn!("[smtc] create_shortcut: SetWorkingDirectory failed: {}", e);
+        }
 
         if let Ok(property_store) = shell_link.cast::<windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore>() {
             let pkey = windows::Win32::Foundation::PROPERTYKEY {
@@ -110,15 +120,28 @@ unsafe fn create_shortcut(name: &str) {
 
         if let Ok(persist_file) = shell_link.cast::<IPersistFile>() {
             if let Ok(pwstr) = SHGetKnownFolderPath(&FOLDERID_Programs, KF_FLAG_DEFAULT, None) {
-                let mut lnk_path = pwstr.to_string().unwrap();
+                // --- SMTC-2 fix: PWSTR::to_string() can only fail if the wide
+                // string contains invalid UTF-16; treat that as non-fatal. ---
+                let lnk_dir = match pwstr.to_string() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        warn!("[smtc] create_shortcut: failed to decode Programs folder path: {}", e);
+                        windows::Win32::System::Com::CoTaskMemFree(Some(pwstr.as_ptr() as _));
+                        return;
+                    }
+                };
                 windows::Win32::System::Com::CoTaskMemFree(Some(pwstr.as_ptr() as _));
-                lnk_path.push_str(&format!("\\{}.lnk", name));
+                let lnk_path = format!("{}\\{}.lnk", lnk_dir, name);
                 if std::path::Path::new(&lnk_path).exists() {
                     let _ = std::fs::remove_file(&lnk_path);
                 }
                 let mut wide_path: Vec<u16> = lnk_path.encode_utf16().collect();
                 wide_path.push(0);
-                persist_file.Save(PCWSTR::from_raw(wide_path.as_ptr()), true).unwrap();
+                // --- SMTC-3 fix: Save failure is non-fatal; SMTC works without
+                // the shortcut, it just won't show the correct app name. ---
+                if let Err(e) = persist_file.Save(PCWSTR::from_raw(wide_path.as_ptr()), true) {
+                    warn!("[smtc] create_shortcut: Save failed: {}", e);
+                }
             }
         }
     }
@@ -128,10 +151,14 @@ pub fn on_update() {
     if !crate::core::Hachimi::instance().config.load().windows.enable_smtc {
         return;
     }
-    let mut smtc_guard = SMTC_INSTANCE.lock().unwrap();
+    // --- W-16 fix: recover from poison instead of unwrap ---
+    let mut smtc_guard = match SMTC_INSTANCE.lock() {
+        Ok(g) => g,
+        Err(e) => e.into_inner(),
+    };
     if smtc_guard.is_none() {
         unsafe {
-            let hwnd = TASKBAR_HWND;
+            let hwnd = HWND(TASKBAR_HWND.load(Ordering::Relaxed) as *mut _);
             if hwnd.0.is_null() { return; }
 
             let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_MULTITHREADED);
@@ -165,18 +192,17 @@ pub fn on_update() {
     let smtc = if let Some(s) = smtc_guard.as_ref() { s } else { return; };
 
     let scene = SceneManager::GetActiveScene();
-    let current_scene_handle = unsafe { CURRENT_SCENE_HANDLE };
+    // --- W-7 fix: atomic load/store ---
+    let current_scene_handle = CURRENT_SCENE_HANDLE.load(Ordering::Relaxed);
 
     if scene.handle != current_scene_handle {
-        unsafe { CURRENT_SCENE_HANDLE = scene.handle; }
+        CURRENT_SCENE_HANDLE.store(scene.handle, Ordering::Relaxed);
 
         let name_ptr = Scene::GetNameInternal(scene.handle);
         let name = if name_ptr.is_null() { String::new() } else { unsafe { (*name_ptr).as_utf16str().to_string() } };
 
-        unsafe {
-            IS_LIVE_SCENE = name == "Live";
-            IS_HOME_SCENE = name == "Home";
-        }
+        IS_LIVE_SCENE.store(name == "Live", Ordering::Relaxed);
+        IS_HOME_SCENE.store(name == "Home", Ordering::Relaxed);
 
         if name == "Live" {
             let _ = smtc.SetIsEnabled(true);
@@ -197,9 +223,9 @@ pub fn on_update() {
         }
     }
 
-    if unsafe { IS_LIVE_SCENE } {
+    if IS_LIVE_SCENE.load(Ordering::Relaxed) {
         update_live_playback(smtc);
-    } else if unsafe { IS_HOME_SCENE } {
+    } else if IS_HOME_SCENE.load(Ordering::Relaxed) {
         update_metadata_home(smtc);
     }
 }
@@ -318,15 +344,14 @@ fn generate_thumbnail_and_update(texture: *mut Il2CppObject, smtc: &SystemMediaT
 fn update_metadata(smtc: &SystemMediaTransportControls, music_id: i32) {
     if music_id == 0 { return; }
 
-    unsafe {
-        if CURRENT_MUSIC_ID != music_id {
-            if let Ok(updater) = smtc.DisplayUpdater() {
-                let _ = updater.SetThumbnail(None);
-                let _ = updater.Update();
-            }
+    // --- W-7 fix: atomic compare ---
+    if CURRENT_MUSIC_ID.load(Ordering::Relaxed) != music_id {
+        if let Ok(updater) = smtc.DisplayUpdater() {
+            let _ = updater.SetThumbnail(None);
+            let _ = updater.Update();
         }
-        CURRENT_MUSIC_ID = music_id;
     }
+    CURRENT_MUSIC_ID.store(music_id, Ordering::Relaxed);
 
     let _ = smtc.SetIsPlayEnabled(true);
     let _ = smtc.SetIsPauseEnabled(true);
@@ -400,7 +425,7 @@ fn update_metadata_home(smtc: &SystemMediaTransportControls) {
                                             let music_id_field = crate::il2cpp::symbols::get_field_from_name(unsafe { (*music_data).klass() }, c"MusicId");
                                             if !music_id_field.is_null() {
                                                 let music_id = crate::il2cpp::symbols::get_field_value::<i32>(music_data, music_id_field);
-                                                unsafe { LAST_HOME_MUSIC_ID = music_id; }
+                                                LAST_HOME_MUSIC_ID.store(music_id, Ordering::Relaxed);
                                                 update_metadata(smtc, music_id);
                                             }
                                         }
@@ -444,14 +469,13 @@ fn update_metadata_home(smtc: &SystemMediaTransportControls) {
         let music_id = get_music_id(jukebox);
 
         if music_id != 0 {
-            unsafe { LAST_HOME_MUSIC_ID = music_id; }
+            LAST_HOME_MUSIC_ID.store(music_id, Ordering::Relaxed);
             update_metadata(smtc, music_id);
             set_playback_status(smtc, MediaPlaybackStatus::Playing);
         } else {
-            unsafe {
-                if LAST_HOME_MUSIC_ID != 0 {
-                    update_metadata(smtc, LAST_HOME_MUSIC_ID);
-                }
+            let last = LAST_HOME_MUSIC_ID.load(Ordering::Relaxed);
+            if last != 0 {
+                update_metadata(smtc, last);
             }
             set_playback_status(smtc, MediaPlaybackStatus::Paused);
         }
@@ -551,7 +575,10 @@ fn get_current_hub_view_child_controller() -> *mut Il2CppObject {
 fn handle_button_pressed(args: &SystemMediaTransportControlsButtonPressedEventArgs) {
     if let Ok(button) = args.Button() {
         PENDING_BUTTON.store(button.0 as u32, Ordering::Relaxed);
-        crate::il2cpp::symbols::Thread::main_thread().schedule(move || {
+        // --- W-7/W-9 fix: avoid .expect() inside Thread::main_thread() ---
+        let threads = crate::il2cpp::symbols::Thread::attached_threads();
+        if let Some(main) = threads.first() {
+            main.schedule(move || {
             let button_val = PENDING_BUTTON.swap(u32::MAX, Ordering::Relaxed);
             if button_val == u32::MAX { return; }
             let button = SystemMediaTransportControlsButton(button_val as i32);
@@ -682,5 +709,6 @@ fn handle_button_pressed(args: &SystemMediaTransportControlsButtonPressedEventAr
                 }
             }
         });
+        } // if let Some(main)
     }
 }

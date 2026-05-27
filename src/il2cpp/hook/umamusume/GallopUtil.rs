@@ -1,4 +1,6 @@
-use crate::{core::{game::Region, utils, Hachimi}, il2cpp::{symbols::get_method_addr, types::*}};
+use std::sync::atomic::Ordering;
+
+use crate::{core::{game::Region, utils, Hachimi}, il2cpp::{sql::{IS_SYSTEM_TEXT_QUERY, TDQ_IS_SKILL_LEARNING_QUERY}, symbols::get_method_addr, types::*}};
 
 type LineHeadWrapCommonFnJP = extern "C" fn(
     s: *mut Il2CppString, line_char_count: i32, handling_type: i32, is_match_delegate: *mut Il2CppDelegate
@@ -6,8 +8,12 @@ type LineHeadWrapCommonFnJP = extern "C" fn(
 extern "C" fn LineHeadWrapCommonJP(
     s: *mut Il2CppString, line_char_count: i32, handling_type: i32, is_match_delegate: *mut Il2CppDelegate
 ) -> *mut Il2CppString {
-    // Don't wrap prewrapped text.
-    if utils::game_str_has_newline(s) {
+    // Skip wrapping when called from a system text or skill learning context —
+    // those callers handle their own formatting.
+    if TDQ_IS_SKILL_LEARNING_QUERY.load(Ordering::Relaxed)
+        || IS_SYSTEM_TEXT_QUERY.load(Ordering::Relaxed)
+        || utils::game_str_has_newline(s)
+    {
         return s;
     }
 
@@ -23,9 +29,12 @@ type LineHeadWrapCommonFnGlobal = extern "C" fn(
 extern "C" fn LineHeadWrapCommonGlobal(
     s: *mut Il2CppString, line_char_count: i32, is_match_delegate: *mut Il2CppDelegate
 ) -> *mut Il2CppString {
-    if utils::game_str_has_newline(s) {
-        // assume prewrapped, let the game handle it
-        return get_orig_fn!(LineHeadWrapCommonGlobal, LineHeadWrapCommonFnGlobal)(s, line_char_count, is_match_delegate);
+    if TDQ_IS_SKILL_LEARNING_QUERY.load(Ordering::Relaxed)
+        || IS_SYSTEM_TEXT_QUERY.load(Ordering::Relaxed)
+        || utils::game_str_has_newline(s)
+    {
+        // Prewrapped or system text — let the game handle it.
+        return s;
     }
 
     if let Some(wrapped) = utils::wrap_text_il2cpp(s, line_char_count) {
@@ -40,6 +49,11 @@ type LineHeadWrapCommonWithColorTagFn = extern "C" fn(
 extern "C" fn LineHeadWrapCommonWithColorTag(
     str: *mut Il2CppString, line_char_count: i32, is_count_single_char: bool, is_match_delegate: *mut Il2CppDelegate
 ) -> *mut Il2CppString {
+    if TDQ_IS_SKILL_LEARNING_QUERY.load(Ordering::Relaxed)
+        || IS_SYSTEM_TEXT_QUERY.load(Ordering::Relaxed)
+    {
+        return str;
+    }
     if let Some(wrapped) = utils::wrap_text_il2cpp(str, line_char_count) {
         return wrapped;
     }

@@ -47,7 +47,13 @@ pub fn init() {
                 std::process::exit(1);
             }
         };
-        let dll_path_cstr = U16CString::from_str(dll_path.to_str().unwrap()).unwrap();
+        let dll_path_cstr = match U16CString::from_str(dll_path.to_str().unwrap_or("")) {
+            Ok(s) => s,
+            Err(e) => {
+                utils::show_error(format!("Failed to encode UnityPlayer_orig.dll path: {}", e));
+                std::process::exit(1);
+            }
+        };
         let dll_path_cstr_ptr = PCWSTR(dll_path_cstr.as_ptr());
         let handle = match LoadLibraryW(dll_path_cstr_ptr) {
             Ok(v) => v,

@@ -54,8 +54,20 @@ proxy_proc!(WinHttpWriteProxySettings, WinHttpWriteProxySettings_orig);
 pub fn init(system_dir: &Utf16Str) {
     unsafe {
         let dll_path = system_dir.to_owned() + "\\winhttp.dll";
-        let dll_path_cstr = U16CString::from_vec(dll_path.into_vec()).unwrap();
-        let handle = LoadLibraryW(PCWSTR(dll_path_cstr.as_ptr())).expect("winhttp.dll");
+        let dll_path_cstr = match U16CString::from_vec(dll_path.into_vec()) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("[winhttp] Failed to encode system winhttp.dll path: {}", e);
+                return;
+            }
+        };
+        let handle = match LoadLibraryW(PCWSTR(dll_path_cstr.as_ptr())) {
+            Ok(h) => h,
+            Err(e) => {
+                error!("[winhttp] Failed to load system winhttp.dll: {}", e);
+                return;
+            }
+        };
 
         WinHttpAddRequestHeaders_orig = utils::get_proc_address(handle, c"WinHttpAddRequestHeaders");
         WinHttpCheckPlatform_orig = utils::get_proc_address(handle, c"WinHttpCheckPlatform");

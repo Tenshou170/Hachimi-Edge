@@ -60,6 +60,14 @@ pub mod ImageCommon;
 pub mod TimeUtil;
 pub mod CameraData;
 pub mod DialogManager;
+mod CharacterHomeTopUI;
+mod CharacterHomeTopUIController;
+mod PartsGachaButton;
+mod PartsGachaButtonController;
+mod PartsHorizontalTextSet;
+mod GachaExecutableUnit;
+mod StoryChoiceButton;
+pub mod PartsSingleModeStoryEventTitle;
 
 #[cfg(target_os = "windows")]
 pub mod SceneManager;
@@ -81,15 +89,8 @@ mod DownloadErrorProcessor;
 mod TitleViewController;
 mod Director;
 mod CySpringNative;
+mod CySpringUpdater;
 mod PartsRaceAnalyzeRaceEventListItem;
-mod Connecting;
-mod DownloadManager;
-mod DownloadView;
-mod HttpHelper;
-mod DownloadErrorProcessor;
-mod TitleViewController;
-mod Director;
-mod CySpringNative;
 
 pub fn init() {
     get_assembly_image_or_return!(image, "umamusume.dll");
@@ -154,6 +155,14 @@ pub fn init() {
     ImageCommon::init(image);
     TimeUtil::init(image);
     DialogManager::init(image);
+    CharacterHomeTopUI::init(image);
+    CharacterHomeTopUIController::init(image);
+    PartsGachaButton::init(image);
+    PartsGachaButtonController::init(image);
+    PartsHorizontalTextSet::init(image);
+    GachaExecutableUnit::init(image);
+    StoryChoiceButton::init(image);
+    PartsSingleModeStoryEventTitle::init(image);
 
     #[cfg(target_os = "windows")]
     {
@@ -176,13 +185,6 @@ pub fn init() {
     TitleViewController::init(image);
     Director::init(image);
     CySpringNative::init(image);
+    CySpringUpdater::init(image);
     PartsRaceAnalyzeRaceEventListItem::init(image);
-    Connecting::init(image);
-    DownloadManager::init(image);
-    DownloadView::init(image);
-    HttpHelper::init(image);
-    DownloadErrorProcessor::init(image);
-    TitleViewController::init(image);
-    Director::init(image);
-    CySpringNative::init(image);
 }

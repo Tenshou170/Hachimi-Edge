@@ -57,7 +57,10 @@ extern "C" fn IDXGISwapChain_Present(this: *mut c_void, sync_interval: c_uint, f
         return orig_fn(this, sync_interval, flags);
     }
 
-    let mut gui = Gui::instance_or_init("windows.menu_open_key").lock().unwrap();
+    // --- RH-1 fix: recover from mutex poison instead of panicking on every frame ---
+    let mut gui = Gui::instance_or_init("windows.menu_open_key")
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let painter_mutex = match init_painter(this) {
         Ok(v) => v,
         Err(e) => {
@@ -76,7 +79,8 @@ extern "C" fn IDXGISwapChain_Present(this: *mut c_void, sync_interval: c_uint, f
         return orig_fn(this, sync_interval, flags);
     }
     // Check if this is the right swap chain
-    let mut painter = painter_mutex.lock().unwrap();
+    // --- RH-2 fix: recover from mutex poison ---
+    let mut painter = painter_mutex.lock().unwrap_or_else(|e| e.into_inner());
     if this != painter.swap_chain().as_raw() {
         return orig_fn(this, sync_interval, flags);
     }
@@ -103,10 +107,16 @@ extern "C" fn IDXGISwapChain_Present(this: *mut c_void, sync_interval: c_uint, f
                 let x = rect.min.x * zoom;
                 let y = rect.max.y * zoom;
                 let y_unity = height as f32 - y;
-                *IME_COMPOSITION_POS.lock().unwrap() = (x, y_unity);
+                // --- RH-3 fix: recover from mutex poison ---
+                if let Ok(mut pos) = IME_COMPOSITION_POS.lock() {
+                    *pos = (x, y_unity);
+                }
 
                 crate::il2cpp::symbols::Thread::main_thread().schedule(|| {
-                    let (x, y_unity) = *IME_COMPOSITION_POS.lock().unwrap();
+                    // --- RH-3 fix ---
+                    let (x, y_unity) = IME_COMPOSITION_POS.lock()
+                        .map(|g| *g)
+                        .unwrap_or((0.0, 0.0));
 
                     crate::il2cpp::hook::UnityEngine_InputLegacyModule::Input::set_compositionCursorPos(
                         crate::il2cpp::types::Vector2_t { x, y: y_unity }
@@ -168,7 +178,8 @@ extern "C" fn IDXGISwapChain_ResizeBuffers(
             return orig_fn(this, buffer_count, width, height, new_format, swap_chain_flags);
         }
     };
-    let mut painter = painter_mutex.lock().unwrap();
+    // --- RH-4 fix: recover from mutex poison in ResizeBuffers ---
+    let mut painter = painter_mutex.lock().unwrap_or_else(|e| e.into_inner());
     if this != painter.swap_chain().as_raw() {
         return orig_fn(this, buffer_count, width, height, new_format, swap_chain_flags);
     }
@@ -214,7 +225,10 @@ unsafe extern "system" fn dummy_wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARA
 }
 
 fn get_swap_chain_vtable() -> Result<*mut usize, Error> {
-    let hmodule = unsafe { GetModuleHandleW(None).unwrap() };
+    // --- RH-5 fix: GetModuleHandleW(None) is infallible for the current
+    // process, but map the error to our Error type instead of unwrap. ---
+    let hmodule = unsafe { GetModuleHandleW(None) }
+        .map_err(|e| Error::RuntimeError(format!("GetModuleHandleW failed: {}", e)))?;
 
     // Create a fake swap chain to obtain the vtable
     let mut wc = WNDCLASSEXW::default();

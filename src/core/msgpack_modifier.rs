@@ -1,4 +1,4 @@
-use std::{fs, io::Write, time::{SystemTime, UNIX_EPOCH}, sync::{atomic::{AtomicI32, Ordering}, Mutex}};
+use std::{fs, io::Write, time::{SystemTime, UNIX_EPOCH}, sync::Mutex};
 use fnv::FnvHashSet;
 use once_cell::sync::Lazy;
 use rmpv::Value;
@@ -13,10 +13,15 @@ use windows::{
     UI::Notifications::{ToastNotificationManager, ScheduledToastNotification, ToastTemplateType}
 };
 
+#[cfg(target_os = "windows")]
+use std::sync::atomic::{AtomicI32, Ordering};
+
 static REAL_OWNED_CHARAS: Lazy<Mutex<FnvHashSet<i32>>> = Lazy::new(|| Mutex::default());
 static REAL_OWNED_DRESSES: Lazy<Mutex<FnvHashSet<i32>>> = Lazy::new(|| Mutex::default());
 static REAL_OWNED_SONGS: Lazy<Mutex<FnvHashSet<i32>>> = Lazy::new(|| Mutex::default());
 static LIVE_SAVE_INFO_MAP: Lazy<Mutex<std::collections::HashMap<i32, Value>>> = Lazy::new(|| Mutex::default());
+
+#[cfg(target_os = "windows")]
 static LEADER_CHARA_ID: AtomicI32 = AtomicI32::new(1001);
 
 fn v_int(i: i32) -> Value { Value::Integer(i.into()) }
@@ -34,73 +39,85 @@ pub fn dump_msgpack(data: &[u8], suffix: &str) {
 }
 
 pub fn modify_request(data: &[u8]) -> Option<Vec<u8>> {
-    let config = Hachimi::instance().config.load();
-    if !config.unlock_live_chara { return None; }
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let config = Hachimi::instance().config.load();
+        if !config.unlock_live_chara { return None; }
 
-    let mut cursor = std::io::Cursor::new(data);
-    let mut val = match rmpv::decode::read_value(&mut cursor) {
-        Ok(v) => v,
-        Err(_) => return None,
-    };
+        let mut cursor = std::io::Cursor::new(data);
+        let mut val = match rmpv::decode::read_value(&mut cursor) {
+            Ok(v) => v,
+            Err(_) => return None,
+        };
 
-    let mut modified = false;
+        let mut modified = false;
 
-    if let Value::Map(ref mut map) = val {
-        for (k, v) in map.iter_mut() {
-            if k.as_str() == Some("live_theater_save_info") {
-                if let Value::Map(ref mut info_map) = v {
-                    if process_theater_save(info_map) {
-                        modified = true;
+        if let Value::Map(ref mut map) = val {
+            for (k, v) in map.iter_mut() {
+                if k.as_str() == Some("live_theater_save_info") {
+                    if let Value::Map(ref mut info_map) = v {
+                        if process_theater_save(info_map) {
+                            modified = true;
+                        }
                     }
                 }
             }
         }
-    }
 
-    if modified {
-        let mut out = Vec::new();
-        if rmpv::encode::write_value(&mut out, &val).is_ok() {
-            return Some(out);
+        if modified {
+            let mut out = Vec::new();
+            if rmpv::encode::write_value(&mut out, &val).is_ok() {
+                return Some(out);
+            }
         }
-    }
-    None
+        None
+    })).unwrap_or(None)
 }
 
 pub fn modify_response(data: &[u8]) -> Option<Vec<u8>> {
-    let config = Hachimi::instance().config.load();
-    if !config.unlock_live_chara { return None; }
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let config = Hachimi::instance().config.load();
+        if !config.unlock_live_chara { return None; }
 
-    let mut cursor = std::io::Cursor::new(data);
-    let mut val = match rmpv::decode::read_value(&mut cursor) {
-        Ok(v) => v,
-        Err(_) => return None,
-    };
+        let mut cursor = std::io::Cursor::new(data);
+        let mut val = match rmpv::decode::read_value(&mut cursor) {
+            Ok(v) => v,
+            Err(_) => return None,
+        };
 
-    let mut modified = false;
+        let mut modified = false;
 
-    if let Value::Map(ref mut map) = val {
-        for (k, v) in map.iter_mut() {
-            if k.as_str() == Some("data") {
-                if let Value::Map(ref mut data_map) = v {
-                    if process_chara_list(data_map) { modified = true; }
-                    if process_chara_profile(data_map) { modified = true; }
-                    if process_card_list(data_map) { modified = true; }
-                    if process_cloth_list(data_map) { modified = true; }
-                    if process_music_list(data_map) { modified = true; }
-                    if process_release_card(data_map) { modified = true; }
-                    if process_save_info(data_map) { modified = true; }
+        if let Value::Map(ref mut map) = val {
+            for (k, v) in map.iter_mut() {
+                if k.as_str() == Some("data") {
+                    if let Value::Map(ref mut data_map) = v {
+                        if process_chara_list(data_map) { modified = true; }
+                        if process_chara_profile(data_map) { modified = true; }
+                        if process_cloth_list(data_map) { modified = true; }
+                        if process_music_list(data_map) { modified = true; }
+                        if process_save_info(data_map) { modified = true; }
+                    }
                 }
             }
         }
-    }
 
-    if modified {
-        let mut out = Vec::new();
-        if rmpv::encode::write_value(&mut out, &val).is_ok() {
-            return Some(out);
+        if modified {
+            let mut out = Vec::new();
+            if rmpv::encode::write_value(&mut out, &val).is_ok() {
+                return Some(out);
+            }
         }
-    }
-    None
+        None
+    })).unwrap_or(None)
+}
+
+// --- #16 fix: helper to lock a mutex and recover from poison rather than
+// panicking.  A poisoned mutex means a previous call panicked while holding
+// it; recovering the inner value is safe here because all mutations are
+// idempotent (we clear + rebuild the sets on every response). ---
+macro_rules! lock_recover {
+    ($m:expr) => {
+        $m.lock().unwrap_or_else(|e| e.into_inner())
+    };
 }
 
 fn process_theater_save(info_map: &mut Vec<(Value, Value)>) -> bool {
@@ -117,8 +134,9 @@ fn process_theater_save(info_map: &mut Vec<(Value, Value)>) -> bool {
         if k.as_str() == Some("member_info_array") {
             member_info_index = Some(i);
             if let Value::Array(members) = v {
-                let charas = REAL_OWNED_CHARAS.lock().unwrap();
-                let dresses = REAL_OWNED_DRESSES.lock().unwrap();
+                // --- #16 fix: recover from poison instead of unwrap ---
+                let charas = lock_recover!(REAL_OWNED_CHARAS);
+                let dresses = lock_recover!(REAL_OWNED_DRESSES);
                 let default_dresses = crate::il2cpp::sql::get_default_dress_ids();
 
                 for member in members {
@@ -137,18 +155,22 @@ fn process_theater_save(info_map: &mut Vec<(Value, Value)>) -> bool {
                         }
                     }
                 }
+                // drop guards before the next lock acquisition
+                drop(charas);
+                drop(dresses);
             }
         }
     }
 
-    if valid && REAL_OWNED_SONGS.lock().unwrap().contains(&music_id) {
+    if valid && lock_recover!(REAL_OWNED_SONGS).contains(&music_id) {
         return false;
     }
 
     if let Some(idx) = member_info_index {
         if let Value::Array(members) = &mut info_map[idx].1 {
-            let charas = REAL_OWNED_CHARAS.lock().unwrap();
-            let dresses = REAL_OWNED_DRESSES.lock().unwrap();
+            // --- #16 fix ---
+            let charas = lock_recover!(REAL_OWNED_CHARAS);
+            let dresses = lock_recover!(REAL_OWNED_DRESSES);
             let default_dresses = crate::il2cpp::sql::get_default_dress_ids();
             let mobs = crate::il2cpp::sql::get_all_mob_ids();
             let mut rng = rand::rng();
@@ -192,15 +214,20 @@ fn process_chara_list(data_map: &mut Vec<(Value, Value)>) -> bool {
     let mut modified = false;
     let mut existing_map = std::collections::HashMap::new();
     let mut target_idx = None;
+    let mut template_item = None;
 
     for (i, (k, v)) in data_map.iter().enumerate() {
         if k.as_str() == Some("chara_list") {
             target_idx = Some(i);
             if let Value::Array(arr) = v {
-                let mut owned = REAL_OWNED_CHARAS.lock().unwrap();
+                // --- #16 fix ---
+                let mut owned = lock_recover!(REAL_OWNED_CHARAS);
                 owned.clear();
                 for item in arr {
-                    if let Value::Map(cmap) = item {
+                    if let Value::Map(cmap) = &*item {
+                        if template_item.is_none() {
+                            template_item = Some(item.clone());
+                        }
                         for (ck, cv) in cmap {
                             if ck.as_str() == Some("chara_id") {
                                 let c_id = cv.as_i64().unwrap_or(0) as i32;
@@ -210,6 +237,8 @@ fn process_chara_list(data_map: &mut Vec<(Value, Value)>) -> bool {
                         }
                     }
                 }
+                // drop before any further work that could panic
+                drop(owned);
             }
         }
     }
@@ -219,6 +248,23 @@ fn process_chara_list(data_map: &mut Vec<(Value, Value)>) -> bool {
         for id in crate::il2cpp::sql::get_all_chara_ids() {
             if let Some(item) = existing_map.get(&id) {
                 new_arr.push(item.clone());
+            } else if let Some(ref template) = template_item {
+                if let Value::Map(mut map_clone) = template.clone() {
+                    for (k, v) in map_clone.iter_mut() {
+                        match k.as_str() {
+                            Some("chara_id") => *v = v_int(id),
+                            Some("training_num") => *v = v_int(0),
+                            Some("love_point") => *v = v_int(0),
+                            Some("fan") => *v = v_int(1),
+                            Some("max_grade") => *v = v_int(0),
+                            Some("dress_id") => *v = v_int(2),
+                            Some("mini_dress_id") => *v = v_int(2),
+                            Some("love_point_pool") => *v = v_int(0),
+                            _ => {}
+                        }
+                    }
+                    new_arr.push(Value::Map(map_clone));
+                }
             } else {
                 new_arr.push(Value::Map(vec![
                     (v_str("chara_id"), v_int(id)),
@@ -242,13 +288,17 @@ fn process_chara_profile(data_map: &mut Vec<(Value, Value)>) -> bool {
     let mut modified = false;
     let mut existing_map = std::collections::HashMap::new();
     let mut target_idx = None;
+    let mut template_item = None;
 
     for (i, (k, v)) in data_map.iter().enumerate() {
         if k.as_str() == Some("chara_profile_array") {
             target_idx = Some(i);
             if let Value::Array(arr) = v {
                 for item in arr {
-                    if let Value::Map(cmap) = item {
+                    if let Value::Map(cmap) = &*item {
+                        if template_item.is_none() {
+                            template_item = Some(item.clone());
+                        }
                         for (ck, cv) in cmap {
                             if ck.as_str() == Some("chara_id") {
                                 existing_map.insert(cv.as_i64().unwrap_or(0) as i32, item.clone());
@@ -265,6 +315,17 @@ fn process_chara_profile(data_map: &mut Vec<(Value, Value)>) -> bool {
         for id in crate::il2cpp::sql::get_all_chara_ids() {
             if let Some(item) = existing_map.get(&id) {
                 new_arr.push(item.clone());
+            } else if let Some(ref template) = template_item {
+                if let Value::Map(mut map_clone) = template.clone() {
+                    for (k, v) in map_clone.iter_mut() {
+                        match k.as_str() {
+                            Some("chara_id") => *v = v_int(id),
+                            Some("new_flag") => *v = v_int(0),
+                            _ => {}
+                        }
+                    }
+                    new_arr.push(Value::Map(map_clone));
+                }
             } else {
                 new_arr.push(Value::Map(vec![
                     (v_str("chara_id"), v_int(id)),
@@ -279,81 +340,20 @@ fn process_chara_profile(data_map: &mut Vec<(Value, Value)>) -> bool {
     modified
 }
 
-fn process_card_list(data_map: &mut Vec<(Value, Value)>) -> bool {
-    let mut modified = false;
-    let mut existing_map = std::collections::HashMap::new();
-    let mut target_idx = None;
-
-    for (i, (k, v)) in data_map.iter().enumerate() {
-        if k.as_str() == Some("card_list") {
-            target_idx = Some(i);
-            if let Value::Array(arr) = v {
-                for item in arr {
-                    if let Value::Map(cmap) = item {
-                        for (ck, cv) in cmap {
-                            if ck.as_str() == Some("card_id") {
-                                existing_map.insert(cv.as_i64().unwrap_or(0) as i32, item.clone());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if let Some(idx) = target_idx {
-        let mut new_arr = Vec::new();
-        for (id, rarity) in crate::il2cpp::sql::get_all_cards() {
-            if let Some(mut item) = existing_map.get(&id).cloned() {
-                if let Value::Map(ref mut cmap) = item {
-                    for (ck, cv) in cmap.iter_mut() {
-                        if ck.as_str() == Some("rarity") && cv.as_i64().unwrap_or(0) < 3 {
-                            *cv = v_int(3);
-                        }
-                    }
-                }
-                new_arr.push(item);
-            } else {
-                new_arr.push(Value::Map(vec![
-                    (v_str("null"), v_int(1)),
-                    (v_str("card_id"), v_int(id)),
-                    (v_str("rarity"), v_int(rarity.max(3))),
-                    (v_str("talent_level"), v_int(1)),
-                    (v_str("create_time"), v_str("2022-07-01 12:00:00")),
-                    (v_str("skill_data_array"), Value::Array(vec![])),
-                ]));
-            }
-        }
-        data_map[idx].1 = Value::Array(new_arr);
-        modified = true;
-    }
-    modified
-}
-
-fn process_release_card(data_map: &mut Vec<(Value, Value)>) -> bool {
-    let mut modified = false;
-    for (k, v) in data_map.iter_mut() {
-        if k.as_str() == Some("release_card_array") {
-            let mut new_arr = Vec::new();
-            for (id, _) in crate::il2cpp::sql::get_all_cards() {
-                new_arr.push(v_int(id));
-            }
-            *v = Value::Array(new_arr);
-            modified = true;
-        }
-    }
-    modified
-}
-
 fn process_cloth_list(data_map: &mut Vec<(Value, Value)>) -> bool {
     let mut modified = false;
     for (k, v) in data_map.iter_mut() {
         if k.as_str() == Some("cloth_list") {
+            let mut template_item = None;
             if let Value::Array(arr) = v {
-                let mut owned = REAL_OWNED_DRESSES.lock().unwrap();
+                // --- #16 fix ---
+                let mut owned = lock_recover!(REAL_OWNED_DRESSES);
                 owned.clear();
                 for item in arr {
-                    if let Value::Map(cmap) = item {
+                    if let Value::Map(cmap) = &*item {
+                        if template_item.is_none() {
+                            template_item = Some(item.clone());
+                        }
                         for (ck, cv) in cmap {
                             if ck.as_str() == Some("cloth_id") {
                                 owned.insert(cv.as_i64().unwrap_or(0) as i32);
@@ -361,11 +361,23 @@ fn process_cloth_list(data_map: &mut Vec<(Value, Value)>) -> bool {
                         }
                     }
                 }
+                drop(owned);
             }
 
             let mut new_arr = Vec::new();
             for id in crate::il2cpp::sql::get_all_dress_ids() {
-                new_arr.push(Value::Map(vec![(v_str("cloth_id"), v_int(id))]));
+                if let Some(ref template) = template_item {
+                    if let Value::Map(mut map_clone) = template.clone() {
+                        for (mk, mv) in map_clone.iter_mut() {
+                            if mk.as_str() == Some("cloth_id") {
+                                *mv = v_int(id);
+                            }
+                        }
+                        new_arr.push(Value::Map(map_clone));
+                    }
+                } else {
+                    new_arr.push(Value::Map(vec![(v_str("cloth_id"), v_int(id))]));
+                }
             }
             *v = Value::Array(new_arr);
             modified = true;
@@ -378,11 +390,16 @@ fn process_music_list(data_map: &mut Vec<(Value, Value)>) -> bool {
     let mut modified = false;
     for (k, v) in data_map.iter_mut() {
         if k.as_str() == Some("music_list") {
+            let mut template_item = None;
             if let Value::Array(arr) = v {
-                let mut owned = REAL_OWNED_SONGS.lock().unwrap();
+                // --- #16 fix ---
+                let mut owned = lock_recover!(REAL_OWNED_SONGS);
                 owned.clear();
                 for item in arr {
-                    if let Value::Map(cmap) = item {
+                    if let Value::Map(cmap) = &*item {
+                        if template_item.is_none() {
+                            template_item = Some(item.clone());
+                        }
                         for (ck, cv) in cmap {
                             if ck.as_str() == Some("music_id") {
                                 owned.insert(cv.as_i64().unwrap_or(0) as i32);
@@ -390,14 +407,26 @@ fn process_music_list(data_map: &mut Vec<(Value, Value)>) -> bool {
                         }
                     }
                 }
+                drop(owned);
             }
 
             let mut new_arr = Vec::new();
             for id in crate::il2cpp::sql::get_all_music_ids() {
-                new_arr.push(Value::Map(vec![
-                    (v_str("music_id"), v_int(id)),
-                    (v_str("acquisition_time"), v_str("2022-07-01 12:00:00"))
-                ]));
+                if let Some(ref template) = template_item {
+                    if let Value::Map(mut map_clone) = template.clone() {
+                        for (mk, mv) in map_clone.iter_mut() {
+                            if mk.as_str() == Some("music_id") {
+                                *mv = v_int(id);
+                            }
+                        }
+                        new_arr.push(Value::Map(map_clone));
+                    }
+                } else {
+                    new_arr.push(Value::Map(vec![
+                        (v_str("music_id"), v_int(id)),
+                        (v_str("acquisition_time"), v_str("2022-07-01 12:00:00"))
+                    ]));
+                }
             }
             *v = Value::Array(new_arr);
             modified = true;
@@ -411,7 +440,8 @@ fn process_save_info(data_map: &mut Vec<(Value, Value)>) -> bool {
     for (k, v) in data_map.iter_mut() {
         if k.as_str() == Some("live_theater_save_info_array") {
             if let Value::Array(arr) = v {
-                let mut save_map = LIVE_SAVE_INFO_MAP.lock().unwrap();
+                // --- #16 fix ---
+                let mut save_map = lock_recover!(LIVE_SAVE_INFO_MAP);
                 save_map.clear();
                 for item in arr.iter() {
                     if let Value::Map(cmap) = item {
@@ -422,6 +452,7 @@ fn process_save_info(data_map: &mut Vec<(Value, Value)>) -> bool {
                         }
                     }
                 }
+                drop(save_map);
             }
             modified = true;
         }
@@ -518,18 +549,27 @@ fn parse_data_map(data_map: &[(Value, Value)], config: &crate::core::hachimi::Co
         if time > now_secs {
             let epoch_diff = 11644473600_i64;
             let file_time = (time + epoch_diff) * 10_000_000;
-            let toast_xml = ToastNotificationManager::GetTemplateContent(ToastTemplateType::ToastText02).unwrap();
-            let text_nodes = toast_xml.GetElementsByTagName(&HSTRING::from("text")).unwrap();
-            text_nodes.Item(0).unwrap().AppendChild(&toast_xml.CreateTextNode(&HSTRING::from(title)).unwrap()).unwrap();
-            text_nodes.Item(1).unwrap().AppendChild(&toast_xml.CreateTextNode(&HSTRING::from(content)).unwrap()).unwrap();
+            // --- MM-1 fix: WinRT COM calls can fail if the notification service
+            // is unavailable or the AUMID isn't registered yet. Use an inner
+            // closure with ? so any failure logs and returns instead of panicking. ---
+            let result: Result<(), windows::core::Error> = (|| {
+                let toast_xml = ToastNotificationManager::GetTemplateContent(ToastTemplateType::ToastText02)?;
+                let text_nodes = toast_xml.GetElementsByTagName(&HSTRING::from("text"))?;
+                text_nodes.Item(0)?.AppendChild(&toast_xml.CreateTextNode(&HSTRING::from(title))?)?;
+                text_nodes.Item(1)?.AppendChild(&toast_xml.CreateTextNode(&HSTRING::from(content))?)?;
 
-            let delivery_time = DateTime { UniversalTime: file_time };
-            let scheduled_toast = ScheduledToastNotification::CreateScheduledToastNotification(&toast_xml, delivery_time).unwrap();
-            let _ = scheduled_toast.SetTag(&HSTRING::from(tag));
-            let _ = scheduled_toast.SetGroup(&HSTRING::from("Generic"));
+                let delivery_time = DateTime { UniversalTime: file_time };
+                let scheduled_toast = ScheduledToastNotification::CreateScheduledToastNotification(&toast_xml, delivery_time)?;
+                let _ = scheduled_toast.SetTag(&HSTRING::from(tag));
+                let _ = scheduled_toast.SetGroup(&HSTRING::from("Generic"));
 
-            let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from("Cygames.Gallop")).unwrap();
-            let _ = notifier.AddToSchedule(&scheduled_toast);
+                let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from("Cygames.Gallop"))?;
+                let _ = notifier.AddToSchedule(&scheduled_toast);
+                Ok(())
+            })();
+            if let Err(e) = result {
+                warn!("[msgpack] schedule_windows_toast: WinRT error: {}", e);
+            }
         }
     };
 

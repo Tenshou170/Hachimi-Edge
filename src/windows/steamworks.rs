@@ -1,43 +1,43 @@
 #![allow(non_snake_case, non_upper_case_globals)]
 
-use std::{os::raw::c_void, ptr::NonNull};
+use std::{os::raw::c_void, ptr::NonNull, sync::atomic::{AtomicUsize, Ordering}};
 
 use windows::Win32::Foundation::HMODULE;
 
 use crate::{core::Hachimi, windows::utils};
 
-static mut SteamAPI_SteamUtils_v010_addr: usize = 0;
-static mut SteamAPI_ISteamUtils_IsOverlayEnabled_addr: usize = 0;
+// --- W-6 fix: replace static mut with AtomicUsize so reads from any thread
+// are race-free. Written once in init() with Release, read with Relaxed. ---
+static SteamAPI_SteamUtils_v010_addr: AtomicUsize = AtomicUsize::new(0);
+static SteamAPI_ISteamUtils_IsOverlayEnabled_addr: AtomicUsize = AtomicUsize::new(0);
 
 #[repr(transparent)]
 pub struct SteamUtils(NonNull<c_void>);
 
 impl SteamUtils {
     pub fn get() -> Option<SteamUtils> {
-        if unsafe { SteamAPI_SteamUtils_v010_addr } == 0 {
+        let addr = SteamAPI_SteamUtils_v010_addr.load(Ordering::Relaxed);
+        if addr == 0 {
             return None;
         }
 
-        let orig_fn: extern "C" fn() -> *mut c_void = unsafe {
-            std::mem::transmute(SteamAPI_SteamUtils_v010_addr)
-        };
-
+        let orig_fn: extern "C" fn() -> *mut c_void = unsafe { std::mem::transmute(addr) };
         NonNull::new(orig_fn()).map(|p| Self(p))
     }
 
     pub fn is_overlay_enabled(&self) -> bool {
-        let orig_fn: extern "C" fn(*mut c_void) -> bool = unsafe {
-            std::mem::transmute(SteamAPI_ISteamUtils_IsOverlayEnabled_addr)
-        };
+        let addr = SteamAPI_ISteamUtils_IsOverlayEnabled_addr.load(Ordering::Relaxed);
+        if addr == 0 { return false; }
+        let orig_fn: extern "C" fn(*mut c_void) -> bool = unsafe { std::mem::transmute(addr) };
         orig_fn(self.0.as_ptr())
     }
 }
 
 pub fn init(steam_api: HMODULE) {
-    unsafe {
-        SteamAPI_SteamUtils_v010_addr = utils::get_proc_address(steam_api, c"SteamAPI_SteamUtils_v010");
-        SteamAPI_ISteamUtils_IsOverlayEnabled_addr = utils::get_proc_address(steam_api, c"SteamAPI_ISteamUtils_IsOverlayEnabled");
-    }
+    let utils_addr = utils::get_proc_address(steam_api, c"SteamAPI_SteamUtils_v010");
+    let overlay_addr = utils::get_proc_address(steam_api, c"SteamAPI_ISteamUtils_IsOverlayEnabled");
+    SteamAPI_SteamUtils_v010_addr.store(utils_addr, Ordering::Release);
+    SteamAPI_ISteamUtils_IsOverlayEnabled_addr.store(overlay_addr, Ordering::Release);
 }
 
 fn is_using_overlay() -> bool {

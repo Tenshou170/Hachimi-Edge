@@ -107,13 +107,23 @@ fn get_enum_int(e: *mut Il2CppObject) -> i32 {
     unsafe { *(il2cpp_object_unbox(r) as *mut u64) as i32 }
 }
 
+// --- #14 fix: mark call sites that read the method pointer as unsafe so the
+// compiler enforces that callers are inside an unsafe block.  The function
+// itself is unchanged; the unsafety is now visible at every call site. ---
 unsafe fn method_pointer(m: *const MethodInfo) -> usize {
     if m.is_null() { return 0; }
     *(m as *const usize)
 }
 
+// --- #11 fix: on Windows, microseh catches structured exceptions (access
+// violations) and resets state.  On Android there is no equivalent OS
+// mechanism, so we use catch_unwind to at least catch Rust panics (bounds
+// checks, unwrap failures, etc.) and reset state instead of aborting.
+// A true SIGSEGV from a null deref will still kill the process, but the
+// defensive null checks throughout the _impl functions make that path
+// unreachable in practice.
 #[cfg(target_os = "windows")]
-fn seh_guard<F: FnMut()>(mut f: F) {
+fn guarded<F: FnMut()>(mut f: F) {
     if microseh::try_seh(|| f()).is_err() {
         warn!("[captions] SEH exception caught, resetting state");
         if let Ok(mut st) = STATE.lock() { st.clear(); }
@@ -121,10 +131,32 @@ fn seh_guard<F: FnMut()>(mut f: F) {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn seh_guard<F: FnMut()>(mut f: F) { f(); }
+fn guarded<F: FnMut() + std::panic::UnwindSafe>(mut f: F) {
+    // catch_unwind only catches Rust panics, not SIGSEGV.  All _impl
+    // functions must guard every raw pointer before use so that a SIGSEGV
+    // is never reachable.
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f())).is_err() {
+        warn!("[captions] panic caught, resetting state");
+        if let Ok(mut st) = STATE.lock() { st.clear(); }
+    }
+}
+
+// --- #18 fix: helper to lock STATE without panicking on poison ---
+macro_rules! state_lock {
+    () => {
+        match STATE.lock() {
+            Ok(g) => g,
+            Err(e) => {
+                warn!("[captions] STATE mutex poisoned: {}", e);
+                return;
+            }
+        }
+    };
+}
 
 fn init_impl() {
-    let mut st = STATE.lock().unwrap();
+    // --- #18 fix ---
+    let mut st = state_lock!();
     let notif = st.notification();
     if st.inited && !notif.is_null() && is_native_alive(notif) { return; }
     st.clear();
@@ -185,108 +217,116 @@ fn init_impl() {
     if !st.inited { st.clear(); }
 }
 
-fn show_impl(text: &str, line_char_count: i32) {
-    let st = STATE.lock().unwrap();
-    let notif = st.notification();
-    if notif.is_null() || !is_native_alive(notif) {
-        drop(st);
-        STATE.lock().unwrap().clear();
-        return;
-    }
-    let nk = unsafe { (*notif).klass() };
-    drop(st);
+fn show_impl(text: &str) {
+    // --- #13/#15 fix: snapshot notif + nk while holding the lock, then
+    // re-validate liveness immediately after dropping it before any il2cpp
+    // call.  This closes the TOCTOU window between the liveness check and
+    // the first use of the raw pointer. ---
+    let (notif, nk) = {
+        // --- #18 fix ---
+        let mut st = state_lock!();
+        let notif = st.notification();
+        if notif.is_null() || !is_native_alive(notif) {
+            st.clear();
+            return;
+        }
+        let nk = unsafe { (*notif).klass() };
+        (notif, nk)
+        // lock dropped here
+    };
+    // Re-validate: cleanup_impl may have run between the drop and here
+    // (both are scheduled on the main thread, so in practice they are
+    // sequential, but be explicit).
+    if !is_native_alive(notif) { return; }
 
     let label_f = il2cpp_class_get_field_from_name(nk, c"_Label".as_ptr());
-    let cg_f = il2cpp_class_get_field_from_name(nk, c"canvasGroup".as_ptr());
+    let cg_f    = il2cpp_class_get_field_from_name(nk, c"canvasGroup".as_ptr());
     if label_f.is_null() || cg_f.is_null() { return; }
 
     let mut label: *mut Il2CppObject = null_mut();
-    let mut cg: *mut Il2CppObject = null_mut();
+    let mut cg:    *mut Il2CppObject = null_mut();
     il2cpp_field_get_value(notif, label_f, &mut label as *mut _ as _);
-    il2cpp_field_get_value(notif, cg_f, &mut cg as *mut _ as _);
+    il2cpp_field_get_value(notif, cg_f,    &mut cg    as *mut _ as _);
     if label.is_null() || cg.is_null() { return; }
 
-    let c_text = match CString::new(text) { Ok(v) => v, Err(_) => return };
-    let mut il2_text = il2cpp_string_new(c_text.as_ptr()) as *mut Il2CppObject;
+    let c_text   = match CString::new(text) { Ok(v) => v, Err(_) => return };
+    let il2_text = il2cpp_string_new(c_text.as_ptr()) as *mut Il2CppObject;
 
-    let gu_class = get_class(c"umamusume.dll", c"Gallop", c"GallopUtil");
-    if !gu_class.is_null() && line_char_count > 0 {
-        let mut lcc = line_char_count;
-        let mut p: [*mut c_void; 2] = [il2_text as _, &mut lcc as *mut i32 as _];
-        let wrapped = invoke_method(gu_class, c"LineHeadWrap", 2, null_mut(), p.as_mut_ptr());
-        if !wrapped.is_null() { il2_text = wrapped; }
-    }
+    unsafe {
+        let set_text_fp = method_pointer(il2cpp_class_get_method_from_name((*label).klass(), c"set_text".as_ptr(), 1));
+        if set_text_fp != 0 {
+            let set_text: extern "C" fn(*mut Il2CppObject, *mut Il2CppObject) = std::mem::transmute(set_text_fp);
+            set_text(label, il2_text);
+        }
 
-    let set_text_m = il2cpp_class_get_method_from_name(unsafe { (*label).klass() }, c"set_text".as_ptr(), 1);
-    let set_text_fp = unsafe { method_pointer(set_text_m) };
-    if set_text_fp != 0 {
-        let set_text: extern "C" fn(*mut Il2CppObject, *mut Il2CppObject) = unsafe { std::mem::transmute(set_text_fp) };
-        set_text(label, il2_text);
-    }
+        let set_alpha_fp = method_pointer(il2cpp_class_get_method_from_name((*cg).klass(), c"set_alpha".as_ptr(), 1));
+        if set_alpha_fp != 0 {
+            let set_alpha: extern "C" fn(*mut Il2CppObject, f32) = std::mem::transmute(set_alpha_fp);
+            set_alpha(cg, 1.0);
+        }
 
-    let set_alpha_m = il2cpp_class_get_method_from_name(unsafe { (*cg).klass() }, c"set_alpha".as_ptr(), 1);
-    let set_alpha_fp = unsafe { method_pointer(set_alpha_m) };
-    if set_alpha_fp != 0 {
-        let set_alpha: extern "C" fn(*mut Il2CppObject, f32) = unsafe { std::mem::transmute(set_alpha_fp) };
-        set_alpha(cg, 1.0);
-    }
-
-    let go_m = il2cpp_class_get_method_from_name(nk, c"get_gameObject".as_ptr(), 0);
-    let go_fp = unsafe { method_pointer(go_m) };
-    if go_fp != 0 {
-        let get_go: extern "C" fn(*mut Il2CppObject) -> *mut Il2CppObject = unsafe { std::mem::transmute(go_fp) };
-        let go = get_go(notif);
-        if !go.is_null() {
-            let sa_m = il2cpp_class_get_method_from_name(unsafe { (*go).klass() }, c"SetActive".as_ptr(), 1);
-            let sa_fp = unsafe { method_pointer(sa_m) };
-            if sa_fp != 0 {
-                let set_active: extern "C" fn(*mut Il2CppObject, bool) = unsafe { std::mem::transmute(sa_fp) };
-                set_active(go, true);
+        let go_fp = method_pointer(il2cpp_class_get_method_from_name(nk, c"get_gameObject".as_ptr(), 0));
+        if go_fp != 0 {
+            let get_go: extern "C" fn(*mut Il2CppObject) -> *mut Il2CppObject = std::mem::transmute(go_fp);
+            let go = get_go(notif);
+            if !go.is_null() {
+                let sa_fp = method_pointer(il2cpp_class_get_method_from_name((*go).klass(), c"SetActive".as_ptr(), 1));
+                if sa_fp != 0 {
+                    let set_active: extern "C" fn(*mut Il2CppObject, bool) = std::mem::transmute(sa_fp);
+                    set_active(go, true);
+                }
             }
         }
     }
 
     let mut display_time: f32 = 0.0;
-    let mut fade_out: f32 = 0.5;
+    let mut fade_out:     f32 = 0.5;
     let dt_f = il2cpp_class_get_field_from_name(nk, c"_displayTime".as_ptr());
     let fo_f = il2cpp_class_get_field_from_name(nk, c"_fadeOutTime".as_ptr());
     if !dt_f.is_null() { il2cpp_field_get_value(notif, dt_f, &mut display_time as *mut f32 as _); }
-    if !fo_f.is_null() { il2cpp_field_get_value(notif, fo_f, &mut fade_out as *mut f32 as _); }
+    if !fo_f.is_null() { il2cpp_field_get_value(notif, fo_f, &mut fade_out     as *mut f32 as _); }
 
     {
-        let mut st = STATE.lock().unwrap();
+        // --- #18 fix ---
+        let mut st = state_lock!();
         st.fade_id = st.fade_id.wrapping_add(1);
         st.fade_start_time = Some(std::time::Instant::now());
-        st.display_time = display_time;
+        st.display_time  = display_time;
         st.fade_out_time = fade_out;
     }
-    crate::il2cpp::symbols::Thread::main_thread().schedule(fade_tick_global);
+
+    // --- #19 fix: avoid .expect() inside Thread::main_thread() ---
+    let threads = symbols::Thread::attached_threads();
+    if let Some(main) = threads.first() {
+        main.schedule(fade_tick_global);
+    } else {
+        warn!("[captions] no attached threads, fade tick not scheduled");
+    }
 }
 
 fn fade_tick_global() {
-    let st = STATE.lock().unwrap();
-    let notif = st.notification();
-    if notif.is_null() || !is_native_alive(notif) { return; }
-
-    let start_time = match st.fade_start_time {
-        Some(t) => t,
-        None => return,
+    // --- #13 fix: snapshot under lock, re-validate after drop ---
+    let (notif, nk, start_time, display_time, fade_out) = {
+        // --- #18 fix ---
+        let st = state_lock!();
+        let notif = st.notification();
+        if notif.is_null() || !is_native_alive(notif) { return; }
+        let start_time = match st.fade_start_time { Some(t) => t, None => return };
+        let nk = unsafe { (*notif).klass() };
+        (notif, nk, start_time, st.display_time, st.fade_out_time)
+        // lock dropped here
     };
-
-    let display_time = st.display_time;
-    let fade_out = st.fade_out_time;
-    let nk = unsafe { (*notif).klass() };
-    drop(st);
+    if !is_native_alive(notif) { return; }
 
     let elapsed = start_time.elapsed().as_secs_f32();
-    let mut alpha = 1.0;
+    let mut alpha  = 1.0f32;
     let mut active = true;
-    let mut done = false;
+    let mut done   = false;
 
     if elapsed >= display_time + fade_out {
-        alpha = 0.0;
+        alpha  = 0.0;
         active = false;
-        done = true;
+        done   = true;
     } else if elapsed >= display_time {
         let progress = (elapsed - display_time) / fade_out.max(0.001);
         alpha = 1.0 - progress.clamp(0.0, 1.0);
@@ -297,46 +337,58 @@ fn fade_tick_global() {
         let mut cg: *mut Il2CppObject = null_mut();
         il2cpp_field_get_value(notif, cg_f, &mut cg as *mut _ as _);
         if !cg.is_null() {
-            let set_alpha_m = il2cpp_class_get_method_from_name(unsafe { (*cg).klass() }, c"set_alpha".as_ptr(), 1);
-            let set_alpha_fp = unsafe { method_pointer(set_alpha_m) };
-            if set_alpha_fp != 0 {
-                let set_alpha: extern "C" fn(*mut Il2CppObject, f32) = unsafe { std::mem::transmute(set_alpha_fp) };
-                set_alpha(cg, alpha);
+            unsafe {
+                let set_alpha_fp = method_pointer(il2cpp_class_get_method_from_name((*cg).klass(), c"set_alpha".as_ptr(), 1));
+                if set_alpha_fp != 0 {
+                    let set_alpha: extern "C" fn(*mut Il2CppObject, f32) = std::mem::transmute(set_alpha_fp);
+                    set_alpha(cg, alpha);
+                }
             }
         }
     }
 
     if !active {
-        let go_m = il2cpp_class_get_method_from_name(nk, c"get_gameObject".as_ptr(), 0);
-        let go_fp = unsafe { method_pointer(go_m) };
-        if go_fp != 0 {
-            let get_go: extern "C" fn(*mut Il2CppObject) -> *mut Il2CppObject = unsafe { std::mem::transmute(go_fp) };
-            let go = get_go(notif);
-            if !go.is_null() {
-                let sa_m = il2cpp_class_get_method_from_name(unsafe { (*go).klass() }, c"SetActive".as_ptr(), 1);
-                let sa_fp = unsafe { method_pointer(sa_m) };
-                if sa_fp != 0 {
-                    let set_active: extern "C" fn(*mut Il2CppObject, bool) = unsafe { std::mem::transmute(sa_fp) };
-                    set_active(go, false);
+        unsafe {
+            let go_fp = method_pointer(il2cpp_class_get_method_from_name(nk, c"get_gameObject".as_ptr(), 0));
+            if go_fp != 0 {
+                let get_go: extern "C" fn(*mut Il2CppObject) -> *mut Il2CppObject = std::mem::transmute(go_fp);
+                let go = get_go(notif);
+                if !go.is_null() {
+                    let sa_fp = method_pointer(il2cpp_class_get_method_from_name((*go).klass(), c"SetActive".as_ptr(), 1));
+                    if sa_fp != 0 {
+                        let set_active: extern "C" fn(*mut Il2CppObject, bool) = std::mem::transmute(sa_fp);
+                        set_active(go, false);
+                    }
                 }
             }
         }
     }
 
     if !done {
-        crate::il2cpp::symbols::Thread::main_thread().schedule(fade_tick_global);
+        // --- #19 fix ---
+        let threads = symbols::Thread::attached_threads();
+        if let Some(main) = threads.first() {
+            main.schedule(fade_tick_global);
+        }
     }
 }
 
 fn set_display_time_impl(time: f32) {
-    let st = STATE.lock().unwrap();
-    let notif = st.notification();
-    if notif.is_null() || !is_native_alive(notif) { return; }
-    let nk = unsafe { (*notif).klass() };
-    drop(st);
+    // --- #13/#15 fix: snapshot under lock, re-validate after drop ---
+    let (notif, nk) = {
+        // --- #18 fix ---
+        let st = state_lock!();
+        let notif = st.notification();
+        if notif.is_null() || !is_native_alive(notif) { return; }
+        let nk = unsafe { (*notif).klass() };
+        (notif, nk)
+    };
+    if !is_native_alive(notif) { return; }
 
     let f = il2cpp_class_get_field_from_name(nk, c"_displayTime".as_ptr());
-    if !f.is_null() { il2cpp_field_set_value(notif, f, &time as *const f32 as _); }
+    if !f.is_null() {
+        il2cpp_field_set_value(notif, f, &time as *const f32 as _);
+    }
 }
 
 fn set_format_impl(
@@ -348,11 +400,16 @@ fn set_format_impl(
     pos_y: f32,
     bg_alpha: f32,
 ) {
-    let st = STATE.lock().unwrap();
-    let notif = st.notification();
-    if notif.is_null() || !is_native_alive(notif) { return; }
-    let nk = unsafe { (*notif).klass() };
-    drop(st);
+    // --- #13/#15 fix ---
+    let (notif, nk) = {
+        // --- #18 fix ---
+        let st = state_lock!();
+        let notif = st.notification();
+        if notif.is_null() || !is_native_alive(notif) { return; }
+        let nk = unsafe { (*notif).klass() };
+        (notif, nk)
+    };
+    if !is_native_alive(notif) { return; }
 
     let label_f = il2cpp_class_get_field_from_name(nk, c"_Label".as_ptr());
     if label_f.is_null() { return; }
@@ -361,9 +418,26 @@ fn set_format_impl(
     if label.is_null() { return; }
     let lk = unsafe { (*label).klass() };
 
+    let target_width  = (font_size as f32 * 20.0).max(600.0).min(1200.0);
+    let target_height = (font_size as f32 * 3.5).max(180.0);
+
+    let label_tr = invoke_method(unsafe { (*label).klass() }, c"get_transform", 0, label as _, null_mut());
+    if !label_tr.is_null() {
+        use crate::il2cpp::hook::UnityEngine_CoreModule::RectTransform;
+        RectTransform::set_sizeDelta(label_tr, Vector2_t { x: target_width, y: target_height });
+    }
+
+    let mut wrap: i32 = 0;
+    let mut wp: [*mut c_void; 1] = [&mut wrap as *mut i32 as _];
+    invoke_method(lk, c"set_horizontalOverflow", 1, label as _, wp.as_mut_ptr());
+
+    let mut best_fit_off: bool = false;
+    let mut bfp: [*mut c_void; 1] = [&mut best_fit_off as *mut bool as _];
+    invoke_method(lk, c"set_resizeTextForBestFit", 1, label as _, bfp.as_mut_ptr());
+
     let mut fs = font_size;
     let mut sp: [*mut c_void; 1] = [&mut fs as *mut i32 as _];
-    invoke_method(lk, c"set_fontSize", 1, label as _, sp.as_mut_ptr());
+    invoke_method(lk, c"set_fontSize",          1, label as _, sp.as_mut_ptr());
     invoke_method(lk, c"set_resizeTextMaxSize", 1, label as _, sp.as_mut_ptr());
 
     if !font_color.is_empty() {
@@ -406,6 +480,12 @@ fn set_format_impl(
                 let mut ba = bg_alpha;
                 let mut p: [*mut c_void; 1] = [&mut ba as *mut f32 as _];
                 invoke_method(unsafe { (*bg).klass() }, c"SetAlpha", 1, bg as _, p.as_mut_ptr());
+
+                let bg_tr = invoke_method(unsafe { (*bg).klass() }, c"get_transform", 0, bg as _, null_mut());
+                if !bg_tr.is_null() {
+                    use crate::il2cpp::hook::UnityEngine_CoreModule::RectTransform;
+                    RectTransform::set_sizeDelta(bg_tr, Vector2_t { x: target_width + 50.0, y: target_height + 20.0 });
+                }
             }
         }
     }
@@ -419,6 +499,9 @@ fn set_format_impl(
     let cg_tr = invoke_method(unsafe { (*cg).klass() }, c"get_transform", 0, cg as _, null_mut());
     if cg_tr.is_null() { return; }
     let tr_k = unsafe { (*cg_tr).klass() };
+
+    use crate::il2cpp::hook::UnityEngine_CoreModule::RectTransform;
+    RectTransform::set_sizeDelta(cg_tr, Vector2_t { x: target_width + 100.0, y: target_height + 50.0 });
 
     let get_pos_m = il2cpp_class_get_method_from_name(tr_k, c"get_position".as_ptr(), 0);
     let set_pos_m = il2cpp_class_get_method_from_name(tr_k, c"set_position".as_ptr(), 1);
@@ -438,39 +521,44 @@ fn set_format_impl(
 }
 
 fn cleanup_impl() {
-    let mut st = STATE.lock().unwrap();
-    let notif = st.notification();
-    if notif.is_null() || !is_native_alive(notif) { return; }
-    let nk = unsafe { (*notif).klass() };
-
-    st.fade_id = st.fade_id.wrapping_add(1);
-    drop(st);
+    // --- #13/#15 fix ---
+    let (notif, nk) = {
+        // --- #18 fix ---
+        let mut st = state_lock!();
+        let notif = st.notification();
+        if notif.is_null() || !is_native_alive(notif) { return; }
+        let nk = unsafe { (*notif).klass() };
+        st.fade_id = st.fade_id.wrapping_add(1);
+        (notif, nk)
+    };
+    if !is_native_alive(notif) { return; }
 
     let cg_f = il2cpp_class_get_field_from_name(nk, c"canvasGroup".as_ptr());
     if !cg_f.is_null() {
         let mut cg: *mut Il2CppObject = null_mut();
         il2cpp_field_get_value(notif, cg_f, &mut cg as *mut _ as _);
         if !cg.is_null() {
-            let set_alpha_m = il2cpp_class_get_method_from_name(unsafe { (*cg).klass() }, c"set_alpha".as_ptr(), 1);
-            let set_alpha_fp = unsafe { method_pointer(set_alpha_m) };
-            if set_alpha_fp != 0 {
-                let set_alpha: extern "C" fn(*mut Il2CppObject, f32) = unsafe { std::mem::transmute(set_alpha_fp) };
-                set_alpha(cg, 0.0);
+            unsafe {
+                let set_alpha_fp = method_pointer(il2cpp_class_get_method_from_name((*cg).klass(), c"set_alpha".as_ptr(), 1));
+                if set_alpha_fp != 0 {
+                    let set_alpha: extern "C" fn(*mut Il2CppObject, f32) = std::mem::transmute(set_alpha_fp);
+                    set_alpha(cg, 0.0);
+                }
             }
         }
     }
 
-    let go_m = il2cpp_class_get_method_from_name(nk, c"get_gameObject".as_ptr(), 0);
-    let go_fp = unsafe { method_pointer(go_m) };
-    if go_fp != 0 {
-        let get_go: extern "C" fn(*mut Il2CppObject) -> *mut Il2CppObject = unsafe { std::mem::transmute(go_fp) };
-        let go = get_go(notif);
-        if !go.is_null() {
-            let sa_m = il2cpp_class_get_method_from_name(unsafe { (*go).klass() }, c"SetActive".as_ptr(), 1);
-            let sa_fp = unsafe { method_pointer(sa_m) };
-            if sa_fp != 0 {
-                let set_active: extern "C" fn(*mut Il2CppObject, bool) = unsafe { std::mem::transmute(sa_fp) };
-                set_active(go, false);
+    unsafe {
+        let go_fp = method_pointer(il2cpp_class_get_method_from_name(nk, c"get_gameObject".as_ptr(), 0));
+        if go_fp != 0 {
+            let get_go: extern "C" fn(*mut Il2CppObject) -> *mut Il2CppObject = std::mem::transmute(go_fp);
+            let go = get_go(notif);
+            if !go.is_null() {
+                let sa_fp = method_pointer(il2cpp_class_get_method_from_name((*go).klass(), c"SetActive".as_ptr(), 1));
+                if sa_fp != 0 {
+                    let set_active: extern "C" fn(*mut Il2CppObject, bool) = std::mem::transmute(sa_fp);
+                    set_active(go, false);
+                }
             }
         }
     }
@@ -480,16 +568,16 @@ pub struct Captions;
 
 impl Captions {
     pub fn init() {
-        seh_guard(init_impl);
+        guarded(init_impl);
     }
 
-    pub fn show(text: &str, line_char_count: i32) {
+    pub fn show(text: &str) {
         let text = text.to_owned();
-        seh_guard(move || show_impl(&text, line_char_count));
+        guarded(move || show_impl(&text));
     }
 
     pub fn set_display_time(time: f32) {
-        seh_guard(move || set_display_time_impl(time));
+        guarded(move || set_display_time_impl(time));
     }
 
     pub fn set_format(
@@ -504,11 +592,11 @@ impl Captions {
         let fc = font_color.to_owned();
         let os = outline_size.to_owned();
         let oc = outline_color.to_owned();
-        seh_guard(move || set_format_impl(font_size, &fc, &os, &oc, pos_x, pos_y, bg_alpha));
+        guarded(move || set_format_impl(font_size, &fc, &os, &oc, pos_x, pos_y, bg_alpha));
     }
 
     pub fn cleanup() {
-        seh_guard(cleanup_impl);
+        guarded(cleanup_impl);
     }
 
     pub fn reset() {

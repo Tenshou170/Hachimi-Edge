@@ -143,12 +143,29 @@ fn init_gl() -> glow::Context {
 fn init_internal() -> Result<(), Error> {
     info!("Hooking eglSwapBuffers");
     let egl_handle = unsafe { libc::dlopen(c"libEGL.so".as_ptr(), libc::RTLD_LAZY) };
-    let eglSwapBuffers_addr = unsafe { libc::dlsym(egl_handle, c"eglSwapBuffers".as_ptr()) };
+    if egl_handle.is_null() {
+        return Err(Error::HookingError("Failed to dlopen libEGL.so".to_owned()));
+    }
+
+    let swap_addr = unsafe { libc::dlsym(egl_handle, c"eglSwapBuffers".as_ptr()) };
+    if swap_addr.is_null() {
+        return Err(Error::HookingError("eglSwapBuffers not found in libEGL.so".to_owned()));
+    }
+
+    let get_proc_addr = unsafe { libc::dlsym(egl_handle, c"eglGetProcAddress".as_ptr()) };
+    if get_proc_addr.is_null() {
+        return Err(Error::HookingError("eglGetProcAddress not found in libEGL.so".to_owned()));
+    }
+
+    let query_surface_addr = unsafe { libc::dlsym(egl_handle, c"eglQuerySurface".as_ptr()) };
+    if query_surface_addr.is_null() {
+        return Err(Error::HookingError("eglQuerySurface not found in libEGL.so".to_owned()));
+    }
 
     unsafe {
-        EGLSWAPBUFFERS_ADDR = Hachimi::instance().interceptor.hook(eglSwapBuffers_addr as usize, eglSwapBuffers as usize)?;
-        EGLGETPROCADDRESS_ADDR = libc::dlsym(egl_handle, c"eglGetProcAddress".as_ptr()) as usize;
-        EGLQUERYSURFACE_ADDR = libc::dlsym(egl_handle, c"eglQuerySurface".as_ptr()) as usize
+        EGLSWAPBUFFERS_ADDR = Hachimi::instance().interceptor.hook(swap_addr as usize, eglSwapBuffers as usize)?;
+        EGLGETPROCADDRESS_ADDR = get_proc_addr as usize;
+        EGLQUERYSURFACE_ADDR = query_surface_addr as usize;
     }
 
     Ok(())

@@ -74,8 +74,14 @@ pub fn set_keyboard_visible(visible: bool) {
 }
 
 pub fn check_keyboard_status() -> bool {
-    let vm = java_vm().unwrap();
-    let mut env = vm.attach_current_thread().unwrap();
+    let vm = match java_vm() {
+        Some(v) => v,
+        None => return false,
+    };
+    let mut env = match vm.attach_current_thread() {
+        Ok(e) => e,
+        Err(_) => return false,
+    };
     let api_level = get_device_api_level(env.get_native_interface());
 
     let is_visible = (|| -> jni::errors::Result<bool> {

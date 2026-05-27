@@ -1,6 +1,6 @@
 use std::{ffi::{CStr, CString}, os::raw::c_void};
 use fnv::FnvHashMap;
-use once_cell::sync::Lazy;
+use once_cell::sync::OnceCell;
 use pelite::{pe::Pe, pe64::PeFile, FileMap};
 use windows::Win32::Foundation::HMODULE;
 
@@ -256,9 +256,31 @@ fn generate_symbol_map() -> Result<FnvHashMap<&'static str, CString>, Error> {
     let mut rva = START_RVA;
     for symbol in SYMBOL_LIST {
         let offset = pe.rva_to_file_offset(rva)?;
+
+        // --- W-11 fix: bounds-check the 4-byte read before indexing ---
+        if offset + 4 > image.len() {
+            return Err(Error::RuntimeError(format!(
+                "symbol map: RVA 0x{:x} maps to offset 0x{:x} which is out of bounds \
+                 (image size 0x{:x}); UnityPlayer.dll may be a different version",
+                rva, offset, image.len()
+            )));
+        }
         let rip_offset = u32::from_le_bytes(image[offset..offset+4].try_into().unwrap());
         let name_offset = pe.rva_to_file_offset(rva + 0x4 + rip_offset)?;
+
+        // --- W-2 fix: validate that the name embedded in the binary actually
+        // matches the expected symbol.  If START_RVA is stale after a game
+        // update the names will diverge and we surface a clear error instead
+        // of silently returning a garbage function pointer. ---
+        if name_offset >= image.len() {
+            return Err(Error::RuntimeError(format!(
+                "symbol map: name offset 0x{:x} out of bounds for symbol '{}'; \
+                 UnityPlayer.dll may be a different version",
+                name_offset, symbol
+            )));
+        }
         let name = unsafe { CStr::from_ptr(image[name_offset..].as_ptr() as _) };
+
         map.insert(*symbol, name.to_owned());
         rva += if rva == START_RVA { 0x28 } else { 0x26 };
     }
@@ -272,17 +294,31 @@ impl From<pelite::Error> for Error {
     }
 }
 
-static SYMBOL_MAP: Lazy<FnvHashMap<&'static str, CString>> = Lazy::new(|| {
-    match generate_symbol_map() {
-        Ok(v) => v,
-        Err(e) => {
-            error!("{}", e);
-            panic!();
-        }
-    }
-});
+// --- W-1 fix: replace panicking Lazy with OnceCell<Result<...>> so a
+// symbol-map failure surfaces a clear error and returns 0 from dlsym
+// (same as "symbol not found") instead of aborting the process. ---
+static SYMBOL_MAP: OnceCell<Result<FnvHashMap<&'static str, CString>, String>> = OnceCell::new();
+
+fn get_symbol_map() -> Option<&'static FnvHashMap<&'static str, CString>> {
+    SYMBOL_MAP.get_or_init(|| {
+        generate_symbol_map().map_err(|e| {
+            error!("[symbols] Failed to build symbol map: {}", e);
+            e.to_string()
+        })
+    }).as_ref().ok()
+}
 
 pub unsafe fn dlsym(handle: *mut c_void, name: &str) -> usize {
     debug_assert!(!handle.is_null());
-    utils::get_proc_address(HMODULE(handle as _), &SYMBOL_MAP[name])
+    // --- W-1/W-2 fix: if the map failed to build, return 0 so the caller
+    // treats this symbol as not found rather than calling a garbage address. ---
+    let Some(map) = get_symbol_map() else {
+        warn!("[symbols] dlsym('{}') skipped: symbol map unavailable", name);
+        return 0;
+    };
+    let Some(cname) = map.get(name) else {
+        warn!("[symbols] dlsym('{}') skipped: symbol not in map", name);
+        return 0;
+    };
+    utils::get_proc_address(HMODULE(handle as _), cname)
 }

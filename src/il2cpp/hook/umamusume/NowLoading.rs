@@ -26,7 +26,7 @@ extern "C" fn SetupLoadingTips(this: *mut Il2CppObject) {
 }
 
 type ShowFn = extern "C" fn(this: *mut Il2CppObject, type_: i32, onComplete: *mut Il2CppDelegate, overrideDuration: *mut Il2CppObject, easeType: i32, customInEffect: *mut Il2CppObject, customLoopEffect: *mut Il2CppObject, customOutEffect: *mut Il2CppObject, charaId: i32);
-extern "C" fn Show(this: *mut Il2CppObject, mut type_: i32, onComplete: *mut Il2CppDelegate, overrideDuration: *mut Il2CppObject, easeType: i32, customInEffect: *mut Il2CppObject, customLoopEffect: *mut Il2CppObject, customOutEffect: *mut Il2CppObject, charaId: i32) {
+extern "C" fn Show(this: *mut Il2CppObject, #[allow(unused_mut)] mut type_: i32, onComplete: *mut Il2CppDelegate, overrideDuration: *mut Il2CppObject, easeType: i32, customInEffect: *mut Il2CppObject, customLoopEffect: *mut Il2CppObject, customOutEffect: *mut Il2CppObject, charaId: i32) {
     let config = crate::core::Hachimi::instance().config.load();
     #[cfg(target_os = "windows")]
     if type_ == 2 && !config.windows.ui_loading_show_orientation_guide {

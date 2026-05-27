@@ -9,12 +9,12 @@ use crate::{core::{plugin_api::Plugin, updater}, gui_impl, hachimi_impl, il2cpp:
 
 use super::{game::{Game, Region}, ipc, plurals, template, template_filters, tl_repo, utils, Error, Interceptor};
 
-pub const REPO_PATH: &str = "kairusds/Hachimi-Edge";
+pub const REPO_PATH: &str = "THShafi170/Hachimi-Edge";
 pub const GITHUB_API: &str = "https://api.github.com/repos";
 pub const CODEBERG_API: &str = "https://codeberg.org/api/v1/repos";
 pub const WEBSITE_URL: &str = "https://hachimi.noccu.art";
-pub const UMAPATCHER_PACKAGE_NAME: &str = "com.leadrdrk.umapatcher.edge";
-pub const UMAPATCHER_INSTALL_URL: &str = "https://github.com/kairusds/UmaPatcher-Edge/releases/latest";
+pub const UMAPATCHER_PACKAGE_NAME: &str = "dev.LeadRDRK.UmaPatcherEdge";
+pub const UMAPATCHER_INSTALL_URL: &str = "https://github.com/THShafi170/UmaPatcher-Edge/releases/latest";
 
 pub static CONFIG_LOAD_ERROR: AtomicBool = AtomicBool::new(false);
 
@@ -422,8 +422,6 @@ impl Default for BgUpdateMode {
 pub struct CaptionConfig {
     #[serde(default)]
     pub caption_enable: bool,
-    #[serde(default = "CaptionConfig::default_lines_char_count")]
-    pub caption_lines_char_count: i32,
     #[serde(default = "CaptionConfig::default_font_size")]
     pub caption_font_size: i32,
     #[serde(default = "CaptionConfig::default_color")]
@@ -444,7 +442,6 @@ impl Default for CaptionConfig {
     fn default() -> Self {
         Self {
             caption_enable: false,
-            caption_lines_char_count: 26,
             caption_font_size: 50,
             caption_color: "White".to_owned(),
             caption_outline_size: "L".to_owned(),
@@ -457,7 +454,6 @@ impl Default for CaptionConfig {
 }
 
 impl CaptionConfig {
-    fn default_lines_char_count() -> i32 { 26 }
     fn default_font_size() -> i32 { 50 }
     fn default_color() -> String { "White".to_owned() }
     fn default_outline_size() -> String { "L".to_owned() }
@@ -481,6 +477,18 @@ pub struct Config {
     pub disable_gui: bool,
     #[serde(default)]
     pub disable_gui_once: bool,
+    #[serde(default)]
+    pub text_debug: bool,
+    #[serde(default)]
+    pub text_log: bool,
+    #[serde(default)]
+    pub text_property_dump: bool,
+    #[serde(default)]
+    pub text_localize_dump: bool,
+    #[serde(default)]
+    pub text_position_debug: bool,
+    #[serde(default)]
+    pub text_path_debug: bool,
     pub localized_data_dir: Option<String>,
     pub target_fps: Option<i32>,
     #[serde(default = "Config::default_open_browser_url")]
@@ -576,6 +584,11 @@ pub struct Config {
     pub physics_update_mode: Option<SpringUpdateMode>,
     #[serde(default)]
     pub cyspring_mono_uncap_frame_scale: bool,
+    /// When true, forces the Mono (managed) physics path by overwriting the
+    /// static `isNative` field on `CySpringNative` to false after its cctor.
+    /// Useful for users experiencing physics glitches with the native plugin.
+    #[serde(default)]
+    pub cyspring_disable_native: bool,
     #[serde(default = "Config::default_ui_animation_scale")]
     pub ui_animation_scale: f32,
     #[serde(default)]
@@ -621,7 +634,7 @@ pub struct Config {
 }
 
 impl Config {
-    fn default_open_browser_url() -> String { "https://www.google.com/".to_owned() }
+    fn default_open_browser_url() -> String { "https://rekodesuwa.com".to_owned() }
     fn default_virtual_res_mult() -> f32 { 1.0 }
     fn default_msgpack_notifier_host() -> String { "http://localhost:4693".to_owned() }
     fn default_msgpack_notifier_connection_timeout_ms() -> u64 { 1000 }
@@ -630,7 +643,7 @@ impl Config {
     fn default_gui_scale() -> f32 { 1.0 }
     fn default_story_choice_auto_select_delay() -> f32 { 1.2 }
     fn default_story_tcps_multiplier() -> f32 { 3.0 }
-    fn default_meta_index_url() -> String { "https://gitlab.com/umatl/hachimi-meta/-/raw/main/meta.json".to_owned() }
+    fn default_meta_index_url() -> String { "https://rekodesuwa.com/tl-en/meta.json".to_owned() }
     fn default_ui_animation_scale() -> f32 { 1.0 }
     fn default_live_vocals_swap() -> [i32; 6] { [0; 6] }
     fn default_champions_live_resource_id() -> i32 { 15 }
@@ -767,9 +780,116 @@ impl Language {
     }
 }
 
+#[derive(Deserialize, Serialize, Clone, Default)]
+pub struct CommonOverrides {
+    pub font_size: Option<i32>,
+    pub line_spacing: Option<f32>,
+    pub horizontal_overflow: Option<i32>,
+    pub vertical_overflow: Option<i32>,
+    pub best_fit: Option<bool>,
+    pub min_size: Option<i32>,
+    pub max_size: Option<i32>,
+    pub update_bounds: Option<bool>,
+    pub generate_out_of_bounds: Option<bool>,
+    pub align_by_geometry: Option<bool>,
+    pub extents_x: Option<f32>,
+    pub extents_y: Option<f32>,
+    pub rich_text: Option<bool>,
+    pub scale_factor: Option<f32>,
+    pub font_style: Option<i32>,
+    pub text_anchor: Option<i32>,
+    pub pivot_x: Option<f32>,
+    pub pivot_y: Option<f32>,
+    pub position_offset_x: Option<f32>,
+    pub position_offset_y: Option<f32>,
+    pub text_override: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Default)]
+pub struct SiblingOverride {
+    pub name: String,
+    pub target_ancestor: Option<u32>,
+    #[serde(flatten)]
+    pub properties: CommonOverrides,
+}
+
+#[derive(Deserialize, Serialize, Clone, Default)]
+pub struct TextPropertyOverrides {
+    #[serde(flatten)]
+    pub common: CommonOverrides,
+    pub position_target_ancestor: Option<u32>,
+
+    pub sibling_name: Option<String>,
+    pub sibling_offset_x: Option<f32>,
+    pub sibling_offset_y: Option<f32>,
+    pub sibling_target_ancestor: Option<u32>,
+
+    pub siblings: Option<Vec<SiblingOverride>>,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+pub struct TextSettings {
+    #[serde(default = "TextSettings::default_font_scale")]
+    pub font_scale: f32,
+    #[serde(default)]
+    pub font_overrides: FnvHashMap<String, i32>,
+    #[serde(default)]
+    pub text_properties_overrides: FnvHashMap<String, TextPropertyOverrides>,
+}
+
+impl TextSettings {
+    fn default_font_scale() -> f32 { 1.0 }
+}
+
+impl Default for TextSettings {
+    fn default() -> Self {
+        Self {
+            font_scale: 1.0,
+            font_overrides: Default::default(),
+            text_properties_overrides: Default::default(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone)]
+pub struct GachaButtonOverrides {
+    pub gacha_button_default: Option<UITextConfig>,
+    pub gacha_button_1: Option<UITextConfig>,
+    pub gacha_button_10: Option<UITextConfig>,
+    pub gacha_button_daily: Option<UITextConfig>,
+    pub gacha_button_free: Option<UITextConfig>,
+    pub gacha_button_paid: Option<UITextConfig>,
+    pub gacha_button_2: Option<UITextConfig>,
+    pub gacha_button_3: Option<UITextConfig>,
+    pub gacha_button_5: Option<UITextConfig>,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct ButtonOverrides {
+    pub character_home_top_card_root_button: Option<UITextConfig>,
+    pub character_home_top_support_card_root_button: Option<UITextConfig>,
+    pub character_home_top_trained_chara_root_button: Option<UITextConfig>,
+    pub character_home_top_character_card_catalog_button: Option<UITextConfig>,
+    pub character_home_top_card_lv_up_button: Option<UITextConfig>,
+    pub character_home_top_hint_lv_up_button: Option<UITextConfig>,
+    pub character_home_top_card_limit_break_button: Option<UITextConfig>,
+    pub character_home_top_piece_exchange_button: Option<UITextConfig>,
+    pub character_home_top_support_edit_button: Option<UITextConfig>,
+    pub character_home_top_support_sell_button: Option<UITextConfig>,
+    pub character_home_top_support_list_button: Option<UITextConfig>,
+    pub character_home_top_trained_list_button: Option<UITextConfig>,
+    pub character_home_top_new_team_edit_button: Option<UITextConfig>,
+    pub character_home_top_transfer_button: Option<UITextConfig>,
+    pub character_home_top_trained_chara_root_short_button: Option<UITextConfig>,
+    pub character_home_top_succession_only_chara_root_button: Option<UITextConfig>,
+    pub character_home_top_succession_only_start_button: Option<UITextConfig>,
+    pub character_home_top_succession_only_list_button: Option<UITextConfig>,
+}
+
 #[derive(Default)]
 pub struct LocalizedData {
     pub config: LocalizedDataConfig,
+    pub text_settings: ArcSwap<TextSettings>,
     path: Option<PathBuf>,
 
     pub localize_dict: FnvHashMap<String, String>,
@@ -850,6 +970,12 @@ impl LocalizedData {
 
             plural_form,
             ordinal_form,
+
+            text_settings: {
+                let settings: TextSettings = Self::load_dict_static(&path, config.text_config.as_ref()).unwrap_or_default();
+                info!("Loaded {} text overrides.", settings.text_properties_overrides.len());
+                ArcSwap::new(Arc::new(settings))
+            },
 
             wrapper_penalties,
 
@@ -969,6 +1095,7 @@ pub struct LocalizedDataConfig {
     pub race_jikkyo_comment_dict: Option<String>,
     pub race_jikkyo_message_dict: Option<String>,
     pub assets_dir: Option<String>,
+    pub text_config: Option<String>,
     #[serde(default)]
     pub extra_asset_bundle: OsOption<String>,
     pub replacement_font_name: Option<String>,
@@ -983,8 +1110,8 @@ pub struct LocalizedDataConfig {
 
     #[serde(default)]
     pub use_text_wrapper: bool,
-    // Predefined line widths are counts of cjk characters.
-    // 1 cjk char = 2 columns, so setting this value to 2 replicates the default behaviour.
+    // Predefined line widths are counts of CJK characters.
+    // 1 CJK char = 2 columns, so setting this value to 2 replicates the default behaviour.
     pub line_width_multiplier: Option<f32>,
     #[serde(default)]
     pub systext_cue_lines: FnvHashMap<String, i32>,
@@ -993,6 +1120,9 @@ pub struct LocalizedDataConfig {
     #[serde(default)]
     pub auto_adjust_story_clip_length: bool,
     pub story_line_count_offset: Option<i32>,
+    pub story_choice_multi_line: Option<UITextConfig>,
+    pub story_event_title: Option<UITextConfig>,
+    pub skill_list_item_desc_font_size_multiplier: Option<f32>,
     pub text_frame_line_spacing_multiplier: Option<f32>,
     pub text_frame_font_size_multiplier: Option<f32>,
     #[serde(default)]
@@ -1007,6 +1137,9 @@ pub struct LocalizedDataConfig {
     pub character_note_top_gallery_button: Option<UITextConfig>,
     pub character_note_top_talk_gallery_button: Option<UITextConfig>,
 
+    pub buttons_override: Option<ButtonOverrides>,
+    pub gacha_buttons_override: Option<GachaButtonOverrides>,
+
     pub news_url: Option<String>,
 
     // RESERVED
@@ -1017,9 +1150,15 @@ pub struct LocalizedDataConfig {
 #[derive(Deserialize, Clone)]
 pub struct UITextConfig {
     pub text: Option<String>,
+    pub text2: Option<String>,
     pub font_size: Option<i32>,
-    pub line_spacing: Option<f32>
+    pub line_spacing: Option<f32>,
+    pub position_offset_x: Option<f32>,
+    pub position_offset_y: Option<f32>,
+    pub position_offset_x2: Option<f32>,
+    pub position_offset_y2: Option<f32>,
 }
+
 
 impl Default for LocalizedDataConfig {
     fn default() -> Self {

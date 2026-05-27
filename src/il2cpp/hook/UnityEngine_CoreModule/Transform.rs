@@ -6,30 +6,40 @@ use crate::{
     }
 };
 
+static mut CLASS: *mut Il2CppClass = 0 as _;
+pub fn class() -> *mut Il2CppClass {
+    unsafe { CLASS }
+}
+
 static mut TYPE_OBJECT: *mut Il2CppObject = 0 as _;
 pub fn type_object() -> *mut Il2CppObject {
     unsafe { TYPE_OBJECT }
 }
 
-// public Transform get_parent() { }
 static mut GET_PARENT_ADDR: usize = 0;
 impl_addr_wrapper_fn!(get_parent, GET_PARENT_ADDR, *mut Il2CppObject, this: *mut Il2CppObject);
 
-// public Int32 get_childCount() { }
 static mut GET_CHILDCOUNT_ADDR: usize = 0;
 impl_addr_wrapper_fn!(get_childCount, GET_CHILDCOUNT_ADDR, i32, this: *mut Il2CppObject);
 
-// public Transform GetChild(Int32 index) { }
 static mut GETCHILD_ADDR: usize = 0;
 impl_addr_wrapper_fn!(GetChild, GETCHILD_ADDR, *mut Il2CppObject, this: *mut Il2CppObject, index: i32);
 
+static mut GET_LOCALSCALE_ADDR: usize = 0;
+impl_addr_wrapper_fn!(get_localScale, GET_LOCALSCALE_ADDR, Vector3_t, this: *mut Il2CppObject);
+
+static mut FIND_ADDR: usize = 0;
+impl_addr_wrapper_fn!(Find, FIND_ADDR, *mut Il2CppObject, this: *mut Il2CppObject, n: *mut Il2CppString);
+
 pub fn init(UnityEngine_CoreModule: *const Il2CppImage) {
     get_class_or_return!(UnityEngine_CoreModule, UnityEngine, Transform);
-
     unsafe {
+        CLASS = Transform;
         TYPE_OBJECT = il2cpp_type_get_object(il2cpp_class_get_type(Transform));
         GET_PARENT_ADDR = get_method_addr(Transform, c"get_parent", 0);
         GET_CHILDCOUNT_ADDR = get_method_addr(Transform, c"get_childCount", 0);
         GETCHILD_ADDR = get_method_addr(Transform, c"GetChild", 1);
+        GET_LOCALSCALE_ADDR = get_method_addr(Transform, c"get_localScale", 0);
+        FIND_ADDR = get_method_addr(Transform, c"Find", 1);
     }
 }

@@ -62,6 +62,37 @@ fn setup_version_env() {
 }
 
 fn main() {
+    let host = std::env::var("HOST").unwrap();
+    let target = std::env::var("TARGET").unwrap();
+
+    if host.contains("linux") && target.contains("windows") {
+        if target.contains("gnu") {
+            panic!(
+                "\n========================================================================\n\
+                 ERROR: Building for Windows using the GNU target (MinGW) on Linux is not supported.\n\
+                 Contributors on Linux MUST use cargo-xwin to target x86_64-pc-windows-msvc.\n\
+                 \n\
+                 Please use the provided cargo-xwin aliases:\n\
+                   cargo xcheck\n\
+                   cargo xbuild\n\
+                 ========================================================================\n"
+            );
+        }
+
+        if std::env::var("CL_FLAGS").is_err() || std::env::var("LIB").is_err() {
+            panic!(
+                "\n========================================================================\n\
+                 ERROR: Compiling for Windows MSVC on Linux requires cargo-xwin.\n\
+                 It seems you are running raw cargo commands instead of the cargo-xwin wrapper.\n\
+                 \n\
+                 Please use the provided cargo-xwin aliases:\n\
+                   cargo xcheck\n\
+                   cargo xbuild\n\
+                 ========================================================================\n"
+            );
+        }
+    }
+
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os == "windows" {
         setup_windows_build();

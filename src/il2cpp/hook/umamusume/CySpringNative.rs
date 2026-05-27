@@ -1,4 +1,22 @@
-use crate::{core::Hachimi, il2cpp::{symbols::get_method_addr, types::*}};
+use crate::{core::Hachimi, il2cpp::{api::il2cpp_field_static_set_value, symbols::{get_field_from_name, get_method_addr}, types::*}};
+
+// --- static isNative field, resolved once in init() ---
+static mut IS_NATIVE_FIELD: *mut FieldInfo = 0 as _;
+
+type CctorFn = extern "C" fn();
+extern "C" fn cctor() {
+    get_orig_fn!(cctor, CctorFn)();
+
+    // If cyspring_disable_native is set, overwrite the static isNative field
+    // to false so the game uses the Mono (managed) physics path instead of
+    // the native C++ plugin — mirrors localify's cySpringDisableNative option.
+    if Hachimi::instance().config.load().cyspring_disable_native {
+        let mut value: bool = false;
+        unsafe {
+            il2cpp_field_static_set_value(IS_NATIVE_FIELD, &mut value as *mut bool as _);
+        }
+    }
+}
 
 type UpdateForceFn = extern "C" fn(
     cloth_working: *mut std::ffi::c_void, stiffness_force_rate: f32, drag_force_rate: f32,
@@ -28,7 +46,19 @@ extern "C" fn UpdateForce(
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
-    get_class_or_return!(umamusume, Gallop, CySpringNative);
+    get_class_or_return!(umamusume, "Gallop", CySpringNative);
+
+    // Resolve isNative static field before hooking cctor
+    unsafe {
+        IS_NATIVE_FIELD = get_field_from_name(CySpringNative, c"isNative");
+    }
+
+    // Hook .cctor to optionally force Mono path
+    let cctor_addr = get_method_addr(CySpringNative, c".cctor", 0);
+    if cctor_addr != 0 {
+        new_hook!(cctor_addr, cctor);
+    }
+
     let UpdateForce_addr = get_method_addr(CySpringNative, c"UpdateForce", 8);
     new_hook!(UpdateForce_addr, UpdateForce);
 }

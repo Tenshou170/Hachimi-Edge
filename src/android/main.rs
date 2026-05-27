@@ -21,11 +21,17 @@ pub(crate) fn java_vm() -> Option<&'static JavaVM> {
 #[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn JNI_OnLoad(vm: JavaVM, reserved: *mut c_void) -> jint {
-    let orig_fn: JniOnLoadFn;
-    unsafe {
+    let orig_fn: JniOnLoadFn = unsafe {
         let handle = libc::dlopen(LIBRARY_NAME.as_ptr(), libc::RTLD_LAZY);
-        orig_fn = std::mem::transmute(libc::dlsym(handle, JNI_ONLOAD_NAME.as_ptr()));
-    }
+        if handle.is_null() {
+            panic!("JNI_OnLoad: failed to dlopen {}", LIBRARY_NAME.to_string_lossy());
+        }
+        let sym = libc::dlsym(handle, JNI_ONLOAD_NAME.as_ptr());
+        if sym.is_null() {
+            panic!("JNI_OnLoad: JNI_OnLoad symbol not found in {}", LIBRARY_NAME.to_string_lossy());
+        }
+        std::mem::transmute(sym)
+    };
 
     if !Hachimi::init() {
         return orig_fn(vm, reserved);

@@ -12,29 +12,29 @@ pub const TBPF_NORMAL: TBPFLAG = 2;
 #[cfg(not(target_os = "windows"))]
 pub const TBPF_ERROR: TBPFLAG = 4;
 
-pub fn update_download_state(state: TBPFLAG) {
+pub fn update_download_state(_state: TBPFLAG) {
     #[cfg(target_os = "windows")]
     {
         if crate::core::Hachimi::instance().config.load().windows.taskbar_show_progress_on_download {
-            crate::windows::taskbar::set_progress_state(state);
+            crate::windows::taskbar::set_progress_state(_state);
         }
     }
 }
 
-pub fn update_download_value(completed: u64, total: u64) {
+pub fn update_download_value(_completed: u64, _total: u64) {
     #[cfg(target_os = "windows")]
     {
         if crate::core::Hachimi::instance().config.load().windows.taskbar_show_progress_on_download {
-            crate::windows::taskbar::set_progress_value(completed, total);
+            crate::windows::taskbar::set_progress_value(_completed, _total);
         }
     }
 }
 
-pub fn update_connecting_state(state: TBPFLAG) {
+pub fn update_connecting_state(_state: TBPFLAG) {
     #[cfg(target_os = "windows")]
     {
         if crate::core::Hachimi::instance().config.load().windows.taskbar_show_progress_on_connecting {
-            crate::windows::taskbar::set_progress_state(state);
+            crate::windows::taskbar::set_progress_state(_state);
         }
     }
 }

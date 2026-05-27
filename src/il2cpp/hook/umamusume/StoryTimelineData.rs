@@ -1,11 +1,10 @@
 use std::ptr::null_mut;
 
-use fnv::FnvHashMap;
 use serde::{Deserialize, Serialize};
 use widestring::Utf16Str;
 
 use crate::{
-    core::{ext::Utf16StringExt, utils, Error, Hachimi, SugoiClient}, 
+    core::{ext::Utf16StringExt, utils, Hachimi, SugoiClient}, 
     il2cpp::{
         ext::{Il2CppStringExt, StringExt}, hook::{umamusume::{StoryTimelineCharaTrackData, StoryTimelineClipData}, UnityEngine_AssetBundleModule::AssetBundle::ASSET_PATH_PREFIX}, symbols::{get_field_from_name, get_field_object_value, get_field_value, set_field_object_value, set_field_value, IList}, types::*
     }

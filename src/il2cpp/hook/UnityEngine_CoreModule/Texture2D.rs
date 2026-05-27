@@ -14,7 +14,7 @@ use crate::{core::{ext::Utf16StringExt, Hachimi}, il2cpp::{
     types::*, utils
 }};
 
-use super::{Graphics, RenderTexture, Texture, TextureFormat_RGBA32};
+use super::{Graphics, RenderTexture, Texture};
 
 static mut CLASS: *mut Il2CppClass = null_mut();
 pub fn class() -> *mut Il2CppClass {

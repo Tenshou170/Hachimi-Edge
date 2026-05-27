@@ -10,6 +10,8 @@ use crate::{
 pub static RETRIEVED_RAW_KEY: Lazy<Mutex<Vec<u8>>> = Lazy::new(|| Mutex::new(Vec::new()));
 pub static AUTO_UNLOCK_NEXT_DB: AtomicBool = AtomicBool::new(false);
 pub static META_DATA: Lazy<RwLock<MetaData>> = Lazy::new(|| RwLock::new(MetaData::default()));
+pub static TDQ_IS_SKILL_LEARNING_QUERY: AtomicBool = AtomicBool::new(false);
+pub static IS_SYSTEM_TEXT_QUERY: AtomicBool = AtomicBool::new(false);
 
 // public API
 #[derive(Default)]

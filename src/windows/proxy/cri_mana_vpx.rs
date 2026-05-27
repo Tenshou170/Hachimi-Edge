@@ -17,8 +17,20 @@ pub fn init() {
     }
 
     unsafe {
-        let dll_path_cstr = U16CString::from_str(dll_path.to_str().unwrap()).unwrap();
-        let handle = LoadLibraryW(PCWSTR(dll_path_cstr.as_ptr())).expect("cri_mana_vpx.dll");
+        let dll_path_cstr = match U16CString::from_str(dll_path.to_str().unwrap_or("")) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("[cri_mana_vpx] Failed to encode DLL path: {}", e);
+                return;
+            }
+        };
+        let handle = match LoadLibraryW(PCWSTR(dll_path_cstr.as_ptr())) {
+            Ok(h) => h,
+            Err(e) => {
+                error!("[cri_mana_vpx] Failed to load cri_mana_vpx.dll: {}", e);
+                return;
+            }
+        };
 
         criVvp9_GetAlphaInterface_orig = utils::get_proc_address(handle, c"criVvp9_GetAlphaInterface");
         criVvp9_GetInterface_orig = utils::get_proc_address(handle, c"criVvp9_GetInterface");

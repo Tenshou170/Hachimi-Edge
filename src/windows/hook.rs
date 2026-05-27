@@ -11,12 +11,23 @@ use super::{hachimi_impl, proxy, ffi};
 type LoadLibraryWFn = extern "C" fn(filename: PCWSTR) -> HMODULE;
 extern "C" fn LoadLibraryW(filename: PCWSTR) -> HMODULE {
     let hachimi = Hachimi::instance();
-    let orig_fn: LoadLibraryWFn = unsafe {
-        std::mem::transmute(hachimi.interceptor.get_trampoline_addr(LoadLibraryW as *const () as usize))
-    };
+    // --- W-10 fix: get_trampoline_addr returns 0 if the hook isn't installed
+    // yet.  Guard before transmute so we never call a null function pointer. ---
+    let trampoline = hachimi.interceptor.get_trampoline_addr(LoadLibraryW as *const () as usize);
+    if trampoline == 0 {
+        // Hook not yet active — fall back to the real LoadLibraryW via FFI
+        return unsafe { crate::windows::ffi::LoadLibraryW(filename) };
+    }
+    let orig_fn: LoadLibraryWFn = unsafe { std::mem::transmute(trampoline) };
 
     let handle = orig_fn(filename);
-    let filename_str = unsafe { filename.to_string().expect("valid utf-16 filename") };
+    // --- W-5 fix: to_string() can fail on invalid UTF-16 (Wine path
+    // translation artifacts, etc.).  Treat decode failure as "not our DLL"
+    // and pass through rather than panicking inside the hook. ---
+    let filename_str = match unsafe { filename.to_string() } {
+        Ok(s) => s,
+        Err(_) => return handle,
+    };
 
     if hachimi_impl::is_criware_lib(&filename_str) {
         // Manually trigger a GameAssembly.dll load anyways since hachimi might have been loaded later

@@ -65,7 +65,11 @@ pub extern "C" fn DllMain(hmodule: HMODULE, call_reason: c_ulong, _reserved: *mu
         }
 
         let hachimi = Hachimi::instance();
-        *hachimi.plugins.lock().unwrap() = load_libraries();
+        // --- W-12 fix: recover from poison instead of unwrap in DllMain context ---
+        match hachimi.plugins.lock() {
+            Ok(mut g) => *g = load_libraries(),
+            Err(e) => *e.into_inner() = load_libraries(),
+        }
 
         hook::init();
         info!("Attach completed");

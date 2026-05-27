@@ -121,7 +121,11 @@ pub fn show_error(e: impl AsRef<str>) {
     let s = e.as_ref();
     error!("{}", s);
 
-    let cstr = U16CString::from_str(s).unwrap();
+    // --- U-1 fix: from_str only fails on embedded null bytes, which our
+    // error strings never contain. Replace with lossy conversion to be safe. ---
+    let cstr = U16CString::from_str(s).unwrap_or_else(|_| {
+        U16CString::from_str("<error message contained invalid characters>").unwrap()
+    });
     unsafe { MessageBoxW(None, PCWSTR(cstr.as_ptr()), w!("Hachimi Error"), MB_ICONERROR | MB_OK); }
 }
 

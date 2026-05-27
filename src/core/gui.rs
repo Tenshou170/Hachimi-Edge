@@ -559,28 +559,81 @@ impl Gui {
         let is_landscape = width > height;
         let main_axis_size = if is_landscape { height } else { width.min(height) };
 
+        // --- Fix-A (Windows HiDpi): factor in the monitor's logical→physical
+        // DPI ratio so the GUI renders at the correct physical size on HiDPI
+        // displays and Wine/Proton desktops with non-96 DPI settings.
+        // GetDpiForWindow returns the DPI for the monitor the window is on;
+        // 96 is the baseline "100% scaling" DPI on Windows.
+        // On Wine the value reflects the Wine desktop DPI setting (default 96).
+        // We clamp to [0.5, 4.0] to guard against bogus values from drivers.
+        // Result is cached in egui temp data after the first successful HWND
+        // resolution so GetDpiForWindow is not called every frame. ---
+        #[cfg(target_os = "windows")]
+        let dpi_scale = {
+            use windows::Win32::UI::HiDpi::GetDpiForWindow;
+            let dpi_key = egui::Id::new("hachimi_dpi_scale");
+            // Use cached value if already resolved from a real HWND
+            if let Some(cached) = self.context.data(|d| d.get_temp::<f32>(dpi_key)) {
+                cached
+            } else {
+                let hwnd = crate::windows::wnd_hook::get_target_hwnd();
+                let dpi = if hwnd.0.is_null() {
+                    96u32 // HWND not ready yet, use fallback — will retry next frame
+                } else {
+                    let d = unsafe { GetDpiForWindow(hwnd) };
+                    if d == 0 { 96 } else { d }
+                };
+                let scale = (dpi as f32 / 96.0).clamp(0.5, 4.0);
+                // Only persist once we have a real HWND
+                if !hwnd.0.is_null() {
+                    self.context.data_mut(|d| d.insert_temp(dpi_key, scale));
+                }
+                scale
+            }
+        };
+
+        #[cfg(target_os = "android")]
+        let dpi_scale = 1.0f32;
+
         let orientation_scale = {
             #[cfg(target_os = "windows")]
             {
                 let config = Hachimi::instance().config.load();
                 let orientation_ratio = if is_landscape { height as f32 / width as f32 } else { 1.0 };
-                if is_landscape && config.windows.enable_gui_landscape_ratio { orientation_ratio * config.windows.gui_landscape_ratio } else { 1.0 }
+                if is_landscape && config.windows.enable_gui_landscape_ratio {
+                    orientation_ratio * config.windows.gui_landscape_ratio
+                } else {
+                    1.0
+                }
             }
 
             #[cfg(target_os = "android")]
-            { 1.0 }
+            { 1.0f32 }
         };
 
-        let pixels_per_point = main_axis_size as f32 * PIXELS_PER_POINT_RATIO * orientation_scale;
-        self.context.set_pixels_per_point(pixels_per_point);
+        let pixels_per_point = main_axis_size as f32 * PIXELS_PER_POINT_RATIO
+            * orientation_scale
+            * dpi_scale;
 
-        self.input.screen_rect = Some(egui::Rect {
-            min: egui::Pos2::default(),
+        // --- Fix-B: only push a new pixels_per_point and screen_rect to egui
+        // when something actually changed. set_pixels_per_point triggers a full
+        // egui relayout, so calling it every frame at the same value wastes CPU
+        // and can cause subtle layout jitter. ---
+        let prev_ppp = self.context.pixels_per_point();
+        let screen_rect = egui::Rect {
+            min: egui::Pos2::ZERO,
             max: egui::Pos2::new(
-                width as f32 / self.context.pixels_per_point(),
-                height as f32 / self.context.pixels_per_point()
-            )
-        });
+                width as f32 / pixels_per_point,
+                height as f32 / pixels_per_point,
+            ),
+        };
+
+        if (pixels_per_point - prev_ppp).abs() > f32::EPSILON
+            || self.input.screen_rect != Some(screen_rect)
+        {
+            self.context.set_pixels_per_point(pixels_per_point);
+            self.input.screen_rect = Some(screen_rect);
+        }
 
         self.prev_main_axis_size = main_axis_size;
     }
@@ -1435,30 +1488,45 @@ impl Gui {
         });
         let ratio = progress.current as f32 / progress.total as f32;
 
+        // --- GUI-1 fix: top-center widget-style progress popup.
+        // Card spans ~90% of screen width with a small top margin.
+        // constrain(false) prevents egui from stretching the Area to screen edges. ---
         egui::Area::new("update_progress".into())
-        .fixed_pos(egui::Pos2 {
-            x: 4.0 * scale,
-            y: 4.0 * scale
-        })
+        .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 6.0 * scale))
+        .constrain(false)
         .show(ctx, |ui| {
+            // 72% of screen width (90% × 0.8)
+            let screen_w = ctx.content_rect().width();
+            let card_width = screen_w * 0.72;
+            let pad_h = 10.0 * scale;
+            let pad_v = 6.0 * scale;
             egui::Frame::NONE
             .fill(self.config.ui_panel_fill)
-            .inner_margin(egui::Margin::same((4.0 * scale) as i8))
+            .inner_margin(egui::Margin::symmetric(pad_h as i8, pad_v as i8))
             .corner_radius(4.0 * scale)
             .show(ui, |ui| {
+                ui.set_max_width(card_width);
+
+                // Row 1: title left, percentage right
                 ui.horizontal(|ui| {
-                    ui.label(t!("tl_updater.title"));
-                    ui.add_space(26.0 * scale);
-                    ui.label(format!("{:.2}%", ratio * 100.0));
+                    ui.label(egui::RichText::new(t!("tl_updater.title")).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(format!("{:.2}%", ratio * 100.0));
+                    });
                 });
+
+                // Row 2: progress bar — fills card minus both horizontal pads
                 ui.add(
                     egui::ProgressBar::new(ratio)
                     .desired_height(4.0 * scale)
-                    .desired_width(140.0 * scale)
+                    .desired_width(card_width - pad_h * 2.0)
                 );
+
+                // Row 3: warning text — smaller font to fit on one line at this width
                 ui.label(
                     egui::RichText::new(t!("tl_updater.warning"))
                     .font(egui::FontId::proportional(10.0 * scale))
+                    .weak()
                 );
             });
         });
@@ -1673,17 +1741,21 @@ pub trait Window {
 fn new_window<'a>(ctx: &egui::Context, id: egui::Id, title: impl Into<egui::WidgetText>) -> egui::Window<'a> {
     let scale = get_scale(ctx);
     let salt = get_scale_salt(ctx);
+    // Use 92% of the logical screen width so the window fits on any screen
+    // with a visible margin, and is wide enough for all 4 tabs without scrolling.
+    let screen_w = ctx.content_rect().width();
+    let win_w = (screen_w * 0.92).min(420.0 * scale);
 
     egui::Window::new(title)
     .id(id.with(salt.to_bits()))
     .pivot(egui::Align2::CENTER_CENTER)
     .fixed_pos(ctx.viewport_rect().max / 2.0)
     .min_width(96.0 * scale)
-    .max_width(320.0 * scale)
+    .max_width(win_w)
     .max_height(250.0 * scale)
     .collapsible(false)
     .resizable(false)
-    .constrain(false)
+    .constrain(true)
 }
 
 fn simple_window_layout(ui: &mut egui::Ui, id: egui::Id, add_contents: impl FnOnce(&mut egui::Ui), add_buttons: impl FnOnce(&mut egui::Ui)) {
@@ -1977,15 +2049,17 @@ fn get_enum_options(class_name: &std::ffi::CStr) -> Vec<String> {
 enum ConfigEditorTab {
     General,
     Graphics,
-    Gameplay
+    Gameplay,
+    Advanced
 }
 
 impl ConfigEditorTab {
-    fn display_list() -> [(ConfigEditorTab, Cow<'static, str>); 3] {
+    fn display_list() -> [(ConfigEditorTab, Cow<'static, str>); 4] {
         [
             (ConfigEditorTab::General, t!("config_editor.general_tab")),
             (ConfigEditorTab::Graphics, t!("config_editor.graphics_tab")),
-            (ConfigEditorTab::Gameplay, t!("config_editor.gameplay_tab"))
+            (ConfigEditorTab::Gameplay, t!("config_editor.gameplay_tab")),
+            (ConfigEditorTab::Advanced, t!("config_editor.advanced_tab")),
         ]
     }
 }
@@ -2049,7 +2123,7 @@ impl ConfigEditor {
                     if config.disable_gui {
                         thread::spawn(|| {
                             Gui::instance().unwrap()
-                            .lock().unwrap()
+                            .lock().unwrap_or_else(|e| e.into_inner())
                             .show_window(Box::new(SimpleOkDialog::new(
                                 &t!("warning"),
                                 &t!("config_editor.disable_overlay_warning"),
@@ -2058,6 +2132,68 @@ impl ConfigEditor {
                         });
                     }
                 }
+                ui.end_row();
+
+                ui.label(t!("config_editor.gui_scale"));
+                ui.add(egui::Slider::new(&mut config.gui_scale, 0.25..=2.0).step_by(0.05));
+                ui.end_row();
+
+                #[cfg(target_os = "windows")]
+                {
+                    ui.label(t!("config_editor.gui_landscape_ratio"));
+                    ui.checkbox(&mut config.windows.enable_gui_landscape_ratio, t!("enable"));
+                    ui.end_row();
+
+                    if config.windows.enable_gui_landscape_ratio {
+                        ui.label("");
+                        ui.add(egui::Slider::new(&mut config.windows.gui_landscape_ratio, 0.25..=1.0).step_by(0.05).fixed_decimals(2));
+                        ui.end_row();
+                    }
+
+                    ui.label(t!("config_editor.menu_open_key"));
+                    ui.horizontal(|ui| {
+                        ui.label(crate::windows::utils::vk_to_display_label(config.windows.menu_open_key));
+                        if ui.button(t!("config_editor.menu_open_key_set")).clicked() {
+                            crate::windows::wnd_hook::start_menu_key_capture();
+                            thread::spawn(|| {
+                                Gui::instance().unwrap()
+                                .lock().unwrap_or_else(|e| e.into_inner())
+                                .show_notification(&t!("notification.press_to_set_menu_key"));
+                            });
+                        }
+                    });
+                    ui.end_row();
+                }
+
+                ui.label(t!("theme_editor.title"));
+                ui.horizontal(|ui| {
+                    if ui.button(t!("open")).clicked() {
+                        thread::spawn(|| {
+                            Gui::instance().unwrap()
+                            .lock().unwrap_or_else(|e| e.into_inner())
+                            .show_window(Box::new(ThemeEditorWindow::new()));
+                        });
+                    }
+                });
+                ui.end_row();
+            },
+
+            ConfigEditorTab::Advanced => {
+                // ── Advanced ─────────────────────────────────────────────
+                ui.heading(t!("config_editor.advanced_settings_heading"));
+                ui.label(""); // span second column
+                ui.end_row();
+
+                ui.label(t!("config_editor.enable_file_logging"));
+                ui.checkbox(&mut config.enable_file_logging, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.enable_ipc"));
+                ui.checkbox(&mut config.enable_ipc, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.ipc_listen_all"));
+                ui.checkbox(&mut config.ipc_listen_all, "");
                 ui.end_row();
 
                 ui.label(t!("config_editor.ipv4_only"));
@@ -2081,76 +2217,59 @@ impl ConfigEditor {
                         }
                     ));
                 }
-
                 if res.lost_focus() && config.meta_index_url.trim().is_empty() {
                     config.meta_index_url = hachimi::Config::default().meta_index_url;
                 }
                 ui.end_row();
 
-                ui.label(t!("config_editor.gui_scale"));
-                ui.add(egui::Slider::new(&mut config.gui_scale, 0.25..=2.0).step_by(0.05));
-                ui.end_row();
-
-                #[cfg(target_os = "windows")]
+                ui.label(t!("config_editor.localized_data_dir"));
                 {
-                    ui.label(t!("config_editor.gui_landscape_ratio"));
-                    ui.checkbox(&mut config.windows.enable_gui_landscape_ratio, t!("enable"));
-                    ui.end_row();
-
-                    if config.windows.enable_gui_landscape_ratio {
-                        ui.label("");
-                        ui.add(egui::Slider::new(&mut config.windows.gui_landscape_ratio, 0.25..=1.0).step_by(0.05).fixed_decimals(2));
-                        ui.end_row();
+                    let hachimi = Hachimi::instance();
+                    let data_path = hachimi.get_data_path("");
+                    let mut available_dirs: Vec<String> = std::fs::read_dir(&data_path)
+                        .map(|rd| rd.filter_map(|e| {
+                            let e = e.ok()?;
+                            if e.file_type().ok()?.is_dir() {
+                                e.file_name().into_string().ok()
+                            } else { None }
+                        }).collect())
+                        .unwrap_or_default();
+                    if !available_dirs.contains(&"localized_data".to_string()) {
+                        available_dirs.insert(0, "localized_data".to_string());
                     }
-                }
-
-                ui.label(t!("theme_editor.title"));
-                ui.horizontal(|ui| {
-                    if ui.button(t!("open")).clicked() {
-                        thread::spawn(|| {
-                            Gui::instance().unwrap()
-                            .lock().unwrap()
-                            .show_window(Box::new(ThemeEditorWindow::new()));
+                    let mut current_dir = config.localized_data_dir.clone()
+                        .unwrap_or_else(|| "localized_data".to_string());
+                    // build a slice of (&str, &str) pairs for run_combo
+                    let choices_owned: Vec<(String, String)> = available_dirs.iter()
+                        .map(|s| (s.clone(), s.clone()))
+                        .collect();
+                    let choices: Vec<(&str, &str)> = choices_owned.iter()
+                        .map(|(k, v)| (k.as_str(), v.as_str()))
+                        .collect();
+                    egui::ComboBox::new(ui.id().with("localized_data_dir"), "")
+                        .selected_text(&current_dir)
+                        .show_ui(ui, |ui| {
+                            for (val, label) in &choices {
+                                ui.selectable_value(&mut current_dir, val.to_string(), *label);
+                            }
                         });
-                    }
-                });
-                ui.end_row();
-
-                #[cfg(target_os = "windows")]
-                {
-                    ui.label(t!("config_editor.discord_rpc"));
-                    ui.checkbox(&mut config.windows.discord_rpc, "");
-                    ui.end_row();
-
-                    ui.label(t!("config_editor.menu_open_key"));
-                    ui.horizontal(|ui| {
-                        ui.label(crate::windows::utils::vk_to_display_label(config.windows.menu_open_key));
-                        if ui.button(t!("config_editor.menu_open_key_set")).clicked() {
-                            crate::windows::wnd_hook::start_menu_key_capture();
-                            thread::spawn(|| {
-                                Gui::instance().unwrap()
-                                .lock().unwrap()
-                                .show_notification(&t!("notification.press_to_set_menu_key"));
-                            });
-                        }
-                    });
-                    ui.end_row();
+                    // Always store as Some — None means "not configured" (first-time setup).
+                    // Storing None here would cause LocalizedData::new to skip loading
+                    // all dictionaries entirely.
+                    config.localized_data_dir = Some(current_dir);
                 }
-
-                ui.label(t!("config_editor.debug_mode"));
-                ui.checkbox(&mut config.debug_mode, "");
                 ui.end_row();
 
-                ui.label(t!("config_editor.enable_file_logging"));
-                ui.checkbox(&mut config.enable_file_logging, "");
+                ui.label(t!("config_editor.translator_mode"));
+                ui.checkbox(&mut config.translator_mode, "");
                 ui.end_row();
 
                 ui.label(t!("config_editor.apply_atlas_workaround"));
                 ui.checkbox(&mut config.apply_atlas_workaround, "");
                 ui.end_row();
 
-                ui.label(t!("config_editor.translator_mode"));
-                ui.checkbox(&mut config.translator_mode, "");
+                ui.label(t!("config_editor.replace_to_builtin_font"));
+                ui.checkbox(&mut config.replace_to_builtin_font, "");
                 ui.end_row();
 
                 ui.label(t!("config_editor.skip_first_time_setup"));
@@ -2176,11 +2295,16 @@ impl ConfigEditor {
                 if config.bg_update_mode != hachimi::BgUpdateMode::Disabled {
                     ui.label(t!("config_editor.bg_update_interval"));
                     let mut minutes = (config.bg_update_interval_sec / 60) as i32;
+                    let prev_minutes = minutes;
                     ui.horizontal(|ui| {
                         ui.add(egui::DragValue::new(&mut minutes).speed(1.0).range(1..=10080));
                         ui.label(t!("minutes"));
                     });
-                    config.bg_update_interval_sec = (minutes as u64) * 60;
+                    // Only write back when the value actually changed to avoid
+                    // rounding the stored seconds value on every frame.
+                    if minutes != prev_minutes {
+                        config.bg_update_interval_sec = (minutes as u64) * 60;
+                    }
                     ui.end_row();
                 }
 
@@ -2188,12 +2312,80 @@ impl ConfigEditor {
                 ui.checkbox(&mut config.disable_translations, "");
                 ui.end_row();
 
-                ui.label(t!("config_editor.enable_ipc"));
-                ui.checkbox(&mut config.enable_ipc, "");
+                #[cfg(target_os = "android")]
+                {
+                    ui.label(t!("config_editor.hook_libc_dlopen"));
+                    ui.checkbox(&mut config.android.hook_libc_dlopen, "");
+                    ui.end_row();
+                }
+
+                #[cfg(target_os = "windows")]
+                {
+                    ui.label(t!("config_editor.discord_rpc"));
+                    ui.checkbox(&mut config.windows.discord_rpc, "");
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.window_always_on_top"));
+                    ui.checkbox(&mut config.windows.window_always_on_top, "");
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.enable_smtc"));
+                    ui.checkbox(&mut config.windows.enable_smtc, "");
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.notification_tp"));
+                    ui.checkbox(&mut config.notification_tp, "");
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.notification_rp"));
+                    ui.checkbox(&mut config.notification_rp, "");
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.notification_jobs"));
+                    ui.checkbox(&mut config.notification_jobs, "");
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.taskbar_show_progress_on_download"));
+                    ui.checkbox(&mut config.windows.taskbar_show_progress_on_download, "");
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.taskbar_show_progress_on_connecting"));
+                    ui.checkbox(&mut config.windows.taskbar_show_progress_on_connecting, "");
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.hide_ingame_ui_hotkey_bind"));
+                    ui.label(crate::windows::utils::vk_to_display_label(config.windows.hide_ingame_ui_hotkey_bind));
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.ui_loading_show_orientation_guide"));
+                    ui.checkbox(&mut config.windows.ui_loading_show_orientation_guide, "");
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.custom_title_name"));
+                    {
+                        let mut title = config.custom_title_name.clone().unwrap_or_default();
+                        if ui.add(egui::TextEdit::singleline(&mut title)).changed() {
+                            config.custom_title_name = if title.is_empty() { None } else { Some(title) };
+                        }
+                    }
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.full_screen_res"));
+                    ui.horizontal(|ui| {
+                        ui.add(egui::DragValue::new(&mut config.windows.full_screen_res.width).speed(1).range(0..=7680).suffix("w"));
+                        ui.add(egui::DragValue::new(&mut config.windows.full_screen_res.height).speed(1).range(0..=4320).suffix("h"));
+                    });
+                    ui.end_row();
+                }
+
+                ui.label(t!("config_editor.hide_now_loading"));
+                ui.checkbox(&mut config.hide_now_loading, "");
                 ui.end_row();
 
-                ui.label(t!("config_editor.ipc_listen_all"));
-                ui.checkbox(&mut config.ipc_listen_all, "");
+                // ── Experimental ─────────────────────────────────────────
+                ui.label(""); ui.label(""); ui.end_row(); // spacer
+                ui.heading(t!("config_editor.experimental_settings_heading"));
+                ui.label("");
                 ui.end_row();
 
                 ui.label(t!("config_editor.auto_translate_stories"));
@@ -2201,13 +2393,22 @@ impl ConfigEditor {
                     if config.auto_translate_stories {
                         thread::spawn(|| {
                             Gui::instance().unwrap()
-                            .lock().unwrap()
+                            .lock().unwrap_or_else(|e| e.into_inner())
                             .show_window(Box::new(SimpleOkDialog::new(
                                 &t!("warning"),
                                 &t!("config_editor.auto_tl_warning"),
                                 || {}
                             )));
                         });
+                    }
+                }
+                ui.end_row();
+
+                ui.label(t!("config_editor.sugoi_url"));
+                {
+                    let mut url = config.sugoi_url.clone().unwrap_or_default();
+                    if ui.add(egui::TextEdit::singleline(&mut url)).changed() {
+                        config.sugoi_url = if url.is_empty() { None } else { Some(url) };
                     }
                 }
                 ui.end_row();
@@ -2217,7 +2418,7 @@ impl ConfigEditor {
                     if config.auto_translate_localize {
                         thread::spawn(|| {
                             Gui::instance().unwrap()
-                            .lock().unwrap()
+                            .lock().unwrap_or_else(|e| e.into_inner())
                             .show_window(Box::new(SimpleOkDialog::new(
                                 &t!("warning"),
                                 &t!("config_editor.auto_tl_warning"),
@@ -2228,6 +2429,28 @@ impl ConfigEditor {
                 }
                 ui.end_row();
 
+                ui.label(t!("config_editor.msgpack_notifier"));
+                ui.checkbox(&mut config.msgpack_notifier, "");
+                ui.end_row();
+
+                if config.msgpack_notifier {
+                    ui.label(t!("config_editor.msgpack_notifier_host"));
+                    ui.add(egui::TextEdit::singleline(&mut config.msgpack_notifier_host));
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.msgpack_notifier_request"));
+                    ui.checkbox(&mut config.msgpack_notifier_request, "");
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.msgpack_notifier_connection_timeout_ms"));
+                    ui.add(egui::DragValue::new(&mut config.msgpack_notifier_connection_timeout_ms).speed(100).range(100..=30000).suffix("ms"));
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.msgpack_notifier_print_error"));
+                    ui.checkbox(&mut config.msgpack_notifier_print_error, "");
+                    ui.end_row();
+                }
+
                 ui.label(t!("config_editor.dump_msgpack"));
                 ui.checkbox(&mut config.dump_msgpack, "");
                 ui.end_row();
@@ -2236,44 +2459,48 @@ impl ConfigEditor {
                 ui.checkbox(&mut config.dump_msgpack_request, "");
                 ui.end_row();
 
-                ui.label(t!("config_editor.msgpack_notifier"));
-                ui.checkbox(&mut config.msgpack_notifier, "");
+                // ── Developer ────────────────────────────────────────────
+                ui.label(""); ui.label(""); ui.end_row(); // spacer
+                ui.heading(t!("config_editor.developer_settings_heading"));
+                ui.label("");
                 ui.end_row();
 
-                ui.label(t!("config_editor.notification_tp"));
-                ui.checkbox(&mut config.notification_tp, "");
+                ui.label(t!("config_editor.debug_mode"));
+                ui.checkbox(&mut config.debug_mode, "");
                 ui.end_row();
 
-                ui.label(t!("config_editor.notification_rp"));
-                ui.checkbox(&mut config.notification_rp, "");
-                ui.end_row();
-
-                ui.label(t!("config_editor.notification_jobs"));
-                ui.checkbox(&mut config.notification_jobs, "");
-                ui.end_row();
-
-                #[cfg(target_os = "windows")]
-                {
-                    ui.label(t!("config_editor.taskbar_show_progress_on_download"));
-                    ui.checkbox(&mut config.windows.taskbar_show_progress_on_download, "");
-                    ui.end_row();
-
-                    ui.label(t!("config_editor.taskbar_show_progress_on_connecting"));
-                    ui.checkbox(&mut config.windows.taskbar_show_progress_on_connecting, "");
-                    ui.end_row();
+                ui.label(t!("config_editor.text_debug"));
+                // Only clear sub-options when the user actively unchecks text_debug,
+                // not every frame it happens to be false (which would silently wipe
+                // values that were set in config but not yet saved).
+                if ui.checkbox(&mut config.text_debug, "").clicked() && !config.text_debug {
+                    config.text_log = false;
+                    config.text_property_dump = false;
+                    config.text_localize_dump = false;
+                    config.text_position_debug = false;
+                    config.text_path_debug = false;
                 }
+                ui.end_row();
 
-                if config.msgpack_notifier {
-                    ui.label(t!("config_editor.msgpack_notifier_request"));
-                    ui.checkbox(&mut config.msgpack_notifier_request, "");
+                if config.text_debug {
+                    ui.label(format!("  \u{21b3} {}", t!("config_editor.text_log")));
+                    ui.checkbox(&mut config.text_log, "");
                     ui.end_row();
 
-                    ui.label(t!("config_editor.msgpack_notifier_host"));
-                    ui.add(egui::TextEdit::singleline(&mut config.msgpack_notifier_host));
+                    ui.label(format!("  \u{21b3} {}", t!("config_editor.text_property_dump")));
+                    ui.checkbox(&mut config.text_property_dump, "");
                     ui.end_row();
 
-                    ui.label(t!("config_editor.msgpack_notifier_print_error"));
-                    ui.checkbox(&mut config.msgpack_notifier_print_error, "");
+                    ui.label(format!("  \u{21b3} {}", t!("config_editor.text_localize_dump")));
+                    ui.checkbox(&mut config.text_localize_dump, "");
+                    ui.end_row();
+
+                    ui.label(format!("  \u{21b3} {}", t!("config_editor.text_position_debug")));
+                    ui.checkbox(&mut config.text_position_debug, "");
+                    ui.end_row();
+
+                    ui.label(format!("  \u{21b3} {}", t!("config_editor.text_path_debug")));
+                    ui.checkbox(&mut config.text_path_debug, "");
                     ui.end_row();
                 }
             },
@@ -2390,6 +2617,10 @@ impl ConfigEditor {
                 ui.checkbox(&mut config.cyspring_mono_uncap_frame_scale, "");
                 ui.end_row();
 
+                ui.label(t!("config_editor.cyspring_disable_native"));
+                ui.checkbox(&mut config.cyspring_disable_native, "");
+                ui.end_row();
+
                 ui.label(t!("config_editor.story_choice_auto_select_delay"));
                 ui.add(egui::Slider::new(&mut config.story_choice_auto_select_delay, 0.1..=10.0).step_by(0.05));
                 ui.end_row();
@@ -2488,10 +2719,6 @@ impl ConfigEditor {
                 ui.end_row();
 
                 if config.caption.caption_enable {
-                    ui.label(t!("config_editor.caption_lines_char_count"));
-                    ui.add(egui::Slider::new(&mut config.caption.caption_lines_char_count, 10..=100));
-                    ui.end_row();
-
                     ui.label(t!("config_editor.caption_font_size"));
                     ui.add(egui::Slider::new(&mut config.caption.caption_font_size, 10..=128));
                     ui.end_row();
@@ -2539,9 +2766,10 @@ impl ConfigEditor {
             }
         }
 
-        // Column widths workaround
-        ui.horizontal(|ui| ui.add_space(100.0 * scale));
-        ui.horizontal(|ui| ui.add_space(150.0 * scale));
+        // Column widths workaround — label col wide enough for section headings,
+        // widget col takes the remaining space.
+        ui.horizontal(|ui| ui.add_space(120.0 * scale));
+        ui.horizontal(|ui| ui.add_space(120.0 * scale));
         ui.end_row();
     }
 }
@@ -2573,24 +2801,32 @@ impl Window for ConfigEditor {
         .show(ctx, |ui| {
             simple_window_layout(ui, self.id,
                 |ui| {
-                    egui::ScrollArea::horizontal()
-                    .id_salt("tabs_scroll")
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            let style = ui.style_mut();
-                            style.spacing.button_padding = egui::vec2(8.0, 5.0);
-                            style.spacing.item_spacing = egui::Vec2::ZERO;
-                            let widgets = &mut style.visuals.widgets;
-                            widgets.inactive.corner_radius = egui::CornerRadius::ZERO;
-                            widgets.hovered.corner_radius = egui::CornerRadius::ZERO;
-                            widgets.active.corner_radius = egui::CornerRadius::ZERO;
+                    // Tab bar — no scroll, tabs share the full width equally at uniform height
+                    let tab_height = 28.0 * scale;
+                    ui.horizontal(|ui| {
+                        let style = ui.style_mut();
+                        style.spacing.button_padding = egui::vec2(4.0, 4.0);
+                        style.spacing.item_spacing = egui::Vec2::ZERO;
+                        let widgets = &mut style.visuals.widgets;
+                        widgets.inactive.corner_radius = egui::CornerRadius::ZERO;
+                        widgets.hovered.corner_radius = egui::CornerRadius::ZERO;
+                        widgets.active.corner_radius = egui::CornerRadius::ZERO;
 
-                            for (tab, label) in ConfigEditorTab::display_list() {
-                                if ui.selectable_label(self.current_tab == tab, label.as_ref()).clicked() {
-                                    self.current_tab = tab;
-                                }
+                        let tabs = ConfigEditorTab::display_list();
+                        let tab_count = tabs.len();
+                        let available_w = ui.available_width();
+                        let tab_w = (available_w / tab_count as f32).floor();
+
+                        for (tab, label) in tabs {
+                            let is_active = self.current_tab == tab;
+                            #[allow(deprecated)]
+                            if ui.add_sized(
+                                egui::vec2(tab_w, tab_height),
+                                egui::SelectableLabel::new(is_active, label.as_ref())
+                            ).clicked() {
+                                self.current_tab = tab;
                             }
-                        });
+                        }
                     });
 
                     ui.add_space(4.0);
@@ -2604,7 +2840,7 @@ impl Window for ConfigEditor {
                             egui::Grid::new(self.id.with("options_grid"))
                             .striped(true)
                             .num_columns(2)
-                            .spacing([40.0 * scale, 4.0 * scale])
+                            .spacing([32.0 * scale, 4.0 * scale])
                             .show(ui, |ui| {
                                 self.run_options_grid(&mut config, ui, self.current_tab);
                             });

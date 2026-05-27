@@ -1,5 +1,10 @@
 use crate::il2cpp::{api::il2cpp_resolve_icall, symbols::{get_method_addr, Array}, types::*};
 
+static mut CLASS: *mut Il2CppClass = 0 as _;
+pub fn class() -> *mut Il2CppClass {
+    unsafe { CLASS }
+}
+
 static mut DESTROY_ADDR: usize = 0;
 impl_addr_wrapper_fn!(Destroy, DESTROY_ADDR, (), obj: *mut Il2CppObject);
 
@@ -15,6 +20,9 @@ impl_addr_wrapper_fn!(get_name, GET_NAME_ADDR, *mut Il2CppString, this: *mut Il2
 static mut SET_NAME_ADDR: usize = 0;
 impl_addr_wrapper_fn!(set_name, SET_NAME_ADDR, (), this: *mut Il2CppObject, name: *mut Il2CppString);
 
+static mut GET_INSTANCEID_ADDR: usize = 0;
+impl_addr_wrapper_fn!(get_instanceID, GET_INSTANCEID_ADDR, i32, this: *mut Il2CppObject);
+
 static mut FINDOBJECTSOFTYPE_ADDR: usize = 0;
 impl_addr_wrapper_fn!(
     FindObjectsOfType, FINDOBJECTSOFTYPE_ADDR, Array<*mut Il2CppObject>, type_: *mut Il2CppObject, include_inactive: bool
@@ -27,11 +35,13 @@ pub fn init(UnityEngine_CoreModule: *const Il2CppImage) {
     get_class_or_return!(UnityEngine_CoreModule, UnityEngine, Object);
 
     unsafe {
+        CLASS = Object;
         DESTROY_ADDR = get_method_addr(Object, c"Destroy", 1);
         SET_HIDEFLAGS_ADDR = get_method_addr(Object, c"set_hideFlags", 1);
         ISNATIVEOBJECTALIVE_ADDR = get_method_addr(Object, c"IsNativeObjectAlive", 1);
         GET_NAME_ADDR = get_method_addr(Object, c"get_name", 0);
         SET_NAME_ADDR = get_method_addr(Object, c"set_name", 1);
+        GET_INSTANCEID_ADDR = get_method_addr(Object, c"GetInstanceID", 0);
         FINDOBJECTSOFTYPE_ADDR = il2cpp_resolve_icall(
             c"UnityEngine.Object::FindObjectsOfType(System.Type,System.Boolean)".as_ptr()
         );
