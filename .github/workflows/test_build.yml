@@ -1,10 +1,30 @@
-name: Create Release
+name: Test Build
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-on: workflow_dispatch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+      - 'README-zh_cn.md'
+      - 'README-zh_tw.md'
+      - 'BUILDING.md'
+      - 'BUILDING-zh_cn.md'
+      - 'BUILDING-zh_tw.md'
+      - '.gitignore'
+      - 'rustfmt.toml'
+      - '.github/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 permissions:
   contents: write
   id-token: write
@@ -27,7 +47,7 @@ jobs:
           rustup target add aarch64-linux-android
           RELEASE=1 ./tools/android/build.sh
         env:
-          HACHIMI_IGNORE_DIRTY: "true"
+          HACHIMI_IGNORE_DIRTY: "false"
 
       - name: Attest Android
         uses: actions/attest@v4
@@ -39,7 +59,7 @@ jobs:
       - name: Upload Android binaries
         uses: actions/upload-artifact@v7
         with:
-          name: android
+          name: android-test
           path: |
             build/*.so
             build/sha256.json
@@ -59,7 +79,7 @@ jobs:
           cargo build --target x86_64-pc-windows-msvc --target-dir build --release
           move build\x86_64-pc-windows-msvc\release\hachimi.dll build
         env:
-          HACHIMI_IGNORE_DIRTY: "true"
+          HACHIMI_IGNORE_DIRTY: "false"
 
       - name: Build Cellar
         run: |
@@ -95,7 +115,7 @@ jobs:
             "hachimi_installer.exe": "$EXE_HASH"
           }
           EOF
-
+      
       - name: Attest Windows
         uses: actions/attest@v4
         with:
@@ -107,59 +127,8 @@ jobs:
       - name: Upload Windows binaries
         uses: actions/upload-artifact@v7
         with:
-          name: windows
+          name: windows-test
           path: |
             build/blake3.json
             build/hachimi.dll
             build/hachimi_installer.exe
-
-  create-release:
-    needs: [build-android, build-windows]
-    runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[ci skip]')"
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - name: Get release version
-        id: get_info
-        run: |
-          VERSION=$(awk '/^\[package\]/{flag=1} flag && /^version/{print $3; exit}' Cargo.toml | tr -d '"')
-          echo "RELEASE_VERSION=v$VERSION" >> $GITHUB_ENV
-
-      - name: Destroy existing release and tag
-        run: |
-          gh release delete ${{ env.RELEASE_VERSION }} --yes || true
-          git push origin :refs/tags/${{ env.RELEASE_VERSION }} || true
-          git tag -d ${{ env.RELEASE_VERSION }} || true
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v8
-        with:
-          path: artifacts
-
-      - name: Create release notes
-        run: |
-          LATEST_TAG=${{ env.RELEASE_VERSION }}
-          git tag $LATEST_TAG
-
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${LATEST_TAG}^" 2>/dev/null || echo "")
-          
-          if [ -n "$PREVIOUS_TAG" ]; then
-            echo "Full Changelog: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...${LATEST_TAG}" > CHANGELOG.md
-          else
-            echo "Initial release" > CHANGELOG.md
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Upload binaries to a release
-        uses: softprops/action-gh-release@v3
-        with:
-          body_path: CHANGELOG.md
-          files: |
-            artifacts/android/*
-            artifacts/windows/*
-          tag_name: ${{ env.RELEASE_VERSION }}
