@@ -1,4 +1,4 @@
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::ptr::null_mut;
@@ -9,6 +9,12 @@ use crate::{core::{template, Hachimi, hachimi::{CommonOverrides, SiblingOverride
 
 static DUMPED_PATHS: Lazy<Mutex<FnvHashSet<String>>> = Lazy::new(|| Mutex::default());
 static SYSTEM_TEXT_COMPONENTS: Lazy<Mutex<FnvHashSet<i32>>> = Lazy::new(|| Mutex::default());
+// Atomic flag so PopulateWithErrors can skip the mutex lock entirely when no
+// system text components have been registered yet (the common case at startup).
+static SYSTEM_TEXT_COMPONENTS_NONEMPTY: AtomicBool = AtomicBool::new(false);
+// Cap the set size to avoid unbounded growth — instance IDs are recycled by
+// Unity so old entries become stale. 512 is well above any realistic count.
+const SYSTEM_TEXT_COMPONENTS_MAX: usize = 512;
 
 struct StoredPosition {
     base: Vector2_t,
@@ -37,14 +43,20 @@ static PENDING_OFFSETS: Lazy<Mutex<Vec<PendingOffset>>> = Lazy::new(|| Mutex::ne
 pub fn mark_as_system_text_component(this: *mut Il2CppObject) {
     if this.is_null() { return; }
     let id = Object::get_instanceID(this);
-    SYSTEM_TEXT_COMPONENTS.lock().unwrap().insert(id);
+    let mut components = SYSTEM_TEXT_COMPONENTS.lock().unwrap();
+    // Evict oldest entries if we hit the cap to prevent unbounded growth.
+    if components.len() >= SYSTEM_TEXT_COMPONENTS_MAX {
+        components.clear();
+    }
+    components.insert(id);
     unsafe {
         let go = (*this).game_object();
         if !go.is_null() {
             let go_id = Object::get_instanceID(go);
-            SYSTEM_TEXT_COMPONENTS.lock().unwrap().insert(go_id);
+            components.insert(go_id);
         }
     }
+    SYSTEM_TEXT_COMPONENTS_NONEMPTY.store(true, Ordering::Relaxed);
 }
 
 fn find_text_property_override<'a>(
@@ -120,7 +132,8 @@ extern "C" fn PopulateWithErrors(
     let mut force_wrap = false;
     if IS_SYSTEM_TEXT_QUERY.load(Ordering::Relaxed) || TDQ_IS_SKILL_LEARNING_QUERY.load(Ordering::Relaxed) {
         force_wrap = true;
-    } else {
+    } else if SYSTEM_TEXT_COMPONENTS_NONEMPTY.load(Ordering::Relaxed) {
+        // Only acquire the mutex when we know the set is non-empty.
         let components = SYSTEM_TEXT_COMPONENTS.lock().unwrap();
         if !context.is_null() {
             if components.contains(&Object::get_instanceID(context)) { force_wrap = true; }
@@ -130,9 +143,20 @@ extern "C" fn PopulateWithErrors(
     }
     if force_wrap { settings.horizontalOverflow = 0; }
 
-    let path = get_hierarchy_path_with_fallback(context, this);
+    // Lazily compute the hierarchy path — walking the transform tree is expensive
+    // (multiple IL2CPP boundary crossings per node). Only compute it when something
+    // actually needs it: overrides, caption check, or debug logging.
+    let needs_path = !text_settings.font_overrides.is_empty()
+        || !text_settings.text_properties_overrides.is_empty()
+        || config.caption.caption_enable
+        || (config.text_debug && (config.text_property_dump || config.text_path_debug || config.text_log));
+    let path: String = if needs_path {
+        get_hierarchy_path_with_fallback(context, this)
+    } else {
+        String::new()
+    };
 
-    if path.contains("PartsCharaMessage") {
+    if !path.is_empty() && path.contains("PartsCharaMessage") {
         settings.horizontalOverflow = 0;
         settings.verticalOverflow = 1;
         settings.resizeTextMaxSize = 30;
@@ -443,7 +467,8 @@ pub fn drain_pending_offsets() {
 
     let config = Hachimi::instance().config.load();
     let mut pos_map = ORIGINAL_POSITIONS.lock().unwrap();
-    
+
+    // Only prune stale entries when we actually have work to do
     pos_map.retain(|_, stored| {
         (stored.base.x - stored.applied.x).abs() > 0.01 ||
         (stored.base.y - stored.applied.y).abs() > 0.01

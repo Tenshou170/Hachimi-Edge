@@ -9,12 +9,12 @@ use crate::{core::{plugin_api::Plugin, updater}, gui_impl, hachimi_impl, il2cpp:
 
 use super::{game::{Game, Region}, ipc, plurals, template, template_filters, tl_repo, utils, Error, Interceptor};
 
-pub const REPO_PATH: &str = "THShafi170/Hachimi-Edge";
+pub const REPO_PATH: &str = "Tenshou170/Hachimi-Edge";
 pub const GITHUB_API: &str = "https://api.github.com/repos";
 pub const CODEBERG_API: &str = "https://codeberg.org/api/v1/repos";
 pub const WEBSITE_URL: &str = "https://hachimi.noccu.art";
 pub const UMAPATCHER_PACKAGE_NAME: &str = "dev.LeadRDRK.UmaPatcherEdge";
-pub const UMAPATCHER_INSTALL_URL: &str = "https://github.com/THShafi170/UmaPatcher-Edge/releases/latest";
+pub const UMAPATCHER_INSTALL_URL: &str = "https://github.com/Tenshou170/UmaPatcher-Edge/releases/latest";
 
 pub static CONFIG_LOAD_ERROR: AtomicBool = AtomicBool::new(false);
 

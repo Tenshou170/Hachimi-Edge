@@ -53,6 +53,8 @@ pub fn apply_ui_scale() {
         #[cfg(target_os = "windows")]
         CanvasScaler::set_scaleFactor(*scaler, scale);
     }
+
+    crate::core::captions::Captions::reposition_scheduled();
 }
 
 type SetHeaderTitleTextFn = extern "C" fn(this: *mut Il2CppObject, text: *mut Il2CppString, guide_id: i32);

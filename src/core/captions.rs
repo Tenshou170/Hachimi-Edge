@@ -512,8 +512,30 @@ fn set_format_impl(
             #[derive(Clone, Copy)]
             struct Vec3 { x: f32, y: f32, z: f32 }
 
+            // Get screen orientation
+            let screen_class = get_class(c"UnityEngine.CoreModule.dll", c"UnityEngine", c"Screen");
+            let mut width = 1080;
+            let mut height = 1920;
+            if !screen_class.is_null() {
+                let w_obj = invoke_method(screen_class, c"get_width", 0, null_mut(), null_mut());
+                if !w_obj.is_null() {
+                    width = unsafe { *(il2cpp_object_unbox(w_obj) as *mut i32) };
+                }
+                let h_obj = invoke_method(screen_class, c"get_height", 0, null_mut(), null_mut());
+                if !h_obj.is_null() {
+                    height = unsafe { *(il2cpp_object_unbox(h_obj) as *mut i32) };
+                }
+            }
+
+            let is_landscape = width > height;
+            let final_pos_y = if is_landscape {
+                pos_y * 0.55
+            } else {
+                pos_y
+            };
+
             let pos = unsafe { &*(il2cpp_object_unbox(pos_obj) as *const Vec3) };
-            let mut new_pos = Vec3 { x: pos_x, y: pos_y, z: pos.z };
+            let mut new_pos = Vec3 { x: pos_x, y: final_pos_y, z: pos.z };
             let mut p: [*mut c_void; 1] = [&mut new_pos as *mut Vec3 as _];
             invoke(set_pos_m, cg_tr as _, p.as_mut_ptr());
         }
@@ -593,6 +615,32 @@ impl Captions {
         let os = outline_size.to_owned();
         let oc = outline_color.to_owned();
         guarded(move || set_format_impl(font_size, &fc, &os, &oc, pos_x, pos_y, bg_alpha));
+    }
+
+    pub fn reposition() {
+        let config = crate::core::Hachimi::instance().config.load();
+        Self::set_format(
+            config.caption.caption_font_size,
+            &config.caption.caption_color,
+            &config.caption.caption_outline_size,
+            &config.caption.caption_outline_color,
+            config.caption.caption_pos_x,
+            config.caption.caption_pos_y,
+            config.caption.caption_bg_alpha,
+        );
+    }
+
+    pub fn reposition_scheduled() {
+        let threads = symbols::Thread::attached_threads();
+        if let Some(main) = threads.first() {
+            main.schedule(Self::reposition_callback);
+        } else {
+            warn!("[captions] no attached threads for reposition scheduling");
+        }
+    }
+
+    fn reposition_callback() {
+        Self::reposition();
     }
 
     pub fn cleanup() {

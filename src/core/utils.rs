@@ -154,15 +154,24 @@ impl<'a> Iterator for IsolateTags<'a> {
                     b'>' | b'=' | b' ' => 'tag_name_end: {
                         if expecting_tag_name {
                             if !in_closing_tag {
-                                // Check for a matching closing tag after
                                 let tag_name = &self.s[tag_start+1..self.i];
-                                let mut closing_tag = String::with_capacity(3 + tag_name.len());
-                                closing_tag += "</";
-                                closing_tag += tag_name;
-                                closing_tag += ">";
-                                if !self.s[self.i..].contains(&closing_tag) {
+                                if tag_name.is_empty() {
                                     in_tag = false;
                                     break 'tag_name_end;
+                                }
+                                // Tags with a value (e.g. <size=39>, <color=#FF6D26>) are
+                                // self-contained — accept them without requiring a closing tag.
+                                // For plain tags (e.g. <b>, <i>) check for a closing tag in
+                                // the full remaining string so we don't misidentify stray '<'.
+                                if c != b'=' {
+                                    let mut closing_tag = String::with_capacity(3 + tag_name.len());
+                                    closing_tag += "</";
+                                    closing_tag += tag_name;
+                                    closing_tag += ">";
+                                    if !self.s[self.i..].contains(&closing_tag) {
+                                        in_tag = false;
+                                        break 'tag_name_end;
+                                    }
                                 }
                             }
                             expecting_tag_name = false;
@@ -304,8 +313,8 @@ fn custom_wrap_algorithm<'a, 'b>(words: &'b [Word<'a>], line_widths: &'b [usize]
     let mut removed_indices = Vec::with_capacity(words.len());
     let mut remove_offset = 0;
     for (i, word) in words.iter().enumerate() {
-        let is_tag = word.starts_with("<") && word.ends_with(">");
-        let is_expr = word.starts_with("$(") && word.ends_with(")");
+        let is_tag = word.starts_with("<") && word.trim_end().ends_with(">");
+        let is_expr = word.starts_with("$(") && word.trim_end().ends_with(")");
         if is_tag || is_expr {
             removed_indices.push(i - remove_offset);
             remove_offset += 1;
