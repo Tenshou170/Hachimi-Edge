@@ -24,6 +24,10 @@ extern "C" fn Initialize(this: *mut Il2CppObject) {
     let text_label = get_TextLabel(this);
     let localized_data = Hachimi::instance().localized_data.load();
 
+    // Enable rich text so <color=...> tags from ColorTextInfo translations
+    // render correctly in the story dialogue box instead of as literal markup.
+    Text::set_richText(text_label, true);
+
     if let Some(mult) = localized_data.config.text_frame_line_spacing_multiplier {
         let line_spacing = Text::get_lineSpacing(text_label);
         Text::set_lineSpacing(text_label, line_spacing * mult);

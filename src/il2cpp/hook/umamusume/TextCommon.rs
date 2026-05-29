@@ -90,34 +90,27 @@ extern "C" fn SetSystemTextWithLineHeadWrap(this: *mut Il2CppObject, system_text
     });
 }
 
-// SetTextWithLineHeadWrap and SetTextWithLineHeadWrapWithColorTag handle
-// plain string system text (e.g. gacha guaranteed badge labels).
-// They need the same best-fit + IS_SYSTEM_TEXT_QUERY treatment.
-
+// SetTextWithLineHeadWrap handles plain string system text (e.g. gacha badge labels,
+// mission text, archive text). These call GallopUtil::LineHeadWrapCommon internally
+// to do the actual wrapping. We must NOT set IS_SYSTEM_TEXT_QUERY here — GallopUtil
+// checks that flag and returns the string unchanged when it's set, which would bypass
+// the game's own wrapping and leave text on a single line (archive About text, etc.).
+// We also must NOT set resizeTextForBestFit — components with zero-size bounds at
+// call time (e.g. ScheduleBookTop mission items) crash Unity's best-fit algorithm.
+// Just call through and let the game + GallopUtil handle everything.
 type SetTextWithLineHeadWrapFn = extern "C" fn(this: *mut Il2CppObject, str: *mut Il2CppString, maxCharacter: i32);
 extern "C" fn SetTextWithLineHeadWrap(this: *mut Il2CppObject, str: *mut Il2CppString, max_character: i32) {
-    Text::set_horizontalOverflow(this, 0);
-    Text::set_resizeTextForBestFit(this, true);
-    Text::set_resizeTextMinSize(this, 14);
-    Text::set_resizeTextMaxSize(this, 30);
-    mark_as_system_text_component(this);
-
-    with_system_text_query(|| {
-        get_orig_fn!(SetTextWithLineHeadWrap, SetTextWithLineHeadWrapFn)(this, str, max_character);
-    });
+    get_orig_fn!(SetTextWithLineHeadWrap, SetTextWithLineHeadWrapFn)(this, str, max_character);
 }
 
+// SetTextWithLineHeadWrapWithColorTag handles text with <color=...> tags (e.g. career
+// story dialogue). Same reasoning as above — no IS_SYSTEM_TEXT_QUERY, no resizeTextForBestFit.
+// We only enable richText so translated <color=...> tags render as colored text instead
+// of literal markup, then let the original + GallopUtil handle wrapping normally.
 type SetTextWithLineHeadWrapWithColorTagFn = extern "C" fn(this: *mut Il2CppObject, str: *mut Il2CppString, maxCharacter: i32);
 extern "C" fn SetTextWithLineHeadWrapWithColorTag(this: *mut Il2CppObject, str: *mut Il2CppString, max_character: i32) {
-    Text::set_horizontalOverflow(this, 0);
-    Text::set_resizeTextForBestFit(this, true);
-    Text::set_resizeTextMinSize(this, 14);
-    Text::set_resizeTextMaxSize(this, 30);
-    mark_as_system_text_component(this);
-
-    with_system_text_query(|| {
-        get_orig_fn!(SetTextWithLineHeadWrapWithColorTag, SetTextWithLineHeadWrapWithColorTagFn)(this, str, max_character);
-    });
+    Text::set_richText(this, true);
+    get_orig_fn!(SetTextWithLineHeadWrapWithColorTag, SetTextWithLineHeadWrapWithColorTagFn)(this, str, max_character);
 }
 
 pub fn init(umamusume: *const Il2CppImage) {

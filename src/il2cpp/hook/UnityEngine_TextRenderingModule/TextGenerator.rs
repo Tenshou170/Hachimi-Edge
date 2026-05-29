@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::ptr::null_mut;
@@ -8,13 +8,6 @@ use once_cell::sync::Lazy;
 use crate::{core::{template, Hachimi, hachimi::{CommonOverrides, SiblingOverride, TextPropertyOverrides}}, il2cpp::{api::il2cpp_class_is_assignable_from, ext::{Il2CppObjectExt, Il2CppStringExt, StringExt}, hook::UnityEngine_CoreModule::{GameObject, Object, RectTransform, Transform}, sql::{IS_SYSTEM_TEXT_QUERY, TDQ_IS_SKILL_LEARNING_QUERY}, types::*}};
 
 static DUMPED_PATHS: Lazy<Mutex<FnvHashSet<String>>> = Lazy::new(|| Mutex::default());
-static SYSTEM_TEXT_COMPONENTS: Lazy<Mutex<FnvHashSet<i32>>> = Lazy::new(|| Mutex::default());
-// Atomic flag so PopulateWithErrors can skip the mutex lock entirely when no
-// system text components have been registered yet (the common case at startup).
-static SYSTEM_TEXT_COMPONENTS_NONEMPTY: AtomicBool = AtomicBool::new(false);
-// Cap the set size to avoid unbounded growth — instance IDs are recycled by
-// Unity so old entries become stale. 512 is well above any realistic count.
-const SYSTEM_TEXT_COMPONENTS_MAX: usize = 512;
 
 struct StoredPosition {
     base: Vector2_t,
@@ -22,10 +15,9 @@ struct StoredPosition {
 }
 static ORIGINAL_POSITIONS: Lazy<Mutex<HashMap<usize, StoredPosition>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
-#[derive(Clone)]
 enum ActionTarget {
-    Direct(*mut Il2CppObject),
-    Sibling { anchor: *mut Il2CppObject, name: String },
+    Direct(crate::il2cpp::symbols::GCHandle),
+    Sibling { anchor: crate::il2cpp::symbols::GCHandle, name: String },
 }
 
 struct PendingAction {
@@ -40,24 +32,7 @@ struct PendingOffset {
 unsafe impl Send for PendingOffset {}
 static PENDING_OFFSETS: Lazy<Mutex<Vec<PendingOffset>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
-pub fn mark_as_system_text_component(this: *mut Il2CppObject) {
-    if this.is_null() { return; }
-    let id = Object::get_instanceID(this);
-    let mut components = SYSTEM_TEXT_COMPONENTS.lock().unwrap();
-    // Evict oldest entries if we hit the cap to prevent unbounded growth.
-    if components.len() >= SYSTEM_TEXT_COMPONENTS_MAX {
-        components.clear();
-    }
-    components.insert(id);
-    unsafe {
-        let go = (*this).game_object();
-        if !go.is_null() {
-            let go_id = Object::get_instanceID(go);
-            components.insert(go_id);
-        }
-    }
-    SYSTEM_TEXT_COMPONENTS_NONEMPTY.store(true, Ordering::Relaxed);
-}
+pub fn mark_as_system_text_component(_this: *mut Il2CppObject) {}
 
 fn find_text_property_override<'a>(
     overrides: &'a fnv::FnvHashMap<String, TextPropertyOverrides>,
@@ -129,34 +104,17 @@ extern "C" fn PopulateWithErrors(
         settings.fontSize = (settings.fontSize as f32 * text_settings.font_scale) as i32;
     }
 
-    let mut force_wrap = false;
-    if IS_SYSTEM_TEXT_QUERY.load(Ordering::Relaxed) || TDQ_IS_SKILL_LEARNING_QUERY.load(Ordering::Relaxed) {
-        force_wrap = true;
-    } else if SYSTEM_TEXT_COMPONENTS_NONEMPTY.load(Ordering::Relaxed) {
-        // Only acquire the mutex when we know the set is non-empty.
-        let components = SYSTEM_TEXT_COMPONENTS.lock().unwrap();
-        if !context.is_null() {
-            if components.contains(&Object::get_instanceID(context)) { force_wrap = true; }
-        } else if !this.is_null() {
-            if components.contains(&Object::get_instanceID(this)) { force_wrap = true; }
-        }
-    }
+    let force_wrap = IS_SYSTEM_TEXT_QUERY.load(Ordering::Relaxed)
+        || TDQ_IS_SKILL_LEARNING_QUERY.load(Ordering::Relaxed);
     if force_wrap { settings.horizontalOverflow = 0; }
 
     // Lazily compute the hierarchy path — walking the transform tree is expensive
-    // (multiple IL2CPP boundary crossings per node). Only compute it when something
-    // actually needs it: overrides, caption check, or debug logging.
-    let needs_path = !text_settings.font_overrides.is_empty()
-        || !text_settings.text_properties_overrides.is_empty()
-        || config.caption.caption_enable
-        || (config.text_debug && (config.text_property_dump || config.text_path_debug || config.text_log));
-    let path: String = if needs_path {
-        get_hierarchy_path_with_fallback(context, this)
-    } else {
-        String::new()
-    };
+    // (multiple IL2CPP boundary crossings per node). Always compute it since
+    // PartsCharaMessage needs it unconditionally; the other consumers (overrides,
+    // captions, debug) benefit from it being pre-computed here too.
+    let path = get_hierarchy_path_with_fallback(context, this);
 
-    if !path.is_empty() && path.contains("PartsCharaMessage") {
+    if path.contains("PartsCharaMessage") {
         settings.horizontalOverflow = 0;
         settings.verticalOverflow = 1;
         settings.resizeTextMaxSize = 30;
@@ -293,7 +251,7 @@ fn queue_position_offset(context: *mut Il2CppObject, fallback: *mut Il2CppObject
                 debug!("[PositionOffset] QUEUE DIRECT resolved_target={:#x} name={}", transform as usize, unsafe { (*transform).name() });
             }
             actions.push(PendingAction {
-                target: ActionTarget::Direct(transform),
+                target: ActionTarget::Direct(crate::il2cpp::symbols::GCHandle::new(transform, false)),
                 properties: props.common.clone(),
             });
         }
@@ -310,7 +268,7 @@ fn queue_position_offset(context: *mut Il2CppObject, fallback: *mut Il2CppObject
             }
             actions.push(PendingAction {
                 target: ActionTarget::Sibling {
-                    anchor,
+                    anchor: crate::il2cpp::symbols::GCHandle::new(anchor, false),
                     name: sib_name.clone(),
                 },
                 properties: CommonOverrides {
@@ -343,7 +301,7 @@ fn queue_position_offset(context: *mut Il2CppObject, fallback: *mut Il2CppObject
             }
             actions.push(PendingAction {
                 target: ActionTarget::Sibling {
-                    anchor,
+                    anchor: crate::il2cpp::symbols::GCHandle::new(anchor, false),
                     name: sib.name.clone(),
                 },
                 properties: sib.properties.clone(),
@@ -477,10 +435,15 @@ pub fn drain_pending_offsets() {
     for p in offsets {
         for action in p.actions {
             match action.target {
-                ActionTarget::Direct(transform) => {
-                    apply_common_overrides(transform, &action.properties, &mut pos_map, config.text_debug && config.text_position_debug);
+                ActionTarget::Direct(handle) => {
+                    let transform = handle.target();
+                    if !transform.is_null() {
+                        apply_common_overrides(transform, &action.properties, &mut pos_map, config.text_debug && config.text_position_debug);
+                    }
                 }
-                ActionTarget::Sibling { anchor, name } => {
+                ActionTarget::Sibling { anchor: anchor_handle, name } => {
+                    let anchor = anchor_handle.target();
+                    if anchor.is_null() || !Object::IsNativeObjectAlive(anchor) { continue; }
                     if config.text_debug && config.text_position_debug {
                         debug!("[SiblingOffset] DRAIN SIBLING anchor={:#x} name={} searching for={}", anchor as usize, get_hierarchy_path(anchor), name);
                     }
