@@ -88,7 +88,11 @@ fn UpdateItemCommon(this: *mut Il2CppObject, skill_info: *mut Il2CppObject, orig
         });
     }
 
-    TextDataQuery::with_skill_query(&txt_cfg, orig_fn_cb);
+    TextDataQuery::with_skill_query(&txt_cfg, || {
+        TextDataQuery::with_skill_learning_query(|| {
+            orig_fn_cb();
+        });
+    });
 
     if txt_cfg.is_localized {
         if !name.is_null() {

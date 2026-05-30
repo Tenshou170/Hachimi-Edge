@@ -250,6 +250,15 @@ impl TextDataQuery {
         TDQ_SKILL_TEXT_FORMAT.store(ptr::null_mut(), atomic::Ordering::Relaxed);
     }
 
+    /// Sets TDQ_IS_SKILL_LEARNING_QUERY for the duration of the callback so GallopUtil
+    /// and PopulateWithErrors know to skip their own wrapping on skill text that is
+    /// already handled by wrap_fit_text in the SQL query path.
+    pub fn with_skill_learning_query(callback: impl FnOnce()) {
+        TDQ_IS_SKILL_LEARNING_QUERY.store(true, atomic::Ordering::Relaxed);
+        callback();
+        TDQ_IS_SKILL_LEARNING_QUERY.store(false, atomic::Ordering::Relaxed);
+    }
+
     // Abuse static lifetime for our funky not-really static pointer because we like living on the Edge :>
     fn requested_skill_format() -> Result<&'static mut SkillTextFormatting, ()> {
         let cfg_ptr = TDQ_SKILL_TEXT_FORMAT.load(atomic::Ordering::Relaxed);

@@ -19,6 +19,21 @@ extern "C" fn UpdateCurrent(this: *mut Il2CppObject) {
     let name = get__nameText(this);
     let desc = get__descText(this);
 
+    // Apply best-fit settings unconditionally before the original call so the
+    // text components are ready regardless of whether a translation is found.
+    // Matches Reko's approach: let Unity handle layout, GallopUtil is suppressed
+    // via TDQ_IS_SKILL_LEARNING_QUERY so it doesn't double-wrap.
+    if !name.is_null() {
+        Text::set_horizontalOverflow(name, 0);
+        Text::set_resizeTextForBestFit(name, true);
+    }
+    if !desc.is_null() {
+        Text::set_horizontalOverflow(desc, 0);
+        Text::set_resizeTextForBestFit(desc, true);
+        Text::set_resizeTextMinSize(desc, 14);
+        Text::set_resizeTextMaxSize(desc, 30);
+    }
+
     let mut skill_cfg = sql::SkillTextFormatting::default();
     if !name.is_null() {
         skill_cfg.name = Some(sql::TextFormatting {
@@ -36,20 +51,18 @@ extern "C" fn UpdateCurrent(this: *mut Il2CppObject) {
     }
 
     TextDataQuery::with_skill_query(&skill_cfg, || {
-        get_orig_fn!(UpdateCurrent, UpdateCurrentFn)(this);
+        TextDataQuery::with_skill_learning_query(|| {
+            get_orig_fn!(UpdateCurrent, UpdateCurrentFn)(this);
+        });
     });
 
+    // If a translation was found, allow overflow so the fitted text isn't clipped.
     if skill_cfg.is_localized {
         if !name.is_null() {
             Text::set_horizontalOverflow(name, 1);
-            // Best-fit resizing from File 1, applied only when localized
-            Text::set_resizeTextForBestFit(name, true);
         }
         if !desc.is_null() {
             Text::set_horizontalOverflow(desc, 1);
-            Text::set_resizeTextForBestFit(desc, true);
-            Text::set_resizeTextMinSize(desc, 14);
-            Text::set_resizeTextMaxSize(desc, 30);
         }
     }
 }
