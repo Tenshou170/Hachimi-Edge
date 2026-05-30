@@ -2325,10 +2325,6 @@ impl ConfigEditor {
                     ui.checkbox(&mut config.windows.discord_rpc, "");
                     ui.end_row();
 
-                    ui.label(t!("config_editor.window_always_on_top"));
-                    ui.checkbox(&mut config.windows.window_always_on_top, "");
-                    ui.end_row();
-
                     ui.label(t!("config_editor.enable_smtc"));
                     ui.checkbox(&mut config.windows.enable_smtc, "");
                     ui.end_row();
