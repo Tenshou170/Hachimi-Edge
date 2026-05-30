@@ -1,4 +1,5 @@
 use std::ptr::null_mut;
+use std::sync::atomic::Ordering;
 
 use crate::{
     core::Hachimi,
@@ -110,35 +111,41 @@ extern "C" fn _UpdateText(this: *mut Il2CppObject) {
     }
 
     let text = unsafe { (*text_ptr).as_utf16str() };
-    let text_str = text.to_string();
+    let has_template = text.as_slice().contains(&36); // 36 = '$'
+    let has_story_title = crate::il2cpp::hook::umamusume::PartsSingleModeStoryEventTitle::HAS_STORY_EVENT_TITLE.load(Ordering::Relaxed);
 
-    if let Ok(last_title) = crate::il2cpp::hook::umamusume::PartsSingleModeStoryEventTitle::LAST_STORY_EVENT_TITLE.read() {
-        if *last_title == text_str && text_str.contains('\n') {
-            if let Some(config) = Hachimi::instance().localized_data.load().config.story_event_title.clone() {
-                if let Some(font_size) = config.font_size {
-                    set_field_value(this, unsafe { FONTSIZE_FIELD }, &font_size);
+    // Only allocate a String when at least one consumer needs it.
+    if has_story_title || has_template {
+        let text_str = text.to_string();
+
+        if has_story_title {
+            if let Ok(last_title) = crate::il2cpp::hook::umamusume::PartsSingleModeStoryEventTitle::LAST_STORY_EVENT_TITLE.read() {
+                if *last_title == text_str && text_str.contains('\n') {
+                    if let Some(config) = Hachimi::instance().localized_data.load().config.story_event_title.clone() {
+                        if let Some(font_size) = config.font_size {
+                            set_field_value(this, unsafe { FONTSIZE_FIELD }, &font_size);
+                        }
+                        if let Some(line_spacing) = config.line_spacing {
+                            set_field_value(this, unsafe { LINESPACE_FIELD }, &line_spacing);
+                        }
+                        let offset = Vector2_t {
+                            x: config.position_offset_x.unwrap_or(0.0),
+                            y: config.position_offset_y.unwrap_or(0.0)
+                        };
+                        set_field_value(this, unsafe { TEXT_OFFSET_FIELD }, &offset);
+                        _UpdatePosition(this);
+                    }
                 }
-                if let Some(line_spacing) = config.line_spacing {
-                    set_field_value(this, unsafe { LINESPACE_FIELD }, &line_spacing);
-                }
-                let offset = Vector2_t {
-                    x: config.position_offset_x.unwrap_or(0.0),
-                    y: config.position_offset_y.unwrap_or(0.0)
-                };
-                set_field_value(this, unsafe { TEXT_OFFSET_FIELD }, &offset);
-                
-                _UpdatePosition(this);
             }
+        }
+
+        if has_template {
+            set__text(this, Hachimi::instance().template_parser
+                .eval_with_context(&text_str, &mut IgnoreTGFiltersContext())
+                .to_il2cpp_string());
         }
     }
 
-    // doesn't run through TextGenerator, ignore its filters
-    if text.as_slice().contains(&36) { // 36 = dollar sign ($)
-        set__text(this, Hachimi::instance().template_parser
-            .eval_with_context(&text_str, &mut IgnoreTGFiltersContext())
-            .to_il2cpp_string());
-    }
-    
     get_orig_fn!(_UpdateText, _UpdateTextFn)(this);
 }
 
@@ -150,34 +157,40 @@ extern "C" fn _UpdateText(this: *mut Il2CppObject, method: usize) {
     }
 
     let text = unsafe { (*text_ptr).as_utf16str() };
-    let text_str = text.to_string();
+    let has_template = text.as_slice().contains(&36); // 36 = '$'
+    let has_story_title = crate::il2cpp::hook::umamusume::PartsSingleModeStoryEventTitle::HAS_STORY_EVENT_TITLE.load(Ordering::Relaxed);
 
-    if let Ok(last_title) = crate::il2cpp::hook::umamusume::PartsSingleModeStoryEventTitle::LAST_STORY_EVENT_TITLE.read() {
-        if *last_title == text_str && text_str.contains('\n') {
-            if let Some(config) = Hachimi::instance().localized_data.load().config.story_event_title.clone() {
-                if let Some(font_size) = config.font_size {
-                    set_field_value(this, unsafe { FONTSIZE_FIELD }, &font_size);
+    if has_story_title || has_template {
+        let text_str = text.to_string();
+
+        if has_story_title {
+            if let Ok(last_title) = crate::il2cpp::hook::umamusume::PartsSingleModeStoryEventTitle::LAST_STORY_EVENT_TITLE.read() {
+                if *last_title == text_str && text_str.contains('\n') {
+                    if let Some(config) = Hachimi::instance().localized_data.load().config.story_event_title.clone() {
+                        if let Some(font_size) = config.font_size {
+                            set_field_value(this, unsafe { FONTSIZE_FIELD }, &font_size);
+                        }
+                        if let Some(line_spacing) = config.line_spacing {
+                            set_field_value(this, unsafe { LINESPACE_FIELD }, &line_spacing);
+                        }
+                        let offset = Vector2_t {
+                            x: config.position_offset_x.unwrap_or(0.0),
+                            y: config.position_offset_y.unwrap_or(0.0)
+                        };
+                        set_field_value(this, unsafe { TEXT_OFFSET_FIELD }, &offset);
+                        _UpdatePosition(this);
+                    }
                 }
-                if let Some(line_spacing) = config.line_spacing {
-                    set_field_value(this, unsafe { LINESPACE_FIELD }, &line_spacing);
-                }
-                let offset = Vector2_t {
-                    x: config.position_offset_x.unwrap_or(0.0),
-                    y: config.position_offset_y.unwrap_or(0.0)
-                };
-                set_field_value(this, unsafe { TEXT_OFFSET_FIELD }, &offset);
-                
-                _UpdatePosition(this);
             }
+        }
+
+        if has_template {
+            set__text(this, Hachimi::instance().template_parser
+                .eval_with_context(&text_str, &mut IgnoreTGFiltersContext())
+                .to_il2cpp_string());
         }
     }
 
-    if text.as_slice().contains(&36) { // 36 = dollar sign ($)
-        set__text(this, Hachimi::instance().template_parser
-            .eval_with_context(&text_str, &mut IgnoreTGFiltersContext())
-            .to_il2cpp_string());
-    }
-    
     get_orig_fn!(_UpdateText, _UpdateTextFn)(this, method);
 }
 

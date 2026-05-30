@@ -637,40 +637,43 @@ pub fn get_data_path() -> String {
 
     #[cfg(target_os = "windows")]
     {
-        use crate::{
-            core::game::Region,
-            il2cpp::hook::UnityEngine_CoreModule::Application,
-            windows::utils::get_game_dir
-        };
+        use std::sync::OnceLock;
+        static CACHED: OnceLock<String> = OnceLock::new();
+        CACHED.get_or_init(|| {
+            use crate::{
+                core::game::Region,
+                il2cpp::hook::UnityEngine_CoreModule::Application,
+                windows::utils::get_game_dir
+            };
 
-        let game = &Hachimi::instance().game;
-        let jp_steam_data_path = get_game_dir()
-            .join("UmamusumePrettyDerby_Jpn_Data")
-            .join("Persistent");
-        let new_jp_dmm_data_path = get_game_dir()
-            .join("umamusume_Data")
-            .join("Persistent");
+            let game = &Hachimi::instance().game;
+            let jp_steam_data_path = get_game_dir()
+                .join("UmamusumePrettyDerby_Jpn_Data")
+                .join("Persistent");
+            let new_jp_dmm_data_path = get_game_dir()
+                .join("umamusume_Data")
+                .join("Persistent");
 
-        let dir_ok = |path: &std::path::Path| {
-            path.exists()
-                && std::fs::read_dir(path)
-                    .map(|mut d| d.next().is_some())
-                    .unwrap_or(false)
-                && path.join("master").join("master.mdb").exists()
-        };
+            let dir_ok = |path: &std::path::Path| {
+                path.exists()
+                    && std::fs::read_dir(path)
+                        .map(|mut d| d.next().is_some())
+                        .unwrap_or(false)
+                    && path.join("master").join("master.mdb").exists()
+            };
 
-        if game.region == Region::Japan && game.is_steam_release && dir_ok(&jp_steam_data_path) {
-            jp_steam_data_path.to_string_lossy().to_string()
-        } else if game.region == Region::Japan && !game.is_steam_release && dir_ok(&new_jp_dmm_data_path) {
-            new_jp_dmm_data_path.to_string_lossy().to_string()
-        } else {
-            unsafe { (*Application::get_persistentDataPath()).as_utf16str() }.to_string()
-        }
+            if game.region == Region::Japan && game.is_steam_release && dir_ok(&jp_steam_data_path) {
+                jp_steam_data_path.to_string_lossy().to_string()
+            } else if game.region == Region::Japan && !game.is_steam_release && dir_ok(&new_jp_dmm_data_path) {
+                new_jp_dmm_data_path.to_string_lossy().to_string()
+            } else {
+                unsafe { (*Application::get_persistentDataPath()).as_utf16str() }.to_string()
+            }
+        }).clone()
     }
 }
 
 pub fn get_masterdb_path() -> String {
-    info!("get_masterdb_path base: {}", get_data_path());
     format!("{}/master/master.mdb", get_data_path())
 }
 

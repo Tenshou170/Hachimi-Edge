@@ -109,12 +109,36 @@ extern "C" fn PopulateWithErrors(
     if force_wrap { settings.horizontalOverflow = 0; }
 
     // Lazily compute the hierarchy path — walking the transform tree is expensive
-    // (multiple IL2CPP boundary crossings per node). Always compute it since
-    // PartsCharaMessage needs it unconditionally; the other consumers (overrides,
-    // captions, debug) benefit from it being pre-computed here too.
-    let path = get_hierarchy_path_with_fallback(context, this);
+    // (multiple IL2CPP boundary crossings per node). Only compute it when at least
+    // one consumer needs it: font/property overrides, captions, PartsCharaMessage
+    // overflow settings, or debug logging.
+    let needs_path = !text_settings.font_overrides.is_empty()
+        || !text_settings.text_properties_overrides.is_empty()
+        || config.caption.caption_enable
+        || (config.text_debug && (config.text_property_dump || config.text_path_debug || config.text_log));
+    // PartsCharaMessage is only present during career story mode, so checking for
+    // it is cheap when needs_path is already true. When needs_path is false we
+    // still need to detect it, but we can do a fast name-only check on the context
+    // object rather than walking the full hierarchy.
+    let path: String = if needs_path {
+        get_hierarchy_path_with_fallback(context, this)
+    } else {
+        // Fast path: only walk if the immediate object name suggests we might be
+        // in a PartsCharaMessage subtree. Avoids full tree walk in the common case.
+        let obj = if !context.is_null() { context } else { this };
+        if !obj.is_null() {
+            let name = unsafe { (*obj).name() };
+            if name.contains("PartsCharaMessage") || name.contains("Message") {
+                get_hierarchy_path_with_fallback(context, this)
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        }
+    };
 
-    if path.contains("PartsCharaMessage") {
+    if !path.is_empty() && path.contains("PartsCharaMessage") {
         settings.horizontalOverflow = 0;
         settings.verticalOverflow = 1;
         settings.resizeTextMaxSize = 30;

@@ -216,19 +216,16 @@ fn apply_position_offset(text_component: *mut Il2CppObject, config: &UITextConfi
     }
 
     let Some(rect_transform) = get_rect_transform(text_component) else { return };
-    
-    let (get_pos_fn, set_pos_fn) = match get_position_functions(rect_transform) {
-        Some(fns) => fns,
-        None => return,
-    };
 
-    let current_pos = get_pos_fn(rect_transform);
+    let current_pos = crate::il2cpp::hook::UnityEngine_CoreModule::RectTransform::get_anchoredPosition(rect_transform);
     let (base_x, base_y) = get_or_store_original_position(rect_transform, current_pos.x, current_pos.y);
 
     let new_x = offset_x.map(|ox| base_x + ox).unwrap_or(base_x);
     let new_y = offset_y.map(|oy| base_y + oy).unwrap_or(base_y);
 
-    set_pos_fn(rect_transform, Vector2_t { x: new_x, y: new_y });
+    crate::il2cpp::hook::UnityEngine_CoreModule::RectTransform::set_anchoredPosition(
+        rect_transform, Vector2_t { x: new_x, y: new_y }
+    );
 }
 
 fn get_rect_transform(text_component: *mut Il2CppObject) -> Option<*mut Il2CppObject> {
@@ -249,29 +246,6 @@ fn get_rect_transform(text_component: *mut Il2CppObject) -> Option<*mut Il2CppOb
         None
     } else {
         Some(rect_transform)
-    }
-}
-
-type GetAnchoredPositionFn = extern "C" fn(*mut Il2CppObject) -> Vector2_t;
-type SetAnchoredPositionFn = extern "C" fn(*mut Il2CppObject, Vector2_t);
-
-fn get_position_functions(rect_transform: *mut Il2CppObject) -> Option<(GetAnchoredPositionFn, SetAnchoredPositionFn)> {
-    use crate::il2cpp::ext::Il2CppObjectExt;
-    
-    let klass = unsafe { (*rect_transform).klass() };
-    
-    let get_addr = get_method_addr(klass, c"get_anchoredPosition", 0);
-    let set_addr = get_method_addr(klass, c"set_anchoredPosition", 1);
-    
-    if get_addr == 0 || set_addr == 0 {
-        return None;
-    }
-
-    unsafe {
-        Some((
-            std::mem::transmute(get_addr),
-            std::mem::transmute(set_addr),
-        ))
     }
 }
 

@@ -65,46 +65,22 @@ fn apply_gallery_button_config(button: *mut Il2CppObject, config: &UITextConfig)
                 error!("  RectTransform type object is null!");
                 return;
             }
-            
+
             let rect_transform = GameObject::GetComponentInChildren(text_go, rt_type, true);
             if !rect_transform.is_null() {
-                use crate::il2cpp::{ext::Il2CppObjectExt, symbols::get_method_addr};
-                let klass = unsafe { (*rect_transform).klass() };
-                
-                let get_anchored_pos_addr = get_method_addr(klass, c"get_anchoredPosition", 0);
-                let set_anchored_pos_addr = get_method_addr(klass, c"set_anchoredPosition", 1);
-                
-                if get_anchored_pos_addr != 0 && set_anchored_pos_addr != 0 {
-                    type GetAnchoredPositionFn = extern "C" fn(*mut Il2CppObject) -> Vector2_t;
-                    type SetAnchoredPositionFn = extern "C" fn(*mut Il2CppObject, Vector2_t);
-                    
-                    let get_anchored_pos: GetAnchoredPositionFn = unsafe { std::mem::transmute(get_anchored_pos_addr) };
-                    let set_anchored_pos: SetAnchoredPositionFn = unsafe { std::mem::transmute(set_anchored_pos_addr) };
-                    
-                    let mut anchored_pos = get_anchored_pos(rect_transform);
-                    
-                    // Use stored original position if available, otherwise store current as original
-                    let mut original_pos_map = ORIGINAL_POSITIONS.lock().unwrap();
-                    let base_pos_ref = original_pos_map.entry(rect_transform as usize).or_insert_with(|| {
-                        Vector2_t { x: anchored_pos.x, y: anchored_pos.y }
-                    });
-                    let (base_x, base_y) = (base_pos_ref.x, base_pos_ref.y);
-                    drop(original_pos_map);
-                    
-                    if let Some(ox) = config.position_offset_x {
-                        anchored_pos.x = base_x + ox;
-                    } else {
-                        anchored_pos.x = base_x;
-                    }
-                    
-                    if let Some(oy) = config.position_offset_y {
-                        anchored_pos.y = base_y + oy;
-                    } else {
-                        anchored_pos.y = base_y;
-                    }
-                    
-                    set_anchored_pos(rect_transform, anchored_pos);
-                }
+                let mut anchored_pos = RectTransform::get_anchoredPosition(rect_transform);
+
+                let mut original_pos_map = ORIGINAL_POSITIONS.lock().unwrap();
+                let base_pos_ref = original_pos_map.entry(rect_transform as usize).or_insert_with(|| {
+                    Vector2_t { x: anchored_pos.x, y: anchored_pos.y }
+                });
+                let (base_x, base_y) = (base_pos_ref.x, base_pos_ref.y);
+                drop(original_pos_map);
+
+                anchored_pos.x = config.position_offset_x.map(|ox| base_x + ox).unwrap_or(base_x);
+                anchored_pos.y = config.position_offset_y.map(|oy| base_y + oy).unwrap_or(base_y);
+
+                RectTransform::set_anchoredPosition(rect_transform, anchored_pos);
             }
         }
     }
