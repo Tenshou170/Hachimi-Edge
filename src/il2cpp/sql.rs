@@ -3,7 +3,7 @@ use fnv::{FnvHashMap, FnvHashSet};
 use sqlparser::ast;
 use once_cell::sync::Lazy;
 use crate::{
-    core::{utils::{get_masterdb_path, fit_text, wrap_fit_text}, Hachimi},
+    core::{utils::{get_masterdb_path, fit_text, wrap_fit_text}, Hachimi, Interceptor},
     il2cpp::{ext::{StringExt, Il2CppStringExt}, hook::LibNative_Runtime::Sqlite3::{Connection, Query}, types::{Il2CppObject, Il2CppString}}
 };
 
@@ -12,6 +12,75 @@ pub static AUTO_UNLOCK_NEXT_DB: AtomicBool = AtomicBool::new(false);
 pub static META_DATA: Lazy<RwLock<MetaData>> = Lazy::new(|| RwLock::new(MetaData::default()));
 pub static TDQ_IS_SKILL_LEARNING_QUERY: AtomicBool = AtomicBool::new(false);
 pub static IS_SYSTEM_TEXT_QUERY: AtomicBool = AtomicBool::new(false);
+
+static mut ORIG_SQLITE3_OPEN_V2: Option<extern "C" fn(*const i8, *mut *mut std::ffi::c_void, i32, *const i8) -> i32> = None;
+static mut ORIG_SQLITE3_KEY: Option<extern "C" fn(*mut std::ffi::c_void, *const std::ffi::c_void, i32) -> i32> = None;
+
+extern "C" fn sqlite3_open_v2_hook(filename: *const i8, pp_db: *mut *mut std::ffi::c_void, flags: i32, z_vfs: *const i8) -> i32 {
+    let result = unsafe { ORIG_SQLITE3_OPEN_V2.unwrap()(filename, pp_db, flags, z_vfs) };
+    if result == 0 && !pp_db.is_null() {
+        if AUTO_UNLOCK_NEXT_DB.swap(false, Ordering::Relaxed) {
+            let raw_key = RETRIEVED_RAW_KEY.lock().unwrap();
+            if !raw_key.is_empty() {
+                let db_ptr = unsafe { *pp_db };
+                unsafe { ORIG_SQLITE3_KEY.unwrap()(db_ptr, raw_key.as_ptr() as *const std::ffi::c_void, raw_key.len() as i32) };
+            }
+        }
+    }
+    result
+}
+
+extern "C" fn sqlite3_key_hook(db: *mut std::ffi::c_void, p_key: *const std::ffi::c_void, n_key: i32) -> i32 {
+    if !p_key.is_null() {
+        let mut raw_guard = RETRIEVED_RAW_KEY.lock().unwrap();
+        if raw_guard.is_empty() {
+            let key_bytes = unsafe { std::slice::from_raw_parts(p_key as *const u8, n_key as usize) };
+            *raw_guard = key_bytes.to_vec();
+        }
+    }
+    unsafe { ORIG_SQLITE3_KEY.unwrap()(db, p_key, n_key) }
+}
+
+pub fn hook_sqlite(interceptor: &Interceptor, handle: usize) {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        use windows::Win32::System::LibraryLoader::GetProcAddress;
+        use windows::core::PCSTR;
+        let h_module = windows::Win32::Foundation::HMODULE(handle as _);
+        let open_addr = GetProcAddress(h_module, PCSTR("sqlite3_open_v2\0".as_ptr()));
+        let key_addr = GetProcAddress(h_module, PCSTR("sqlite3_key\0".as_ptr()));
+        if let Some(addr) = open_addr {
+            if let Ok(orig) = interceptor.hook(addr as usize, sqlite3_open_v2_hook as *const () as usize) {
+                ORIG_SQLITE3_OPEN_V2 = Some(std::mem::transmute(orig));
+            }
+        }
+        if let Some(addr) = key_addr {
+            if let Ok(orig) = interceptor.hook(addr as usize, sqlite3_key_hook as *const () as usize) {
+                ORIG_SQLITE3_KEY = Some(std::mem::transmute(orig));
+            }
+        }
+    }
+    #[cfg(target_os = "android")]
+    unsafe {
+        let handle_ptr = handle as *mut libc::c_void;
+        let open_sym = b"sqlite3_open_v2\0".as_ptr() as *const libc::c_char;
+        let key_sym = b"sqlite3_key\0".as_ptr() as *const libc::c_char;
+        let open_addr = libc::dlsym(handle_ptr, open_sym);
+        let key_addr = libc::dlsym(handle_ptr, key_sym);
+        if !open_addr.is_null() {
+            if let Ok(orig) = interceptor.hook(open_addr as usize, sqlite3_open_v2_hook as *const () as usize) {
+                ORIG_SQLITE3_OPEN_V2 = Some(std::mem::transmute(orig));
+                info!("Successfully hooked native sqlite3_open_v2 (Android)");
+            }
+        }
+        if !key_addr.is_null() {
+            if let Ok(orig) = interceptor.hook(key_addr as usize, sqlite3_key_hook as *const () as usize) {
+                ORIG_SQLITE3_KEY = Some(std::mem::transmute(orig));
+                info!("Successfully hooked native sqlite3_key (Android)");
+            }
+        }
+    }
+}
 
 // public API
 #[derive(Default)]
