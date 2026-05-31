@@ -81,6 +81,7 @@ pub mod TweenAnimationTimelineSheetData;
 mod PartsSingleModeChoiceRewardTextElementViewModel;
 mod PartsCommonHeaderTitle;
 pub mod StoryParamChangeEffect;
+pub mod DialogSupportCardDetail;
 mod Connecting;
 mod DownloadManager;
 mod DownloadView;
@@ -177,6 +178,7 @@ pub fn init() {
     PartsSingleModeChoiceRewardTextElementViewModel::init(image);
     PartsCommonHeaderTitle::init(image);
     StoryParamChangeEffect::init(image);
+    DialogSupportCardDetail::init(image);
     Connecting::init(image);
     DownloadManager::init(image);
     DownloadView::init(image);
