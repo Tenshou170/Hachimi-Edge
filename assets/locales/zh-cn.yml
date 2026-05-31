@@ -76,6 +76,7 @@ notification:
   ipc_softreset_exec: "已远程软重启（IPC）"
   atlas_workaround_reset: "检测到 Atlas 文件更新: 已重新应用 Atlas 翻译..."
   config_error: "配置文件已损坏，将使用默认值..."
+  asset_mismatch: "部分资源因版本更新已被禁用，请查看日志了解详情。"
 
 first_time_setup:
   title: "初始化设置"
@@ -136,6 +137,7 @@ config_editor:
   debug_mode: "调试模式"
   enable_file_logging: "启用文件日志记录"
   apply_atlas_workaround: "应用翻译 Atlas 修复"
+  disable_outdated_asset_notif: "禁用过时资源通知"
   translator_mode: "翻译者模式"
   skip_first_time_setup: "跳过初始化设置"
   lazy_translation_updates: "宽松翻译更新检查"

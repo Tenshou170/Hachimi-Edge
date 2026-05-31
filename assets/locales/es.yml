@@ -75,6 +75,7 @@ notification:
   menu_open_key_set: "Tecla para abrir el menú: %{key}"
   ipc_softreset_exec: "Reinicio suave remoto (IPC) ejecutado con éxito."
   atlas_workaround_reset: "Archivos de Atlas modificados: arreglo temporal desactivado."
+  asset_mismatch: "Algunos assets fueron desactivados debido a una actualización. Consulta el registro para más detalles."
   config_error: "La configuración está corrupta. Usando valores por defecto..."
 
 
@@ -139,6 +140,7 @@ config_editor:
   debug_mode: "Modo depuración"
   enable_file_logging: "Guardar registro en un archivo"
   apply_atlas_workaround: "Arreglo temporal para los Atlas"
+  disable_outdated_asset_notif: "Desactivar notificación de assets desactualizados"
   translator_mode: "Modo traductor"
   skip_first_time_setup: "Omitir instalación inicial"
   lazy_translation_updates: "Actualizaciones de traducciones (rápidas)"

@@ -76,6 +76,7 @@ notification:
   menu_open_key_set: "Hotkey buka menu diatur ke %{key}"
   ipc_softreset_exec: "Kendali IPC soft-reset dijalankan"
   atlas_workaround_reset: "File Atlas dimodifikasi: solusi sementara dinonaktifkan."
+  asset_mismatch: "Beberapa aset telah dinonaktifkan karena pembaruan. Periksa log untuk detailnya."
 
 first_time_setup:
   title: "Setup Pertama Kali"
@@ -136,6 +137,7 @@ config_editor:
   debug_mode: "Mode Debug"
   enable_file_logging: "Nyalakan logging file"
   apply_atlas_workaround: "\uf013 Terapkan Perbaikan Atlas TL"
+  disable_outdated_asset_notif: "Nonaktifkan notifikasi aset usang"
   translator_mode: "Mode Translator"
   skip_first_time_setup: "Lewati setup pertama kali"
   lazy_translation_updates: "Pembaruan terjemahan fleksibel"
