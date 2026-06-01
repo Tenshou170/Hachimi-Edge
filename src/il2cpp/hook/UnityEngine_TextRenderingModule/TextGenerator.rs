@@ -8,6 +8,7 @@ use once_cell::sync::Lazy;
 use crate::{core::{template, Hachimi, hachimi::{CommonOverrides, SiblingOverride, TextPropertyOverrides}}, il2cpp::{api::il2cpp_class_is_assignable_from, ext::{Il2CppObjectExt, Il2CppStringExt, StringExt}, hook::UnityEngine_CoreModule::{GameObject, Object, RectTransform, Transform}, sql::{IS_SYSTEM_TEXT_QUERY, TDQ_IS_SKILL_LEARNING_QUERY}, types::*}};
 
 static DUMPED_PATHS: Lazy<Mutex<FnvHashSet<String>>> = Lazy::new(|| Mutex::default());
+static SYSTEM_TEXT_COMPONENTS: Lazy<Mutex<FnvHashSet<i32>>> = Lazy::new(|| Mutex::default());
 
 struct StoredPosition {
     base: Vector2_t,
@@ -15,9 +16,10 @@ struct StoredPosition {
 }
 static ORIGINAL_POSITIONS: Lazy<Mutex<HashMap<usize, StoredPosition>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
+#[derive(Clone)]
 enum ActionTarget {
-    Direct(crate::il2cpp::symbols::GCHandle),
-    Sibling { anchor: crate::il2cpp::symbols::GCHandle, name: String },
+    Direct(*mut Il2CppObject),
+    Sibling { anchor: *mut Il2CppObject, name: String },
 }
 
 struct PendingAction {
@@ -32,7 +34,18 @@ struct PendingOffset {
 unsafe impl Send for PendingOffset {}
 static PENDING_OFFSETS: Lazy<Mutex<Vec<PendingOffset>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
-pub fn mark_as_system_text_component(_this: *mut Il2CppObject) {}
+pub fn mark_as_system_text_component(this: *mut Il2CppObject) {
+    if this.is_null() { return; }
+    let id = Object::get_instanceID(this);
+    SYSTEM_TEXT_COMPONENTS.lock().unwrap().insert(id);
+    unsafe {
+        let go = (*this).game_object();
+        if !go.is_null() {
+            let go_id = Object::get_instanceID(go);
+            SYSTEM_TEXT_COMPONENTS.lock().unwrap().insert(go_id);
+        }
+    }
+}
 
 fn find_text_property_override<'a>(
     overrides: &'a fnv::FnvHashMap<String, TextPropertyOverrides>,
@@ -104,8 +117,17 @@ extern "C" fn PopulateWithErrors(
         settings.fontSize = (settings.fontSize as f32 * text_settings.font_scale) as i32;
     }
 
-    let force_wrap = IS_SYSTEM_TEXT_QUERY.load(Ordering::Relaxed)
-        || TDQ_IS_SKILL_LEARNING_QUERY.load(Ordering::Relaxed);
+    let mut force_wrap = false;
+    if IS_SYSTEM_TEXT_QUERY.load(Ordering::Relaxed) || TDQ_IS_SKILL_LEARNING_QUERY.load(Ordering::Relaxed) {
+        force_wrap = true;
+    } else {
+        let components = SYSTEM_TEXT_COMPONENTS.lock().unwrap();
+        if !context.is_null() {
+            if components.contains(&Object::get_instanceID(context)) { force_wrap = true; }
+        } else if !this.is_null() {
+            if components.contains(&Object::get_instanceID(this)) { force_wrap = true; }
+        }
+    }
     if force_wrap { settings.horizontalOverflow = 0; }
 
     // Lazily compute the hierarchy path — walking the transform tree is expensive
@@ -275,7 +297,7 @@ fn queue_position_offset(context: *mut Il2CppObject, fallback: *mut Il2CppObject
                 debug!("[PositionOffset] QUEUE DIRECT resolved_target={:#x} name={}", transform as usize, unsafe { (*transform).name() });
             }
             actions.push(PendingAction {
-                target: ActionTarget::Direct(crate::il2cpp::symbols::GCHandle::new(transform, false)),
+                target: ActionTarget::Direct(transform),
                 properties: props.common.clone(),
             });
         }
@@ -292,7 +314,7 @@ fn queue_position_offset(context: *mut Il2CppObject, fallback: *mut Il2CppObject
             }
             actions.push(PendingAction {
                 target: ActionTarget::Sibling {
-                    anchor: crate::il2cpp::symbols::GCHandle::new(anchor, false),
+                    anchor,
                     name: sib_name.clone(),
                 },
                 properties: CommonOverrides {
@@ -325,7 +347,7 @@ fn queue_position_offset(context: *mut Il2CppObject, fallback: *mut Il2CppObject
             }
             actions.push(PendingAction {
                 target: ActionTarget::Sibling {
-                    anchor: crate::il2cpp::symbols::GCHandle::new(anchor, false),
+                    anchor,
                     name: sib.name.clone(),
                 },
                 properties: sib.properties.clone(),
@@ -459,14 +481,10 @@ pub fn drain_pending_offsets() {
     for p in offsets {
         for action in p.actions {
             match action.target {
-                ActionTarget::Direct(handle) => {
-                    let transform = handle.target();
-                    if !transform.is_null() {
-                        apply_common_overrides(transform, &action.properties, &mut pos_map, config.text_debug && config.text_position_debug);
-                    }
+                ActionTarget::Direct(transform) => {
+                    apply_common_overrides(transform, &action.properties, &mut pos_map, config.text_debug && config.text_position_debug);
                 }
-                ActionTarget::Sibling { anchor: anchor_handle, name } => {
-                    let anchor = anchor_handle.target();
+                ActionTarget::Sibling { anchor, name } => {
                     if anchor.is_null() || !Object::IsNativeObjectAlive(anchor) { continue; }
                     if config.text_debug && config.text_position_debug {
                         debug!("[SiblingOffset] DRAIN SIBLING anchor={:#x} name={} searching for={}", anchor as usize, get_hierarchy_path(anchor), name);
