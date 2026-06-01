@@ -14,7 +14,7 @@ use crate::{core::{ext::Utf16StringExt, Hachimi}, il2cpp::{
     types::*, utils
 }};
 
-use super::{Graphics, RenderTexture, Texture};
+use super::{Graphics, RenderTexture, Texture, TextureFormat_RGBA32};
 
 static mut CLASS: *mut Il2CppClass = null_mut();
 pub fn class() -> *mut Il2CppClass {
@@ -23,16 +23,16 @@ pub fn class() -> *mut Il2CppClass {
 
 static mut CTOR_ADDR: usize = 0;
 impl_addr_wrapper_fn!(_ctor, CTOR_ADDR, (),
-    this: *mut Il2CppObject, width: i32, height: i32
+    this: *mut Il2CppObject, width: i32, height: i32, texture_format: i32, mip_chain: bool, linear: bool
 );
 
-pub fn new(width: i32, height: i32) -> *mut Il2CppObject {
+pub fn new(width: i32, height: i32, texture_format: i32, mip_chain: bool, linear: bool) -> *mut Il2CppObject {
     let this = il2cpp_object_new(class());
-    _ctor(this, width, height);
+    _ctor(this, width, height, texture_format, mip_chain, linear);
     this
 }
 
-pub fn from_image_file<P: AsRef<Path>>(path: P, _mip_chain: bool, mark_non_readable: bool) -> Option<*mut Il2CppObject> {
+pub fn from_image_file<P: AsRef<Path>>(path: P, mip_chain: bool, mark_non_readable: bool) -> Option<*mut Il2CppObject> {
     let path_ref = path.as_ref();
 
     // check if file exists
@@ -44,7 +44,7 @@ pub fn from_image_file<P: AsRef<Path>>(path: P, _mip_chain: bool, mark_non_reada
     // we've done everything we can, can't catch C# exceptions, yolo :)
     let path_str = path_ref.to_str()?;
     let bytes = mscorlib::File::ReadAllBytes(path_str.to_il2cpp_string());
-    let texture = new(2, 2);
+    let texture = new(2, 2, TextureFormat_RGBA32, mip_chain, false);
     if ImageConversion::LoadImage(texture, bytes, mark_non_readable) {
         Some(texture)
     }
@@ -97,7 +97,7 @@ pub fn render_to_texture(this: *mut Il2CppObject) -> *mut Il2CppObject {
     RenderTexture::SetActive(render_texture);
 
     // Create a new texture and read the data from the render texture
-    let output_texture = new(width, height);
+    let output_texture = new(width, height, TextureFormat_RGBA32, false, false);
     ReadPixels(
         output_texture,
         Rect_t { x: 0.0, y: 0.0, width: width as f32, height: height as f32 },
@@ -170,7 +170,7 @@ pub fn init(UnityEngine_CoreModule: *const Il2CppImage) {
 
     unsafe {
         CLASS = Texture2D;
-        CTOR_ADDR = get_method_addr(Texture2D, c".ctor", 2);
+        CTOR_ADDR = get_method_addr(Texture2D, c".ctor", 5);
         GETPIXELS32_ADDR = il2cpp_resolve_icall(c"UnityEngine.Texture2D::GetPixels32(System.Int32)".as_ptr());
         READPIXELS_ADDR = get_method_addr(Texture2D, c"ReadPixels", 3);
         APPLY_ADDR = get_method_addr(Texture2D, c"Apply", 0);

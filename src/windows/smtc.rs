@@ -323,7 +323,7 @@ fn generate_thumbnail_and_update(texture: *mut Il2CppObject, smtc: &SystemMediaT
         let prev_active = RenderTexture::GetActive();
         RenderTexture::SetActive(render_texture);
 
-        let readable_texture = Texture2D::new(width, height);
+        let readable_texture = Texture2D::new(width, height, crate::il2cpp::hook::UnityEngine_CoreModule::TextureFormat_RGBA32, false, false);
         Texture2D::ReadPixels(readable_texture, Rect_t { x: 0.0, y: 0.0, width: width as f32, height: height as f32 }, 0, 0);
         Texture2D::Apply(readable_texture);
 
