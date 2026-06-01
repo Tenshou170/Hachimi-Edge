@@ -1,12 +1,13 @@
 use std::borrow::Cow;
-use std::collections::hash_map;
 use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
+use std::num::NonZeroUsize;
 use std::os::raw::c_void;
 use std::sync::Mutex;
 
 use fnv::FnvHashMap;
+use lru::LruCache;
 use once_cell::sync::Lazy;
 
 use crate::core::Hachimi;
@@ -125,33 +126,36 @@ pub fn get_method_overload_addr(class: *mut Il2CppClass, name: &str, params: &[I
     }
 }
 
+/// Maximum number of IL2CPP class pointers tracked in the method cache.
+/// Each entry holds a small inner map of (method_name, arg_count) → address.
+/// Capped to prevent unbounded growth across scene transitions.
+const METHOD_CACHE_CLASS_CAP: usize = 512;
+
 pub static METHOD_CACHE: Lazy<
-    Mutex<FnvHashMap<usize, FnvHashMap<(Cow<'_, CStr>, i32), usize>>>
-> = Lazy::new(|| Mutex::default());
+    Mutex<LruCache<usize, FnvHashMap<(Cow<'static, CStr>, i32), usize>>>
+> = Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(METHOD_CACHE_CLASS_CAP).unwrap())));
 
 pub fn get_method_cached(class: *mut Il2CppClass, name: &CStr, args_count: i32) -> Result<*const MethodInfo, Error> {
     let mut cache = METHOD_CACHE.lock().unwrap();
-    let entries = match cache.entry(class as usize) {
-        hash_map::Entry::Occupied(e) => {
-            if let Some(addr) = e.get().get(&(name.into(), args_count)) {
-                if *addr == 0 {
-                    // Only error that get_method returns
-                    return Err(Error::MethodNotFound(name.to_str().unwrap().to_owned()));
-                }
-                else {
-                    return Ok(*addr as *const MethodInfo);
-                }
+    // Peek first to avoid promoting on a hit that returns early
+    if let Some(inner) = cache.get(&(class as usize)) {
+        if let Some(addr) = inner.get(&(name.into(), args_count)) {
+            if *addr == 0 {
+                return Err(Error::MethodNotFound(name.to_str().unwrap().to_owned()));
+            } else {
+                return Ok(*addr as *const MethodInfo);
             }
-            e.into_mut()
-        },
-        hash_map::Entry::Vacant(e) => e.insert(FnvHashMap::default())
-    };
+        }
+    }
+
+    // Miss — resolve and insert
     let res = get_method(class, name, args_count);
     let addr = match res {
         Ok(addr) => addr as usize,
-        Err(_) => 0
+        Err(_) => 0,
     };
-    entries.insert((name.to_owned().into(), args_count), addr);
+    let inner = cache.get_or_insert_mut(class as usize, FnvHashMap::default);
+    inner.insert((name.to_owned().into(), args_count), addr);
     res
 }
 

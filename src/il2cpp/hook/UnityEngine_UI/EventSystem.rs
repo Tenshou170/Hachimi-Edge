@@ -27,7 +27,7 @@ extern "C" fn Update(this: *mut Il2CppObject) {
     {
         let mut cache = crate::core::sugoi_client::TRANSLATION_CACHE.lock().unwrap();
         for (orig, trans) in &completed {
-            cache.insert(orig.clone(), trans.clone());
+            cache.put(orig.clone(), trans.clone());
         }
     }
 

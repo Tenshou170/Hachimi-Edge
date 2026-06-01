@@ -1,6 +1,7 @@
-use std::{cell::LazyCell, collections::{hash_map::Entry, BTreeMap}};
+use std::{collections::BTreeMap, sync::RwLock};
 
 use fnv::FnvHashMap;
+use once_cell::sync::Lazy;
 
 use crate::{
     core::{utils, Hachimi, SugoiClient},
@@ -9,8 +10,13 @@ use crate::{
 
 use super::TextId;
 
-// SAFETY: Localize::Get is only called from the Unity main thread.
-static mut TEXTID_NAME_CACHE: LazyCell<FnvHashMap<i32, String>> = LazyCell::new(|| FnvHashMap::default());
+/// Maps TextId integer values to their enum name strings.
+/// Populated lazily on first access per id. Using RwLock so concurrent reads
+/// (which are the common case) don't contend with each other.
+/// Previously this was `static mut LazyCell<HashMap>` which is unsound if
+/// `Get` is ever called from more than one thread.
+static TEXTID_NAME_CACHE: Lazy<RwLock<FnvHashMap<i32, String>>> =
+    Lazy::new(|| RwLock::new(FnvHashMap::default()));
 
 /**
  * Gallop::Localize::Get
@@ -28,17 +34,20 @@ pub extern "C" fn Get(id: i32) -> *mut Il2CppString {
         return get_orig_fn!(Get, GetFn)(id);
     }
 
-    let name = match unsafe { TEXTID_NAME_CACHE.entry(id) } {
-        Entry::Occupied(e) => &*e.into_mut(),
-        Entry::Vacant(e) => {
-            let name = TextId::get_name(id);
-            let name_str = unsafe { (*name).as_utf16str().to_string() };
-            e.insert(name_str)
-        },
+    // Fast path: read lock only
+    let name_opt = TEXTID_NAME_CACHE.read().unwrap().get(&id).cloned();
+    let name = if let Some(n) = name_opt {
+        n
+    } else {
+        // Slow path: resolve and insert under write lock
+        let name_ptr = TextId::get_name(id);
+        let name_str = unsafe { (*name_ptr).as_utf16str().to_string() };
+        TEXTID_NAME_CACHE.write().unwrap().insert(id, name_str.clone());
+        name_str
     };
 
     let config = hachimi.config.load();
-    if let Some(text) = localized_data.localize_dict.get(name) {
+    if let Some(text) = localized_data.localize_dict.get(&name) {
         if config.text_debug && config.text_localize_dump {
             let orig_str = get_orig_fn!(Get, GetFn)(id);
             let orig_s = if orig_str.is_null() { String::new() } else { unsafe { (*orig_str).as_utf16str().to_string() } };
@@ -50,7 +59,7 @@ pub extern "C" fn Get(id: i32) -> *mut Il2CppString {
         let str = get_orig_fn!(Get, GetFn)(id);
         if Hachimi::instance().config.load().translator_mode && id != 1109 && id != 1032 {
             // 1109 and 1032 seems to be debugging strings (they're annoying)
-            utils::print_json_entry(name, unsafe { &(*str).as_utf16str().to_string() });
+            utils::print_json_entry(&name, unsafe { &(*str).as_utf16str().to_string() });
         }
         if hachimi.config.load().auto_translate_localize && !str.is_null() && unsafe { (*str).length > 0 } {
             let s = unsafe { (*str).as_utf16str().to_string() };

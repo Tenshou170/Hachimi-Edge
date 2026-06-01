@@ -1,6 +1,8 @@
+use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex, mpsc::{self, Receiver, Sender}};
 
-use fnv::{FnvHashMap, FnvHashSet};
+use fnv::FnvHashSet;
+use lru::LruCache;
 use once_cell::sync::Lazy;
 use serde::Serialize;
 
@@ -27,8 +29,11 @@ pub static TRANSLATION_QUEUE: Lazy<(Sender<(String, String)>, Mutex<Receiver<(St
     (tx, Mutex::new(rx))
 });
 
-pub static TRANSLATION_CACHE: Lazy<Mutex<FnvHashMap<String, String>>> = Lazy::new(|| {
-    Mutex::new(FnvHashMap::default())
+/// LRU-bounded translation cache. Capped at 2000 entries to prevent unbounded
+/// heap growth across long sessions with auto-translate enabled.
+const TRANSLATION_CACHE_CAP: usize = 2000;
+pub static TRANSLATION_CACHE: Lazy<Mutex<LruCache<String, String>>> = Lazy::new(|| {
+    Mutex::new(LruCache::new(NonZeroUsize::new(TRANSLATION_CACHE_CAP).unwrap()))
 });
 
 pub static PENDING_TRANSLATIONS: Lazy<Mutex<FnvHashSet<String>>> = Lazy::new(|| {
