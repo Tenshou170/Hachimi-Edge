@@ -22,8 +22,28 @@ pub fn is_criware_lib(filename: &str) -> bool {
     filename == "cri_ware_unity.dll"
 }
 
+/// Detect Wine/Proton by checking for the wine_get_version export in ntdll.dll.
+/// Under native Windows this symbol does not exist.
+pub fn is_wine() -> bool {
+    use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
+    use windows::core::PCSTR;
+    unsafe {
+        let ntdll = GetModuleHandleA(PCSTR(b"ntdll.dll\0".as_ptr()));
+        if let Ok(h) = ntdll {
+            GetProcAddress(h, PCSTR(b"wine_get_version\0".as_ptr())).is_some()
+        } else {
+            false
+        }
+    }
+}
+
 pub fn on_hooking_finished(hachimi: &Hachimi) {
     wnd_hook::init();
+
+    // Detect Wine/Proton and log it
+    if is_wine() {
+        info!("Wine/Proton detected — disabling SMTC and taskbar integration");
+    }
 
     // Kill unity crash handler (just to be safe)
     unsafe {

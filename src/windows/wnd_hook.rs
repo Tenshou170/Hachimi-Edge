@@ -230,7 +230,9 @@ pub fn init() {
             let _ = SetWindowTextW(hwnd, &HSTRING::from(t));
         }
 
-        taskbar::init(hwnd);
+        if !crate::windows::hachimi_impl::is_wine() {
+            taskbar::init(hwnd);
+        }
 
         info!("Hooking WndProc");
         let wnd_proc_addr = GetWindowLongPtrW(hwnd, GWLP_WNDPROC);
@@ -257,7 +259,9 @@ pub fn init() {
              }
         }
 
-        smtc::init(hwnd);
+        if !crate::windows::hachimi_impl::is_wine() {
+            smtc::init(hwnd);
+        }
     }
 }
 
