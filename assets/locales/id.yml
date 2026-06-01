@@ -47,6 +47,7 @@ menu:
   fps_label: "FPS"
   vsync_label: "VSync"
   stay_on_top: "Sematkan di atas"
+  keep_screen_on: "Cegah layar mati otomatis"
   translation_heading: "\uf02d Translasi"
   reload_localized_data: "\uf021 Muat ulang data lokalisasi"
   tl_check_for_updates: "\uf0aa Periksa pembaruan terjemahan"
@@ -247,6 +248,7 @@ config_editor:
   full_screen_res: "Resolusi layar penuh kustom"
   localized_data_dir: "Direktori data lokalisasi"
   hook_libc_dlopen: "Paksa hook libc dlopen (Waydroid/emulator)"
+  keep_screen_on: "Cegah layar mati otomatis"
 
 theme_editor:
   title: "Editor Tema GUI"

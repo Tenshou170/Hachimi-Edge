@@ -47,6 +47,7 @@ menu:
   fps_label: "帧率限制"
   vsync_label: "垂直同步"
   stay_on_top: "窗口置顶"
+  keep_screen_on: "防止屏幕超时"
   translation_heading: "\uf02d 翻译"
   reload_localized_data: "\uf021 重新加载本地化数据"
   tl_check_for_updates: "\uf0aa 检查翻译更新"
@@ -247,6 +248,7 @@ config_editor:
   full_screen_res: "自定义全屏分辨率"
   localized_data_dir: "本地化数据目录"
   hook_libc_dlopen: "强制 libc dlopen 钩子（Waydroid/模拟器）"
+  keep_screen_on: "防止屏幕超时"
 
 theme_editor:
   title: "覆盖层主题编辑器"

@@ -47,6 +47,7 @@ menu:
   fps_label: "FPS"
   vsync_label: "VSync"
   stay_on_top: "Stay on top"
+  keep_screen_on: "Prevent screen timeout"
   translation_heading: "\uf02d Translation"
   reload_localized_data: "\uf021 Reload localized data"
   tl_check_for_updates: "\uf0aa Check for translation updates"
@@ -248,6 +249,7 @@ config_editor:
   full_screen_res: "Custom fullscreen resolution"
   localized_data_dir: "Localized data directory"
   hook_libc_dlopen: "Force libc dlopen hook (Waydroid/emulator)"
+  keep_screen_on: "Prevent screen timeout"
 
 theme_editor:
   title: "GUI Theme Editor"

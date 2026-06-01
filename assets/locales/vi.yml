@@ -47,6 +47,7 @@ menu:
   fps_label: "FPS"
   vsync_label: "VSync"
   stay_on_top: "Giữ cửa sổ trên cùng"
+  keep_screen_on: "Ngăn màn hình tắt tự động"
   translation_heading: "\uf02d Bản dịch"
   reload_localized_data: "\uf021 Tải lại dữ liệu dịch"
   tl_check_for_updates: "\uf0aa Kiểm tra cập nhật bản dịch"
@@ -236,6 +237,7 @@ config_editor:
   full_screen_res: "Độ phân giải toàn màn hình tùy chỉnh"
   localized_data_dir: "Thư mục dữ liệu bản địa hóa"
   hook_libc_dlopen: "Buộc hook libc dlopen (Waydroid/giả lập)"
+  keep_screen_on: "Ngăn màn hình tắt tự động"
   press_to_set_menu_key: "Nhấn một phím trong cửa sổ game để đặt phím tắt mở menu."
   atlas_workaround_reset: "Các tệp Atlas đã thay đổi: đã tắt giải pháp tạm thời."
 

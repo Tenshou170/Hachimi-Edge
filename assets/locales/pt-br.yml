@@ -47,6 +47,7 @@ menu:
   fps_label: "FPS"
   vsync_label: "VSync"
   stay_on_top: "Mostrar no topo"
+  keep_screen_on: "Evitar tempo limite da tela"
   translation_heading: "\uf02d Tradução"
   reload_localized_data: "\uf021 Recarregar tradução"
   tl_check_for_updates: "\uf0aa Buscar atualizações de tradução"
@@ -248,6 +249,7 @@ config_editor:
   full_screen_res: "Resolução de tela cheia personalizada"
   localized_data_dir: "Diretório de dados localizados"
   hook_libc_dlopen: "Forçar hook libc dlopen (Waydroid/emulador)"
+  keep_screen_on: "Evitar tempo limite da tela"
 
 theme_editor:
   title: "Editor do tema da GUI"

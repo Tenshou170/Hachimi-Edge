@@ -1101,6 +1101,24 @@ impl Gui {
                         }
                         ui.separator();
 
+                        #[cfg(target_os = "android")]
+                        {
+                            use crate::android::hachimi_impl::set_keep_screen_on;
+
+                            ui.horizontal(|ui| {
+                                let config = hachimi.config.load();
+                                let mut value = config.android.keep_screen_on;
+                                ui.label(t!("menu.keep_screen_on"));
+                                if ui.checkbox(&mut value, "").changed() {
+                                    let mut new_config = config.as_ref().clone();
+                                    new_config.android.keep_screen_on = value;
+                                    hachimi.config.store(std::sync::Arc::new(new_config));
+                                    set_keep_screen_on(value);
+                                }
+                            });
+                            ui.separator();
+                        }
+
                         ui.heading(t!("menu.translation_heading"));
                         if ui.button(t!("menu.reload_localized_data")).clicked() {
                             hachimi.load_localized_data();
@@ -2326,6 +2344,10 @@ impl ConfigEditor {
                 {
                     ui.label(t!("config_editor.hook_libc_dlopen"));
                     ui.checkbox(&mut config.android.hook_libc_dlopen, "");
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.keep_screen_on"));
+                    ui.checkbox(&mut config.android.keep_screen_on, "");
                     ui.end_row();
                 }
 
