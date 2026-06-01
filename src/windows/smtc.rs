@@ -47,6 +47,13 @@ static TASKBAR_HWND: AtomicIsize = AtomicIsize::new(0);
 /// synchronous LoadAsset_Internal call on the main thread every frame
 /// and tanked FPS after returning to the home screen from gacha.
 static THUMBNAIL_PENDING: AtomicBool = AtomicBool::new(false);
+/// Set to true after the first SMTC initialization attempt, regardless of
+/// whether it succeeded. Under Proton/Wine, GetForWindow always fails and
+/// SMTC_INSTANCE stays None, so without this flag on_update would retry
+/// the full COM initialization path (CoInitializeEx, SHGetKnownFolderPath,
+/// factory::<...>()) every single frame — all of which are slow Wine stubs
+/// that caused per-frame overhead and FPS drops on Linux.
+static SMTC_INIT_ATTEMPTED: AtomicBool = AtomicBool::new(false);
 
 fn set_playback_status(smtc: &SystemMediaTransportControls, status: MediaPlaybackStatus) {
     // --- W-7 fix: atomic compare-and-swap instead of static mut read/write ---
@@ -163,6 +170,13 @@ pub fn on_update() {
         Err(e) => e.into_inner(),
     };
     if smtc_guard.is_none() {
+        // Only attempt initialization once. Under Proton/Wine the COM calls
+        // always fail and SMTC_INSTANCE stays None, so retrying every frame
+        // wastes time on slow Wine stubs (CoInitializeEx, SHGetKnownFolderPath,
+        // factory::<...>()).
+        if SMTC_INIT_ATTEMPTED.swap(true, Ordering::Relaxed) {
+            return;
+        }
         unsafe {
             let hwnd = HWND(TASKBAR_HWND.load(Ordering::Relaxed) as *mut _);
             if hwnd.0.is_null() { return; }
