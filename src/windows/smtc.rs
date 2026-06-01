@@ -41,6 +41,12 @@ static LAST_STATUS: AtomicI32 = AtomicI32::new(MediaPlaybackStatus::Closed.0);
 static LAST_HOME_MUSIC_ID: AtomicI32 = AtomicI32::new(0);
 // HWND stored as isize
 static TASKBAR_HWND: AtomicIsize = AtomicIsize::new(0);
+/// Set to true while a thumbnail generation thread is in flight.
+/// Prevents get_jacket_texture() from being called every frame while the
+/// async encode/upload thread hasn't finished yet, which caused a
+/// synchronous LoadAsset_Internal call on the main thread every frame
+/// and tanked FPS after returning to the home screen from gacha.
+static THUMBNAIL_PENDING: AtomicBool = AtomicBool::new(false);
 
 fn set_playback_status(smtc: &SystemMediaTransportControls, status: MediaPlaybackStatus) {
     // --- W-7 fix: atomic compare-and-swap instead of static mut read/write ---
@@ -335,6 +341,9 @@ fn generate_thumbnail_and_update(texture: *mut Il2CppObject, smtc: &SystemMediaT
                 }
                 Some(())
             })();
+            // Clear the pending flag regardless of success or failure so the
+            // next music_id change can trigger a fresh load attempt.
+            THUMBNAIL_PENDING.store(false, Ordering::Relaxed);
         });
 
         Some(())
@@ -350,6 +359,8 @@ fn update_metadata(smtc: &SystemMediaTransportControls, music_id: i32) {
             let _ = updater.SetThumbnail(None);
             let _ = updater.Update();
         }
+        // Reset the pending flag so the new track gets a fresh thumbnail load.
+        THUMBNAIL_PENDING.store(false, Ordering::Relaxed);
     }
     CURRENT_MUSIC_ID.store(music_id, Ordering::Relaxed);
 
@@ -373,8 +384,16 @@ fn update_metadata(smtc: &SystemMediaTransportControls, music_id: i32) {
 
         if let Ok(_thumbnail) = updater.Thumbnail() {
         } else {
-            if let Some(tex) = get_jacket_texture(music_id) {
-                generate_thumbnail_and_update(tex, smtc);
+            // Only kick off a new jacket load if no thread is already in flight.
+            // Without this guard, get_jacket_texture() (which calls LoadAsset_Internal
+            // synchronously on the main thread) was called every frame between the
+            // music_id change and the async thumbnail thread completing, causing
+            // continuous blocking I/O that tanked FPS on the home screen after gacha.
+            if !THUMBNAIL_PENDING.load(Ordering::Relaxed) {
+                if let Some(tex) = get_jacket_texture(music_id) {
+                    THUMBNAIL_PENDING.store(true, Ordering::Relaxed);
+                    generate_thumbnail_and_update(tex, smtc);
+                }
             }
         }
         let _ = updater.Update();
