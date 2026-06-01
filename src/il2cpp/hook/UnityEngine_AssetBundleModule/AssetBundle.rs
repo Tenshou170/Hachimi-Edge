@@ -67,7 +67,9 @@ pub fn check_asset_bundle_name(this: *mut Il2CppObject, metadata: &AssetMetadata
 type LoadAssetFn = extern "C" fn(this: *mut Il2CppObject, name: *mut Il2CppString, type_: *mut Il2CppObject) -> *mut Il2CppObject;
 extern "C" fn LoadAsset_Internal(this: *mut Il2CppObject, name: *mut Il2CppString, type_: *mut Il2CppObject) -> *mut Il2CppObject {
     let asset = get_orig_fn!(LoadAsset_Internal, LoadAssetFn)(this, name, type_);
-    on_LoadAsset(this, asset, name);
+    if !asset.is_null() {
+        on_LoadAsset(this, asset, name);
+    }
     asset
 }
 

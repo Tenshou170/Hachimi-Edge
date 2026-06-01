@@ -14,7 +14,9 @@ extern "C" fn GetResult(this: *mut Il2CppObject) -> *mut Il2CppObject {
         warn!("Asset bundle request not found");
         return asset;
     };
-    AssetBundle::on_LoadAsset(info.bundle as _, asset, info.name());
+    if !asset.is_null() {
+        AssetBundle::on_LoadAsset(info.bundle as _, asset, info.name());
+    }
     asset
 }
 
