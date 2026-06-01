@@ -49,11 +49,28 @@ extern "C" fn SetResolution_Injected(width: i32, height: i32, full_screen_mode: 
     let windows_config = &Hachimi::instance().config.load().windows;
     if windows_config.auto_full_screen {
         if apply_auto_full_screen(width, height) {
+            // Re-apply topmost after auto-fullscreen resolution change
+            re_apply_topmost();
             return;
         }
     }
 
     get_orig_fn!(SetResolution_Injected, SetResolutionInjectedFn)(width, height, full_screen_mode, preferred_refresh_rate);
+
+    // Re-apply topmost after any resolution/orientation change.
+    // Windows resets the Z-order when the game transitions between portrait
+    // and landscape (stories, lives, races), losing the "stay on top" state.
+    re_apply_topmost();
+}
+
+fn re_apply_topmost() {
+    let hachimi = Hachimi::instance();
+    if hachimi.window_always_on_top.load(std::sync::atomic::Ordering::Relaxed) {
+        let hwnd = crate::windows::wnd_hook::get_target_hwnd();
+        if !hwnd.0.is_null() {
+            unsafe { _ = crate::windows::utils::set_window_topmost(hwnd, true); }
+        }
+    }
 }
 
 pub fn init(UnityEngine_CoreModule: *const Il2CppImage) {
