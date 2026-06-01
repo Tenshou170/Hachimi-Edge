@@ -245,7 +245,7 @@ fn process_chara_list(data_map: &mut Vec<(Value, Value)>) -> bool {
 
     if let Some(idx) = target_idx {
         let mut new_arr = Vec::new();
-        for id in crate::il2cpp::sql::get_all_chara_ids() {
+        for id in crate::il2cpp::sql::get_all_chara_ids().iter().copied() {
             if let Some(item) = existing_map.get(&id) {
                 new_arr.push(item.clone());
             } else if let Some(ref template) = template_item {
@@ -312,7 +312,7 @@ fn process_chara_profile(data_map: &mut Vec<(Value, Value)>) -> bool {
 
     if let Some(idx) = target_idx {
         let mut new_arr = Vec::new();
-        for id in crate::il2cpp::sql::get_all_chara_ids() {
+        for id in crate::il2cpp::sql::get_all_chara_ids().iter().copied() {
             if let Some(item) = existing_map.get(&id) {
                 new_arr.push(item.clone());
             } else if let Some(ref template) = template_item {
@@ -365,7 +365,7 @@ fn process_cloth_list(data_map: &mut Vec<(Value, Value)>) -> bool {
             }
 
             let mut new_arr = Vec::new();
-            for id in crate::il2cpp::sql::get_all_dress_ids() {
+            for id in crate::il2cpp::sql::get_all_dress_ids().iter().copied() {
                 if let Some(ref template) = template_item {
                     if let Value::Map(mut map_clone) = template.clone() {
                         for (mk, mv) in map_clone.iter_mut() {
@@ -411,7 +411,7 @@ fn process_music_list(data_map: &mut Vec<(Value, Value)>) -> bool {
             }
 
             let mut new_arr = Vec::new();
-            for id in crate::il2cpp::sql::get_all_music_ids() {
+            for id in crate::il2cpp::sql::get_all_music_ids().iter().copied() {
                 if let Some(ref template) = template_item {
                     if let Value::Map(mut map_clone) = template.clone() {
                         for (mk, mv) in map_clone.iter_mut() {

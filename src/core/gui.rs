@@ -203,6 +203,12 @@ pub fn enqueue_plugin_notification(message: String) {
     PLUGIN_NOTIFICATIONS.lock().unwrap().push(message);
 }
 
+/// Called on every scene transition to drop stale raw pointers from the set.
+/// Without this, pointers to destroyed Unity objects accumulate across scenes.
+pub fn clear_disabled_game_uis() {
+    DISABLED_GAME_UIS.lock().unwrap().clear();
+}
+
 fn get_plugin_menu_items() -> Vec<PluginMenuItem> {
     PLUGIN_MENU_ITEMS.lock().unwrap().clone()
 }
@@ -772,16 +778,16 @@ impl Gui {
             self.context.set_style(style);
         }
 
-        self.context.data_mut(|d| {
-            d.insert_temp(egui::Id::new("gui_scale"), live_scale);
-            d.insert_temp(egui::Id::new("gui_scale_salt"), self.finalized_scale);
-        });
-
-        let mut style = self.default_style.clone();
-        if live_scale != 1.0 {
-            style.scale(live_scale);
+        // Only update egui temp data when the values actually changed to avoid
+        // locking the internal TypeMap and hashing the Id strings every frame.
+        let prev_scale = self.context.data(|d| d.get_temp::<f32>(egui::Id::new("gui_scale"))).unwrap_or(0.0);
+        let prev_salt  = self.context.data(|d| d.get_temp::<f32>(egui::Id::new("gui_scale_salt"))).unwrap_or(0.0);
+        if (prev_scale - live_scale).abs() > f32::EPSILON || (prev_salt - self.finalized_scale).abs() > f32::EPSILON {
+            self.context.data_mut(|d| {
+                d.insert_temp(egui::Id::new("gui_scale"), live_scale);
+                d.insert_temp(egui::Id::new("gui_scale_salt"), self.finalized_scale);
+            });
         }
-        self.context.set_style(style);
 
         self.context.begin_pass(input);
 

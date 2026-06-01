@@ -31,6 +31,16 @@ pub fn new() -> *mut Il2CppObject {
 pub static SELECT_QUERIES: Lazy<Mutex<FnvHashMap<usize, Box<dyn sql::SelectQueryState + Send + Sync>>>> =
     Lazy::new(|| Mutex::new(FnvHashMap::default()));
 
+/// Cache of SQL string → parsed query template (table name + column/param layout).
+/// Avoids re-running sqlparser on every repeated query call. The same handful of
+/// SELECT statements are issued thousands of times per session.
+///
+/// The value is a factory closure that produces a fresh `SelectQueryState` box,
+/// because each live query object needs its own mutable state (bound params etc.).
+type QueryFactory = Box<dyn Fn() -> Box<dyn sql::SelectQueryState + Send + Sync> + Send + Sync>;
+static QUERY_TEMPLATE_CACHE: Lazy<Mutex<FnvHashMap<String, QueryFactory>>> =
+    Lazy::new(|| Mutex::new(FnvHashMap::default()));
+
 #[inline(never)]
 fn parse_query(query: *mut Il2CppObject, sql: *const Il2CppString) {
     let sql_str = unsafe { (*sql).as_utf16str() }.to_string();
@@ -38,6 +48,15 @@ fn parse_query(query: *mut Il2CppObject, sql: *const Il2CppString) {
     // quick escape!!!11
     if !sql_str.starts_with("SELECT") {
         return;
+    }
+
+    // Check the template cache first — avoid re-parsing the same SQL string.
+    {
+        let cache = QUERY_TEMPLATE_CACHE.lock().unwrap();
+        if let Some(factory) = cache.get(&sql_str) {
+            SELECT_QUERIES.lock().unwrap().insert(query as usize, factory());
+            return;
+        }
     }
 
     // parse the sql string
@@ -59,41 +78,56 @@ fn parse_query(query: *mut Il2CppObject, sql: *const Il2CppString) {
             return;
         };
 
-        // Create the query state
-        let mut query_state: Box<dyn sql::SelectQueryState + Send + Sync> = match table_name.as_ref() {
-            "text_data" => Box::new(sql::TextDataQuery::default()),
-            "character_system_text" => Box::new(sql::CharacterSystemTextQuery::default()),
-            "race_jikkyo_comment" => Box::new(sql::RaceJikkyoCommentQuery::default()),
-            "race_jikkyo_message" => Box::new(sql::RaceJikkyoMessageQuery::default()),
-            _ => return
-        };
+        // Collect column and param metadata from the parsed AST so we can
+        // replay it cheaply for every future occurrence of this SQL string.
+        let table_name = table_name.clone();
 
-        // Add columns
-        let mut i = 0;
+        // Gather column names in order
+        let mut columns: Vec<String> = Vec::new();
         for item in select.projection.iter() {
             if let Some(name) = item.get_unnamed_expr_ident() {
-                query_state.add_column(i, name);
-                i += 1;
+                columns.push(name.clone());
             }
         }
 
-        // Add params
-        i = 1; // index starts at 1
+        // Gather param names in order
+        let mut params: Vec<String> = Vec::new();
         if let Some(selection) = select.selection {
-            // this should visit them in order (column1 = ? AND column2 = ? ...)
             for expr in selection.binary_op_iter() {
                 if *expr.op != BinaryOperator::Eq { continue; }
-
                 if let Some(name) = expr.left.get_ident_value() {
                     if expr.right.is_placeholder_value() {
-                        query_state.add_param(i, name);
-                        i += 1;
+                        params.push(name.clone());
                     }
                 }
             }
         }
 
-        // Add query state
+        // Only cache tables we actually handle.
+        if !matches!(table_name.as_ref(), "text_data" | "character_system_text" | "race_jikkyo_comment" | "race_jikkyo_message") {
+            return;
+        }
+
+        // Build a factory closure that replays the metadata onto a fresh state.
+        let factory: QueryFactory = Box::new(move || {
+            let mut state: Box<dyn sql::SelectQueryState + Send + Sync> = match table_name.as_ref() {
+                "text_data" => Box::new(sql::TextDataQuery::default()),
+                "character_system_text" => Box::new(sql::CharacterSystemTextQuery::default()),
+                "race_jikkyo_comment" => Box::new(sql::RaceJikkyoCommentQuery::default()),
+                "race_jikkyo_message" => Box::new(sql::RaceJikkyoMessageQuery::default()),
+                _ => unreachable!(),
+            };
+            for (i, col) in columns.iter().enumerate() {
+                state.add_column(i as i32, col);
+            }
+            for (i, param) in params.iter().enumerate() {
+                state.add_param(i as i32 + 1, param);
+            }
+            state
+        });
+
+        let query_state = factory();
+        QUERY_TEMPLATE_CACHE.lock().unwrap().insert(sql_str, factory);
         SELECT_QUERIES.lock().unwrap().insert(query as usize, query_state);
     }
 }

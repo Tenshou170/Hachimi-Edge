@@ -231,21 +231,39 @@ pub fn broadcast_msgpack(data: &[u8], is_request: bool) {
     let url = format!("{}{}", host, endpoint);
     let payload = data.to_vec();
 
-    std::thread::spawn(move || {
-        let agent: Agent = Agent::config_builder()
-            .timeout_global(Some(std::time::Duration::from_millis(timeout)))
-            .build()
-            .into();
+    // Use a bounded channel (capacity 64) backed by a single persistent worker
+    // thread instead of spawning a new OS thread per network call. This prevents
+    // thread proliferation during career/daily sessions with many API calls.
+    use std::sync::mpsc::{self, SyncSender};
+    static NOTIFIER_TX: std::sync::OnceLock<SyncSender<(String, u64, Vec<u8>)>> = std::sync::OnceLock::new();
 
-        let res = agent.post(&url)
-            .header("Content-Type", "application/x-msgpack")
-            .send(payload);
+    let tx = NOTIFIER_TX.get_or_init(|| {
+        let (tx, rx) = mpsc::sync_channel::<(String, u64, Vec<u8>)>(64);
+        std::thread::Builder::new()
+            .name("msgpack_notifier".into())
+            .spawn(move || {
+                while let Ok((url, timeout_ms, payload)) = rx.recv() {
+                    let agent: Agent = Agent::config_builder()
+                        .timeout_global(Some(std::time::Duration::from_millis(timeout_ms)))
+                        .build()
+                        .into();
 
-        if let Err(e) = res {
-            let config = crate::core::Hachimi::instance().config.load();
-            if config.msgpack_notifier_print_error {
-                log::warn!("MsgPack Notifier HTTP Error: {}", e);
-            }
-        }
+                    let res = agent.post(&url)
+                        .header("Content-Type", "application/x-msgpack")
+                        .send(payload);
+
+                    if let Err(e) = res {
+                        let config = crate::core::Hachimi::instance().config.load();
+                        if config.msgpack_notifier_print_error {
+                            log::warn!("MsgPack Notifier HTTP Error: {}", e);
+                        }
+                    }
+                }
+            })
+            .expect("Failed to spawn msgpack_notifier thread");
+        tx
     });
+
+    // If the channel is full (back-pressure), drop the message rather than block.
+    let _ = tx.try_send((url, timeout, payload));
 }

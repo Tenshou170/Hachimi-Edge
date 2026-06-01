@@ -755,24 +755,32 @@ fn get_single_column_int(sql: &str) -> Vec<i32> {
     items
 }
 
-pub fn get_all_chara_ids() -> Vec<i32> {
-    get_single_column_int("SELECT id FROM chara_data")
+// Per-session caches for stable DB tables. These never change while the game is
+// running, so we query once and reuse the result for the entire session.
+static ALL_CHARA_IDS: std::sync::OnceLock<Vec<i32>> = std::sync::OnceLock::new();
+static ALL_DRESS_IDS: std::sync::OnceLock<Vec<i32>> = std::sync::OnceLock::new();
+static ALL_MUSIC_IDS: std::sync::OnceLock<Vec<i32>> = std::sync::OnceLock::new();
+static ALL_MOB_IDS: std::sync::OnceLock<Vec<i32>> = std::sync::OnceLock::new();
+static DEFAULT_DRESS_IDS: std::sync::OnceLock<Vec<i32>> = std::sync::OnceLock::new();
+
+pub fn get_all_chara_ids() -> &'static Vec<i32> {
+    ALL_CHARA_IDS.get_or_init(|| get_single_column_int("SELECT id FROM chara_data"))
 }
 
-pub fn get_all_dress_ids() -> Vec<i32> {
-    get_single_column_int("SELECT id FROM dress_data")
+pub fn get_all_dress_ids() -> &'static Vec<i32> {
+    ALL_DRESS_IDS.get_or_init(|| get_single_column_int("SELECT id FROM dress_data"))
 }
 
-pub fn get_all_music_ids() -> Vec<i32> {
-    get_single_column_int("SELECT music_id FROM live_data")
+pub fn get_all_music_ids() -> &'static Vec<i32> {
+    ALL_MUSIC_IDS.get_or_init(|| get_single_column_int("SELECT music_id FROM live_data"))
 }
 
-pub fn get_all_mob_ids() -> Vec<i32> {
-    get_single_column_int("SELECT mob_id FROM mob_data WHERE use_live = 1")
+pub fn get_all_mob_ids() -> &'static Vec<i32> {
+    ALL_MOB_IDS.get_or_init(|| get_single_column_int("SELECT mob_id FROM mob_data WHERE use_live = 1"))
 }
 
-pub fn get_default_dress_ids() -> Vec<i32> {
-    get_single_column_int("SELECT id FROM dress_data WHERE (condition_type = 1 OR condition_type = 4 OR condition_type = 5) AND use_live_theater = 1 AND id < 999")
+pub fn get_default_dress_ids() -> &'static Vec<i32> {
+    DEFAULT_DRESS_IDS.get_or_init(|| get_single_column_int("SELECT id FROM dress_data WHERE (condition_type = 1 OR condition_type = 4 OR condition_type = 5) AND use_live_theater = 1 AND id < 999"))
 }
 
 pub fn get_all_cards() -> Vec<(i32, i32)> {

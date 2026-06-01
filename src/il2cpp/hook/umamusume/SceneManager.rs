@@ -11,6 +11,10 @@ fn ChangeViewCommon(next_view_id: i32) {
     if next_view_id == 1 { // ViewId.Splash
         SPLASH_SHOWN.store(true, atomic::Ordering::Release);
     }
+
+    // Clear stale raw pointers to destroyed Unity UI objects so they don't
+    // accumulate across scene transitions and cause use-after-free on iteration.
+    crate::core::gui::clear_disabled_game_uis();
 }
 
 type ChangeViewJpfn = extern "C" fn(
