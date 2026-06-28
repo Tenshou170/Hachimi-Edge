@@ -169,3 +169,61 @@ pub fn get_key(key_code: jint) -> Option<Key> {
         _ => None
     }
 }
+
+/// Returns a human-readable display label for an Android keycode.
+/// Ported from Hachimi-Edge-Mario0051 as a reference implementation.
+pub fn keycode_display_label(keycode: i32) -> String {
+    use rust_i18n::t;
+    let name_map: &[(i32, &str)] = &[
+        (KEYCODE_DPAD_UP,       "key_names.dpad_up"),
+        (KEYCODE_DPAD_DOWN,     "key_names.dpad_down"),
+        (KEYCODE_DPAD_LEFT,     "key_names.dpad_left"),
+        (KEYCODE_DPAD_RIGHT,    "key_names.dpad_right"),
+        (KEYCODE_ESCAPE,        "key_names.escape"),
+        (KEYCODE_TAB,           "key_names.tab"),
+        (KEYCODE_DEL,           "key_names.backspace"),
+        (KEYCODE_ENTER,         "key_names.enter"),
+        (KEYCODE_SPACE,         "key_names.space"),
+        (KEYCODE_INSERT,        "key_names.insert"),
+        (KEYCODE_FORWARD_DEL,   "key_names.delete"),
+        (KEYCODE_MOVE_HOME,     "key_names.home"),
+        (KEYCODE_MOVE_END,      "key_names.end"),
+        (KEYCODE_PAGE_UP,       "key_names.page_up"),
+        (KEYCODE_PAGE_DOWN,     "key_names.page_down"),
+        (KEYCODE_BACK,          "key_names.back"),
+        (KEYCODE_VOLUME_UP,     "key_names.volume_up"),
+        (KEYCODE_VOLUME_DOWN,   "key_names.volume_down"),
+        (KEYCODE_COPY,          "key_names.copy"),
+        (KEYCODE_CUT,           "key_names.cut"),
+        (KEYCODE_PASTE,         "key_names.paste"),
+        (KEYCODE_SEMICOLON,     "key_names.semicolon"),
+        (KEYCODE_COMMA,         "key_names.comma"),
+        (KEYCODE_BACKSLASH,     "key_names.backslash"),
+        (KEYCODE_SLASH,         "key_names.slash"),
+        (KEYCODE_LEFT_BRACKET,  "key_names.left_bracket"),
+        (KEYCODE_RIGHT_BRACKET, "key_names.right_bracket"),
+        (KEYCODE_GRAVE,         "key_names.grave"),
+        (KEYCODE_MINUS,         "key_names.minus"),
+        (KEYCODE_PERIOD,        "key_names.period"),
+        (KEYCODE_PLUS,          "key_names.plus"),
+        (KEYCODE_EQUALS,        "key_names.equals"),
+    ];
+
+    if let Some((_, key_t)) = name_map.iter().find(|(k, _)| *k == keycode) {
+        return t!(*key_t).into_owned();
+    }
+
+    match keycode {
+        k if k >= KEYCODE_0 && k <= KEYCODE_0 + 9 => {
+            format!("{}", k - KEYCODE_0)
+        }
+        k if k >= KEYCODE_A && k <= KEYCODE_A + 25 => {
+            let c = (b'A' + (k - KEYCODE_A) as u8) as char;
+            c.to_string()
+        }
+        k if k >= KEYCODE_F1 && k <= KEYCODE_F12 => {
+            format!("F{}", k - KEYCODE_F1 + 1)
+        }
+        other => t!("key_names.unknown", code = other).into_owned(),
+    }
+}

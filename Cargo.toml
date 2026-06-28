@@ -1,6 +1,6 @@
 [package]
 name = "hachimi"
-version = "0.25.5"
+version = "0.27.0"
 edition = "2021"
 
 [lib]
@@ -20,6 +20,7 @@ debug = "limited"
 log = "0.4"
 cstr = "0.2"
 once_cell = "1.19"
+material-colors = { version = "0.4" }
 chrono = "0.4.42"
 arc-swap = "1.7"
 serde = { version = "1.0", features = ["derive"] }
@@ -27,6 +28,8 @@ serde_json = "1.0"
 fnv = "1.0"
 widestring = "1.1"
 egui = { version = "0.33.3", default-features = false, features = ["serde"] }
+egui-material3 = { git = "https://github.com/Tenshou170/egui-material3.git", rev = "8acd5ad60ba1db02f4e637797b41d8cec0f8618e", default-features = false }
+# egui-material3 = { path = "../egui-material3", default-features = false }
 egui-scale = "0.3.0"
 egui_extras = { version = "0.33.3", default-features = false, features = ["image"] }
 image = { version = "0.25.9", default-features = false, features = ["png"] }
@@ -60,7 +63,7 @@ egui_glow = "0.33.3"
 glow = "0.16"
 dobby-rs = "0.1"
 
-[target.'cfg(target_os = "windows")'.dependencies]
+[target.'cfg(all(target_os = "windows", target_env = "msvc"))'.dependencies]
 windebug_logger = "0.1"
 minhook = "0.5"
 egui-directx11 = "0.12.1"
@@ -68,7 +71,7 @@ discord-rich-presence = "1.0.0"
 pelite = "0.10"
 microseh = "1.1"
 
-[target.'cfg(target_os = "windows")'.dependencies.windows]
+[target.'cfg(all(target_os = "windows", target_env = "msvc"))'.dependencies.windows]
 version = "0.62.2"
 features = [
     "Win32_System_LibraryLoader",
@@ -100,17 +103,18 @@ features = [
     "UI_Notifications"
 ]
 
+[dev-dependencies]
+proptest = "1.6"
+
 [build-dependencies]
 tauri-winres = "0.1"
 cc = "1.1"
 
 [package.metadata.tauri-winres]
-ProductName = "Hachimi"
+ProductName = "Hachimi Edge"
 FileDescription = "Game enhancement and translation mod"
 
 [patch.crates-io]
 dobby-sys = { git = "https://github.com/LeadRDRK/dobby-sys.git", rev = "e005f6abb0db1353b92ff58d50f59112f04dcad4" }
 embed-resource = { git = "https://github.com/nabijaczleweli/rust-embed-resource.git", rev = "e98e9aa28d66b0c2ff43516b41847cac372310dd" }
-egui = { git = "https://github.com/THShafi170/egui.git", rev = "2e6ff9a6c92f10a42037761f65eab267c569d794" }
-egui_extras = { git = "https://github.com/THShafi170/egui.git", rev = "2e6ff9a6c92f10a42037761f65eab267c569d794" }
 egui-directx11 = { git = "https://github.com/Nekomaru-PKU/egui-directx11.git", rev = "903043939a076dc81e122a1c8451755bfb3979c8" }

@@ -1,15 +1,20 @@
 hachimi: "Hachimi Edge"
 
-windows:
+windows: 
   menu_open_key: "Mũi tên phải"
 
-android:
-  menu_open_key: "Vol Up + Vol Down\n\uf25a hoặc chạm 3 lần phía trên bên trái"
+android: 
+  menu_open_key: "Vol Up + Vol Down\n\ue87c hoặc chạm 3 lần phía trên bên trái"
 
-splash_sub: "\uf015 Nhấn nút %{open_key_str} để mở menu."
+splash_sub: "\ue88a Nhấn nút %{open_key_str} để mở menu."
 loading_label: "Đang tải..."
 search_filter: "Nhập để tìm kiếm..."
 open: "Mở"
+reload: "Tải lại"
+check: "Kiểm tra"
+dump: "Xuất"
+restart: "Khởi động lại"
+toggle: "Bật/Tắt"
 cancel: "Hủy"
 save: "Lưu"
 done: "Hoàn tất"
@@ -19,48 +24,53 @@ yes: "Có"
 no: "Không"
 ok: "OK"
 retry: "Thử lại"
+bind_key: "Gán phím"
+set_keybind: 
+  title: "Gán Phím Tắt"
+  press_any_key: "Nhấn bất kỳ phím nào…"
+  bound_key: "Phím đã gán: %{key}"
 default: "Mặc định"
 off: "Tắt"
 on: "Bật"
 enable: "Bật"
-info: "Thông tin"
-warning: "Cảnh báo"
 disabled: "Đã tắt"
 minutes: "phút"
+info: "Thông tin"
+warning: "Cảnh báo"
 confirm_dialog_title: "Xác nhận"
 soft_restart_confirm_content: "Bạn có muốn soft restart game không?"
 in_game_browser_confirm_content: "Bạn có muốn mở trình duyệt trong game không?"
 browser_dialog_title: "Trình duyệt"
 
-menu:
-  check_for_updates: "\uf0aa Kiểm tra cập nhật"
+menu: 
+  check_for_updates: "\ue923 Kiểm tra cập nhật"
   fps_text: "FPS: %{fps}"
-  close_menu: "\uf00d Đóng menu"
-  stats_heading: "\uf022 Thống kê"
+  close_menu: "\ue5cd Đóng menu"
+  stats_heading: "\ue473 Thống kê"
   localize_dict_entries: "Số mục localize_dict: %{count}"
   hashed_dict_entries: "Số mục hashed_dict: %{count}"
-  config_heading: "\uf0ad Cài đặt"
-  open_config_editor: "\uf040 Chỉnh sửa cài đặt"
-  reload_config: "\uf021 Tải lại cài đặt"
-  open_first_time_setup: "\uf135 Thiết lập lần đầu"
-  graphics_heading: "\uf03e Đồ họa"
+  config_heading: "\ue8b8 Cài đặt"
+  open_config_editor: "\ue8b9 Chỉnh sửa cài đặt"
+  reload_config: "\ue5d5 Tải lại cài đặt"
+  open_first_time_setup: "\ue869 Thiết lập lần đầu"
+  graphics_heading: "\ueb97 Đồ họa"
   fps_label: "FPS"
   vsync_label: "VSync"
   stay_on_top: "Giữ cửa sổ trên cùng"
   keep_screen_on: "Ngăn màn hình tắt tự động"
-  translation_heading: "\uf02d Bản dịch"
-  reload_localized_data: "\uf021 Tải lại dữ liệu dịch"
-  tl_check_for_updates: "\uf0aa Kiểm tra cập nhật bản dịch"
-  tl_check_for_updates_pedantic: "\uf0aa Kiểm tra cập nhật bản dịch (sâu)"
-  dump_localize_dict: "Xuất file localize dict"
-  danger_zone_heading: "\uf071 Vùng nguy hiểm"
+  translation_heading: "\ue894 Bản dịch"
+  reload_localized_data: "\ue5d5 Tải lại dữ liệu dịch"
+  tl_check_for_updates: "\ue923 Kiểm tra cập nhật bản dịch"
+  tl_check_for_updates_pedantic: "\ue923 Kiểm tra cập nhật bản dịch (sâu)"
+  dump_localize_dict: "\ue2c4 Xuất dữ liệu dịch"
+  danger_zone_heading: "\ue8b2 Vùng nguy hiểm"
   danger_zone_warning: "Những lựa chọn này có thể gây ra các tác dụng không mong muốn. Hãy sử dụng cẩn thận!"
-  soft_restart: "\uf021 Soft restart"
-  open_in_game_browser: "\uf0ac Mở trình duyệt trong game"
-  toggle_game_ui: "\uf06e Bật/tắt giao diện game"
+  soft_restart: "\ue5d5 Soft restart"
+  open_in_game_browser: "\ue80b Mở trình duyệt trong game"
+  toggle_game_ui: "\ue8f4 Bật/tắt giao diện game"
   discord_rpc: "Discord RPC"
 
-notification:
+notification: 
   saved_localize_dump: "Đã lưu localize_dump.json"
   config_reloaded: "Đã tải lại cài đặt."
   config_saved: "Đã lưu cài đặt."
@@ -73,20 +83,21 @@ notification:
   errors_during_update: "%{count} lỗi đã xảy ra trong lúc cập nhật. Kiểm tra log để biết thêm thông tin."
   checking_for_updates: "Đang kiểm tra cập nhật..."
   no_updates: "Không có bản cập nhật."
+  press_to_set_menu_key: "Nhấn một phím trong cửa sổ game để đặt phím tắt mở menu."
+  menu_open_key_set: "Đã đặt phím tắt mở menu thành %{key}"
   ipc_softreset_exec: "Đã khởi động mềm IPC từ xa."
   atlas_workaround_reset: "Các tệp Atlas đã thay đổi: đã tắt giải pháp tạm thời."
   asset_mismatch: "Một số asset đã bị tắt do cập nhật. Kiểm tra log để biết thêm chi tiết."
-  config_error: "Cài đặt bị hỏng. Đang dùng giá trị mặc định..."
-  press_to_set_menu_key: "Nhấn một phím trong cửa sổ game để đặt phím tắt mở menu."
-  menu_open_key_set: "Đã đặt phím tắt mở menu thành %{key}"
+  error_occurred: "Đã xảy ra lỗi: %{reason}"
 
-
-first_time_setup:
+first_time_setup: 
   title: "Thiết lập lần đầu"
   welcome_heading: "Chào mừng"
   welcome_content: >-
     Hachimi đã được cài đặt! Phần này sẽ hướng dẫn bạn qua quá trình cài đặt ban đầu.
     Nếu bạn không quan tâm đến các tính năng dịch, bạn có thể bỏ qua bằng cách đóng hộp thoại này.
+
+
   translation_repo_heading: "Bản dịch"
   select_translation_repo: "Chọn một bản dịch:"
   no_compatible_repo: "Không có bản dịch nào tương thích với phiên bản game này."
@@ -96,26 +107,39 @@ first_time_setup:
     Bản dịch đã được thiết lập. Khi bạn nhấp vào Hoàn tất, cài đặt sẽ được lưu
     và kiểm tra cập nhật sẽ được thực hiện, sau đó yêu cầu bạn tải xuống dữ liệu bản dịch mới.
 
-about:
+about: 
   title: "Giới thiệu"
   copyright: "© 2024-%{year} LeadRDRK, kairusds and contributors"
   view_license: "Xem bản quyền"
   open_website: "Mở trang web"
   view_source_code: "Xem mã nguồn"
 
-license:
+license: 
   title: "Bản quyền"
+  gpl_v3_only_notice: "Văn bản giấy phép GPL-3.0-only"
+  ofl_fonts_header: "Phần mềm này đi kèm các phông chữ sau theo giấy phép SIL Open Font License 1.1:"
+  font_inter: "Inter: Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)"
+  font_font_awesome: "Font Awesome Version 4.7.0: Copyright Dave Gandy (https://fontawesome.com) 2016. Bảo lưu mọi quyền."
+  ofl_notice: "Văn bản giấy phép SIL OFL 1.1"
+  font_alibaba_header: "Alibaba PuHuiTi 3.0"
+  font_alibaba_body: "Copyright (c) 2020-2023 Alibaba (China) Co., Ltd. Bảo lưu mọi quyền."
 
-tl_updater:
+tl_updater: 
   title: "Đang cập nhật..."
+  checking: "Đang kiểm tra..."
   warning: "Bản dịch sẽ không hoạt động trong lúc đang cập nhật"
 
-config_editor:
+config_editor: 
   title: "Chỉnh sửa cài đặt"
-  general_tab: "\uf013 Chung"
-  graphics_tab: "\uf03e Đồ họa"
-  gameplay_tab: "\uf11b Gameplay"
+  general_tab: "\ue8b9 Chung"
+  graphics_tab: "\ueb97 Đồ họa"
+  gameplay_tab: "\ue30f Gameplay"
+  advanced_tab: "\ue869 Nâng cao"
+  advanced_settings_heading: "Nâng cao"
+  experimental_settings_heading: "Thử nghiệm"
+  developer_settings_heading: "Nhà phát triển"
   language: "Ngôn ngữ"
+  restore_defaults: "Khôi phục mặc định"
   disable_overlay: "Tắt overlay (GUI)"
   disable_overlay_warning: >-
     Tùy chọn này sẽ tắt GUI của Hachimi sau khi bạn khởi động lại game,
@@ -147,11 +171,23 @@ config_editor:
     trải nghiệm chơi game có thể bị ảnh hưởng. Vui lòng để tùy chọn này bị tắt
     nếu bạn không có sẵn máy chủ dịch thuật.
   auto_translate_ui: "Tự động dịch UI (KHÔNG ỔN ĐỊNH)"
+  notification_tp: "Thông báo hồi phục TP"
+  notification_rp: "Thông báo hồi phục RP"
+  notification_jobs: "Thông báo hoàn thành công việc"
+  taskbar_show_progress_on_download: "Tiến trình tải xuống trên thanh tác vụ"
+  taskbar_show_progress_on_connecting: "Tiến trình kết nối trên thanh tác vụ"
+  dump_msgpack: "Xuất phản hồi MsgPack"
+  dump_msgpack_request: "Xuất yêu cầu MsgPack"
+  msgpack_notifier: "Bật thông báo MsgPack"
+  msgpack_notifier_request: "Bao gồm yêu cầu trong thông báo"
+  msgpack_notifier_host: "URL máy chủ thông báo"
+  msgpack_notifier_print_error: "In lỗi HTTP ra console"
   target_fps: "Đặt FPS"
   virtual_resolution_multiplier: "Số nhân độ phân giải ảo"
   ui_scale: "Tỷ lệ UI"
   gui_scale: "Tỷ lệ lớp phủ"
   gui_landscape_ratio: "Tỷ lệ thu phóng lớp phủ ngang"
+  ui_animation_scale: "Tỷ lệ hoạt ảnh UI"
   graphics_quality: "Chất lượng đồ họa"
   vsync: "VSync"
   auto_full_screen: "Tự động toàn màn hình"
@@ -169,17 +205,44 @@ config_editor:
   force_allow_dynamic_camera: "Buộc cho phép dynamic camera"
   live_theater_allow_same_chara: "Cho phép cùng nhân vật trong live"
   physics_update_mode: "Chế độ vật lý"
+  cyspring_mono_uncap_frame_scale: "Bỏ giới hạn tỷ lệ khung CySpring Mono"
+  cyspring_disable_native: "Buộc dùng đường dẫn CySpring Mono (tắt plugin gốc)"
   disable_skill_name_translation: "Tắt dịch tên kỹ năng"
-  restore_defaults: "Khôi phục mặc định"
-  ui_animation_scale: "Tỷ lệ hoạt ảnh UI"
-  msaa: "MSAA"
   hide_ingame_ui_hotkey: "Phím tắt ẩn giao diện trong game"
   hide_ingame_ui_hotkey_info: >-
     Tùy chọn này cho phép sử dụng phím tắt để ẩn/hiện giao diện (UI) trong trò chơi.
     Đối với Android, bạn cần nhấn đúp phím Tăng âm lượng, hoặc nhấn ba lần vào góc trên bên phải màn hình.
     Đối với PC/Android có bàn phím, đó là phím Insert và có thể được cấu hình trong GUI hoặc tệp config.
+  unlock_live_chara: "Mở khóa nhân vật/bài hát Live Theater"
+  live_slider_always_show: "Luôn hiển thị thanh điều khiển Live"
+  live_playback_loop: "Lặp lại buổi biểu diễn trực tiếp"
+  champions_live_show_text: "Ghi đè văn bản Champions Meeting Live"
+  champions_live_resource_id: "Tiêu đề Champions Meeting"
+  champions_live_year: "Năm Champions Meeting"
+  captions: "Phụ đề"
+  caption_font_size: "Cỡ chữ"
+  caption_bg_alpha: "Độ mờ nền"
+  caption_pos_x: "Vị trí X"
+  caption_pos_y: "Vị trí Y"
+  caption_color: "Màu chữ"
+  caption_fallback_enable: "Fallback wrap"
+  caption_fallback_tooltip: "Ngắt mềm mỗi N ký tự"
+  caption_show_logging: "Ghi lại sự kiện hiển thị phụ đề"
+  caption_show_logging_tooltip: "Khi bật, trạng thái hiển thị và sự kiện phụ đề sẽ được ghi vào nhật ký"
+  caption_format_logging: "Ghi lại định dạng phụ đề"
+  caption_format_logging_tooltip: "Khi bật, các bước định dạng phụ đề sẽ được ghi vào nhật ký"
+  caption_logging: "Ghi chú phụ đề để gỡ lỗi"
+  caption_logging_tooltip: "Khi bật, phụ đề sẽ được ghi vào đầu ra nhật ký"
+  caption_lines_char_count: "Ký tự trên dòng"
+  caption_outline_color: "Màu viền"
+  caption_outline_size: "Kích thước viền"
+  enable_keyboard_shortcuts: "Bật phím tắt trong game"
+  discord_rpc: "Discord RPC"
+  enable_smtc: "Bật điều khiển phương tiện Windows"
+  unavailable_wine_proton: "Không khả dụng trên Wine/Proton"
   menu_open_key: "Phím tắt mở menu"
-  menu_open_key_set: "Nhấn để thiết lập"
+  menu_open_key_set: "Thiết lập"
+  msaa: "MSAA"
   render_scale: "Tỷ lệ kết xuất"
   aniso_level: "Lọc dị hướng"
   live_vocals_swap: "Thay đổi giọng hát trực tiếp"
@@ -187,40 +250,6 @@ config_editor:
   skill_info_dialog: "Hộp thoại thông tin kỹ năng tùy chỉnh"
   homescreen_bgseason: "Mùa nền Màn hình chính"
   shadow_resolution: "Độ phân giải bóng đổ"
-  captions: "Phụ đề"
-  caption_font_size: "Cỡ chữ"
-  caption_bg_alpha: "Độ mờ nền"
-  caption_pos_x: "Vị trí X"
-  caption_pos_y: "Vị trí Y"
-  caption_color: "Màu chữ"
-  caption_outline_color: "Màu viền"
-  caption_outline_size: "Kích thước viền"
-  notification_tp: "Thông báo hồi phục TP"
-  notification_rp: "Thông báo hồi phục RP"
-  notification_jobs: "Thông báo hoàn thành công việc"
-  taskbar_show_progress_on_download: "Tiến trình tải xuống trên thanh tác vụ"
-  taskbar_show_progress_on_connecting: "Tiến trình kết nối trên thanh tác vụ"
-  dump_msgpack: "Xuất phản hồi MsgPack"
-  dump_msgpack_request: "Xuất yêu cầu MsgPack"
-  msgpack_notifier: "Bật thông báo MsgPack"
-  msgpack_notifier_request: "Bao gồm yêu cầu trong thông báo"
-  msgpack_notifier_host: "URL máy chủ thông báo"
-  msgpack_notifier_print_error: "In lỗi HTTP ra console"
-  unlock_live_chara: "Mở khóa nhân vật/bài hát Live Theater"
-  live_slider_always_show: "Luôn hiển thị thanh điều khiển Live"
-  live_playback_loop: "Lặp lại buổi biểu diễn trực tiếp"
-  champions_live_show_text: "Ghi đè văn bản Champions Meeting Live"
-  champions_live_resource_id: "Tiêu đề Champions Meeting"
-  champions_live_year: "Năm Champions Meeting"
-  cyspring_mono_uncap_frame_scale: "Bỏ giới hạn tỷ lệ khung CySpring Mono"
-  cyspring_disable_native: "Buộc dùng đường dẫn CySpring Mono (tắt plugin gốc)"
-  discord_rpc: "Discord RPC"
-  enable_smtc: "Bật điều khiển phương tiện Windows"
-  enable_keyboard_shortcuts: "Bật phím tắt trong game"
-  advanced_tab: "\uf0ad Nâng cao"
-  advanced_settings_heading: "Nâng cao"
-  experimental_settings_heading: "Thử nghiệm"
-  developer_settings_heading: "Nhà phát triển"
   text_debug: "Chế độ gỡ lỗi văn bản"
   text_log: "Ghi nhật ký văn bản đã xử lý"
   text_property_dump: "Xuất thuộc tính UI"
@@ -235,60 +264,61 @@ config_editor:
   hide_ingame_ui_hotkey_bind: "Phím tắt ẩn UI"
   ui_loading_show_orientation_guide: "Hiển thị hướng dẫn hướng khi tải"
   full_screen_res: "Độ phân giải toàn màn hình tùy chỉnh"
+  landscape: "Ngang"
+  portrait: "Dọc"
   localized_data_dir: "Thư mục dữ liệu bản địa hóa"
   hook_libc_dlopen: "Buộc hook libc dlopen (Waydroid/giả lập)"
   keep_screen_on: "Ngăn màn hình tắt tự động"
-  press_to_set_menu_key: "Nhấn một phím trong cửa sổ game để đặt phím tắt mở menu."
-  atlas_workaround_reset: "Các tệp Atlas đã thay đổi: đã tắt giải pháp tạm thời."
 
-theme_editor:
-  title: "Trình chỉnh sửa Giao diện"
-  ui_accent_color: "Màu nhấn"
-  ui_window_fill: "Màu nền cửa sổ"
-  ui_panel_fill: "Màu nền bảng điều khiển"
-  ui_extreme_bg_color: "Nền ô nhập liệu"
-  ui_text_color: "Màu văn bản"
-  ui_window_rounding: "Bo góc"
+theme_editor: 
+  title: "Cài đặt Giao diện"
+  seed_color: "Màu hạt giống"
+  theme_mode: "Chế độ chủ đề"
+  dark: "Tối"
+  light: "Sáng"
+  contrast_level: "Độ tương phản"
+  normal: "Bình thường"
+  medium: "Trung bình"
+  high: "Cao"
+  scheme_mode: "Phối màu"
+  auto: "Tự động (từ hạt giống)"
+  manual: "Thủ công"
+  manual_colors: "Ghi đè màu"
+  primary: "Màu chính"
+  surface: "Bề mặt"
+  on_surface: "Trên bề mặt"
+  transparency: "Độ trong suốt nền"
+  corner_radius: "Bán kính bo góc"
+  translucent_windows: "Cửa sổ trong suốt"
 
-tl_update_dialog:
+tl_update_dialog: 
   title: "Bản cập nhật mới"
   content: "Đã có bản cập nhật bản dịch mới (%{size}). Bạn có muốn tải về không?"
   content_zip_warning: "Đã có bản cập nhật dịch thuật mới (%{changed_size}). Bản cập nhật này sẽ tải về toàn bộ tệp lưu trữ (%{download_size}) thay thế."
 
-update_prompt_dialog:
+update_prompt_dialog: 
   title: "Bản cập nhật mới"
   content: |
     Đã có phiên bản Hachimi mới (%{version}). Bạn có muốn cài đặt không?
     Game sẽ được khởi động lại để áp dụng bản cập nhật.
   android_content: |
     Đã có bản cập nhật Hachimi Edge mới (%{version}). Bạn có muốn cài đặt không?
-
     Nhấn "Có" để mở UmaPatcher Edge và patch lại game hiện tại của bạn.
     (Không cần tải lại toàn bộ game hay APK, bạn chỉ cần patch lại như bình thường vì UmaPatcher Edge luôn tự tải về phiên bản Hachimi Edge mới nhất.)
 
-updating_dialog:
+
+updating_dialog: 
   title: "Đang cập nhật"
   content: "Đang tải về bản cập nhật, game sẽ được khởi động lại trong giây lát..."
 
-steam_overlay_conflict_dialog:
+steam_overlay_conflict_dialog: 
   title: "Thông báo"
   content: >-
     Các giao dịch mua có thể không hoạt động khi overlay Hachimi được bật. Nếu overlay Steam đã hiện lên
     để bạn thực hiện giao dịch, hãy bỏ qua thông báo này và nhấn Không. Nếu không hoạt động, nhấn Có
     để tạm thời tắt overlay Hachimi. Game sẽ đóng lại, và lần khởi động tiếp theo overlay Hachimi sẽ bị
     tắt để bạn có thể thực hiện giao dịch. Sau đó, bạn có thể khởi động lại game để bật lại overlay.
-
-license:
-  title: "Bản quyền"
-  gpl_v3_only_notice: "Văn bản giấy phép GPL-3.0-only"
-  ofl_fonts_header: "Phần mềm này đi kèm các phông chữ sau theo giấy phép SIL Open Font License 1.1:"
-  font_inter: "Inter: Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)"
-  font_font_awesome: "Font Awesome Version 4.7.0: Copyright Dave Gandy (https://fontawesome.com) 2016. Bảo lưu mọi quyền."
-  ofl_notice: "Văn bản giấy phép SIL OFL 1.1"
-  font_alibaba_header: "Alibaba PuHuiTi 3.0"
-  font_alibaba_body: "Copyright (c) 2020-2023 Alibaba (China) Co., Ltd. Bảo lưu mọi quyền."
-
-key_names:
+key_names: 
   left: "Mũi tên trái"
   right: "Mũi tên phải"
   up: "Mũi tên lên"
@@ -331,3 +361,25 @@ key_names:
   numpad_multiply: "Numpad *"
   numpad_divide: "Numpad /"
   numpad_decimal: "Numpad ."
+  dpad_up: "D-Pad lên"
+  dpad_down: "D-Pad xuống"
+  dpad_left: "D-Pad trái"
+  dpad_right: "D-Pad phải"
+  back: "Quay lại"
+  volume_up: "Tăng âm lượng"
+  volume_down: "Giảm âm lượng"
+  copy: "Sao chép"
+  cut: "Cắt"
+  paste: "Dán"
+  semicolon: "Chấm phẩy"
+  comma: "Phẩy"
+  backslash: "Gạch chéo ngược"
+  slash: "Gạch chéo"
+  left_bracket: "["
+  right_bracket: "]"
+  grave: "Grave"
+  minus: "Trừ"
+  period: "Chấm"
+  plus: "Cộng"
+  equals: "Bằng"
+  unknown: "Phím %{code}"

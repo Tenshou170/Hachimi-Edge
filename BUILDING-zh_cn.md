@@ -29,7 +29,7 @@ Hachimi Edge 是一个使用 Rust 编写的跨平台游戏增强与翻译模组�
 
 为了与官方发布的构建版本（例如自定义 Combo Box 大小和 UI 渲染）保持绝对的视觉一致性，Hachimi Edge 需要针对自定义修补版本的 Egui 进行编译。
 
-此过程**完全由 Cargo 自动处理**。`Cargo.toml` 中已预先配置好 Git 补丁（指向 Git Fork 仓库 `THShafi170/egui` 的 `hachimi-patches` 分支）。在编译项目时，Cargo 会自动拉取、缓存并应用这些修改，无需开发人员进行任何手动克隆、修补或运行本地设置脚本！
+此过程**完全由 Cargo 自动处理**。`Cargo.toml` 中已预先配置好 Git 补丁（指向 Git Fork 仓库 `Tenshou170/egui` 的 `main` 分支）。在编译项目时，Cargo 会自动拉取、缓存并应用这些修改，无需开发人员进行任何手动克隆、修补或运行本地设置脚本！
 
 ---
 
@@ -51,22 +51,31 @@ mklink /J ndk C:\path\to\android-ndk-r27d
 
 *注意：`ndk` 链接已被 Git 自动忽略。*
 
+> [!IMPORTANT]
+> **开发机操作系统配置 (`.cargo/config.toml`)**:
+> 请根据您的开发机系统是 Windows 还是 Linux/macOS，相应地切换 [.cargo/config.toml](file:///.cargo/config.toml) 中的配置：
+> - **Windows 开发者**: 保持默认的 Windows 配置行启用（默认已启用）。
+> - **Linux/macOS 开发者**: 注释掉 Windows 相关的配置行，并取消注释 `[alias]`、`[target.aarch64-linux-android]` 和 `[env]` 下对应的 Linux 配置行。
+
 ---
 
 ## 4. 编译模组
 
 ### Windows (x64)
 
-#### 在 Windows 上构建：
+#### 检查代码：
+使用我们预定配置的 Cargo 别名：
 ```bash
-cargo build --target x86_64-pc-windows-msvc --release
+cargo xcheck
 ```
+*(在 Windows 主机上进行原生检查；在 Linux/macOS 主机上通过 `cargo-xwin` 交叉检查)。*
 
-#### 在 Linux 上交叉编译：
-使用我们预先配置的 Cargo 别名（它会调用 `cargo-xwin`）：
+#### 编译 DLL：
+使用我们预配置的 Cargo 别名：
 ```bash
 cargo xbuild
 ```
+*(在 Windows 主机上进行原生构建；在 Linux/macOS 主机上通过 `cargo-xwin` 交叉编译)。*
 
 **构建产物**：`target/x86_64-pc-windows-msvc/release/hachimi.dll`
 
@@ -98,5 +107,5 @@ RELEASE=1 ./tools/android/build.sh
 
 *   `cargo abuild`: 使用本地 `ndk` 符号链接在 release 模式下编译 Android 版本。
 *   `cargo acheck`: 用于 Android 目标的快速编译器检查。
-*   `cargo xbuild`: 运行 `cargo xwin` 在 Linux 主机上交叉编译 Windows 版本。
-*   `cargo xcheck`: 用于 Windows 交叉编译目标的快速编译器检查。
+*   `cargo xbuild`: 编译 Windows 版本（在 Windows 主机上进行原生构建；在 Linux/macOS 主机上运行 `cargo-xwin` 进行交叉编译）。
+*   `cargo xcheck`: 用于 Windows 目标的快速编译器检查（在 Windows 主机上原生检查；在 Linux/macOS 主机上通过 `cargo-xwin` 交叉检查）。

@@ -6,7 +6,7 @@ type SetTargetFrameRateFn = extern "C" fn(value: i32);
 pub extern "C" fn set_targetFrameRate(mut value: i32) {
     let target_fps = Hachimi::instance().target_fps.load(atomic::Ordering::Relaxed);
     if target_fps != -1 {
-        value = target_fps;
+        value = target_fps.clamp(30, 240);
     }
     get_orig_fn!(set_targetFrameRate, SetTargetFrameRateFn)(value);
 }

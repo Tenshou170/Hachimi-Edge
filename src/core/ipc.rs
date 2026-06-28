@@ -71,7 +71,11 @@ fn on_http_request(request: &mut Request) -> Result<CommandResponse, Error> {
     }
 
     let headers = Headers { headers: request.headers() };
-    if !headers.get("content-type").map(|t| t.eq_ignore_ascii_case("application/json")).unwrap_or(false) {
+    if !headers
+        .get("content-type")
+        .map(is_json_content_type)
+        .unwrap_or(false)
+    {
         return Ok(CommandResponse::error("Invalid content type".to_owned()));
     }
 
@@ -180,6 +184,23 @@ impl<'a> Headers<'a> {
     
         None
     }
+}
+
+fn is_json_content_type(value: &str) -> bool {
+    let value = value.trim();
+    if value.eq_ignore_ascii_case("application/json") {
+        return true;
+    }
+
+    if value.len() <= 16 {
+        return false;
+    }
+
+    if !value[..16].eq_ignore_ascii_case("application/json") {
+        return false;
+    }
+
+    value[16..].trim_start().starts_with(';')
 }
 
 #[derive(Deserialize)]

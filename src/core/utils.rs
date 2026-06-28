@@ -159,19 +159,13 @@ impl<'a> Iterator for IsolateTags<'a> {
                                     in_tag = false;
                                     break 'tag_name_end;
                                 }
-                                // Tags with a value (e.g. <size=39>, <color=#FF6D26>) are
-                                // self-contained — accept them without requiring a closing tag.
-                                // For plain tags (e.g. <b>, <i>) check for a closing tag in
-                                // the full remaining string so we don't misidentify stray '<'.
-                                if c != b'=' {
-                                    let mut closing_tag = String::with_capacity(3 + tag_name.len());
-                                    closing_tag += "</";
-                                    closing_tag += tag_name;
-                                    closing_tag += ">";
-                                    if !self.s[self.i..].contains(&closing_tag) {
-                                        in_tag = false;
-                                        break 'tag_name_end;
-                                    }
+                                let mut closing_tag = String::with_capacity(3 + tag_name.len());
+                                closing_tag += "</";
+                                closing_tag += tag_name;
+                                closing_tag += ">";
+                                if !self.s[self.i..].contains(&closing_tag) {
+                                    in_tag = false;
+                                    break 'tag_name_end;
                                 }
                             }
                             expecting_tag_name = false;
@@ -313,9 +307,7 @@ fn custom_wrap_algorithm<'a, 'b>(words: &'b [Word<'a>], line_widths: &'b [usize]
     let mut removed_indices = Vec::with_capacity(words.len());
     let mut remove_offset = 0;
     for (i, word) in words.iter().enumerate() {
-        let is_tag = word.starts_with("<") && word.trim_end().ends_with(">");
-        let is_expr = word.starts_with("$(") && word.trim_end().ends_with(")");
-        if is_tag || is_expr {
+        if word.starts_with("<") && word.ends_with(">") {
             removed_indices.push(i - remove_offset);
             remove_offset += 1;
             continue;
@@ -323,16 +315,14 @@ fn custom_wrap_algorithm<'a, 'b>(words: &'b [Word<'a>], line_widths: &'b [usize]
         clean_fragments.push(words[i]);
     }
 
-    let config = &Hachimi::instance().localized_data.load();
-    let penalties = &config.wrapper_penalties;
     // quick escape!!!11
     let f64_line_widths = line_widths.iter().map(|w| *w as f64).collect::<Vec<_>>();
     if remove_offset == 0 {
-        return wrap_algorithms::wrap_optimal_fit(words, &f64_line_widths, penalties).unwrap();
+        return wrap_algorithms::wrap_optimal_fit(words, &f64_line_widths, &wrap_algorithms::Penalties::new()).unwrap();
     }
 
     // Wrap without formatting tags
-    let wrapped = wrap_algorithms::wrap_optimal_fit(&clean_fragments, &f64_line_widths, penalties).unwrap();
+    let wrapped = wrap_algorithms::wrap_optimal_fit(&clean_fragments, &f64_line_widths, &wrap_algorithms::Penalties::new()).unwrap();
 
     // Create results with formatting tags added back
     // Note: The break word option doesn't really affect the extra long lines since
@@ -458,13 +448,7 @@ pub fn wrap_fit_text(string: &str, base_line_width: i32, mut max_line_count: i32
     loop {
         let wrapped = wrap_text_internal(string, line_width.round() as i32, line_width_multiplier);
         if wrapped.len() as i32 <= max_line_count {
-            let new_size = font_size.round() as i32;
-            let new_text = wrapped.join("\n");
-            return Some(if new_size != base_font_size {
-                add_size_tag(&new_text, new_size)
-            } else {
-                new_text
-            });
+            return Some(add_size_tag(&wrapped.join("\n"), font_size.round() as i32));
         }
 
         let prev_max_line_count = max_line_count;
@@ -570,10 +554,23 @@ pub fn truncate_text_il2cpp(string: *mut Il2CppString, width: usize, ellipsis: b
 }
 
 pub fn write_json_file<T: Serialize, P: AsRef<Path>>(data: &T, path: P) -> Result<(), Error> {
-    let file = std::fs::File::create(path)?;
-    let mut writer = std::io::BufWriter::new(file);
-    serde_json::to_writer_pretty(&mut writer, data)?;
-    writer.flush()?;
+    let path = path.as_ref();
+    let tmp_path = path.with_extension("tmp");
+
+    let result = (|| -> Result<(), Error> {
+        let file = std::fs::File::create(&tmp_path)?;
+        let mut writer = std::io::BufWriter::new(file);
+        serde_json::to_writer_pretty(&mut writer, data)?;
+        writer.flush()?;
+        Ok(())
+    })();
+
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp_path);
+        return result;
+    }
+
+    std::fs::rename(&tmp_path, path)?;
     Ok(())
 }
 
@@ -696,7 +693,7 @@ pub fn notify_error(message: impl AsRef<str>) {
     let s = message.as_ref();
     error!("{}", s);
     if let Some(mutex) = Gui::instance() {
-        mutex.lock().unwrap().show_notification(s);
+        mutex.lock().unwrap().show_notification(&rust_i18n::t!("notification.error_occurred", reason = s));
     }
 }
 

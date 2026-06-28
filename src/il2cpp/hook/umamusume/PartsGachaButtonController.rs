@@ -2,7 +2,8 @@ use crate::{
     core::{hachimi::UITextConfig, Hachimi},
     il2cpp::{
         ext::{Il2CppObjectExt, StringExt},
-        symbols::get_method_addr,
+        hook::UnityEngine_CoreModule::Object,
+        symbols::{get_method_addr, GCHandle},
         types::*
     }
 };
@@ -12,7 +13,12 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
 
-static ORIGINAL_POSITIONS: Lazy<Mutex<HashMap<usize, Vector2_t>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+struct StoredPosition {
+    handle: GCHandle,
+    position: Vector2_t
+}
+
+static ORIGINAL_POSITIONS: Lazy<Mutex<HashMap<usize, StoredPosition>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 type SetButtonTextFn = extern "C" fn(this: *mut Il2CppObject);
 type InitializeFn = extern "C" fn(this: *mut Il2CppObject, executable: *mut Il2CppObject, card_type: i32, ticket_counter: *mut Il2CppObject, on_success: *mut Il2CppObject, is_only_one: bool, index: i32, is_small: bool, open_dialog_type: i32);
@@ -340,10 +346,17 @@ fn get_position_functions(rect_transform: *mut Il2CppObject) -> Option<(GetAncho
 
 fn get_or_store_original_position(rect_transform: *mut Il2CppObject, current_x: f32, current_y: f32) -> (f32, f32) {
     let mut map = ORIGINAL_POSITIONS.lock().unwrap();
-    let base_pos_ref = map.entry(rect_transform as usize).or_insert_with(|| {
-        Vector2_t { x: current_x, y: current_y }
+    map.retain(|_, stored| {
+        let ptr = stored.handle.target();
+        !ptr.is_null() && Object::op_Implicit(ptr)
     });
-    (base_pos_ref.x, base_pos_ref.y)
+    let base_pos_ref = map.entry(rect_transform as usize).or_insert_with(|| {
+        StoredPosition {
+            handle: GCHandle::new_weak_ref(rect_transform, false),
+            position: Vector2_t { x: current_x, y: current_y }
+        }
+    });
+    (base_pos_ref.position.x, base_pos_ref.position.y)
 }
 
 pub fn init(umamusume: *const Il2CppImage) {

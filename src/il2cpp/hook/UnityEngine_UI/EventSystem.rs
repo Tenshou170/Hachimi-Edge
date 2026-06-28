@@ -37,6 +37,9 @@ extern "C" fn Update(this: *mut Il2CppObject) {
         }
     }
 
+    crate::il2cpp::hook::UnityEngine_UI::Text::prune_inactive_translation_targets();
+    crate::il2cpp::hook::UnityEngine_TextRenderingModule::TextMesh::prune_inactive_translation_targets();
+
     if completed.is_empty() {
         #[cfg(target_os = "windows")]
         smtc_on_update_if_native();

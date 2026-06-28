@@ -2,9 +2,14 @@ use std::sync::Mutex;
 use fnv::FnvHashMap;
 use once_cell::sync::Lazy;
 use crate::core::sugoi_client::SugoiClient;
-use crate::il2cpp::{ext::{Il2CppStringExt, StringExt}, hook::UnityEngine_CoreModule::Object, symbols::get_method_addr, types::*};
+use crate::il2cpp::{ext::{Il2CppStringExt, StringExt}, hook::UnityEngine_CoreModule::Object, symbols::{get_method_addr, GCHandle}, types::*};
 
-pub static ACTIVE_TEXT_MESH_COMPONENTS: Lazy<Mutex<FnvHashMap<usize, String>>> = Lazy::new(|| {
+struct ActiveTextMeshComponent {
+    handle: GCHandle,
+    original: String
+}
+
+static ACTIVE_TEXT_MESH_COMPONENTS: Lazy<Mutex<FnvHashMap<usize, ActiveTextMeshComponent>>> = Lazy::new(|| {
     Mutex::new(FnvHashMap::default())
 });
 
@@ -21,7 +26,10 @@ pub extern "C" fn set_text_hook(this: *mut Il2CppObject, value: *mut Il2CppStrin
 
     let orig_str = unsafe { (*value).as_utf16str().to_string() };
 
-    ACTIVE_TEXT_MESH_COMPONENTS.lock().unwrap().insert(this as usize, orig_str.clone());
+    ACTIVE_TEXT_MESH_COMPONENTS.lock().unwrap().insert(this as usize, ActiveTextMeshComponent {
+        handle: GCHandle::new_weak_ref(this, false),
+        original: orig_str.clone()
+    });
 
     if let Some(trans) = SugoiClient::instance().get_cached(&orig_str) {
         return get_orig_fn!(set_text_hook, SetTextFn)(this, trans.to_il2cpp_string());
@@ -35,14 +43,20 @@ pub fn apply_translations(completed: &[(String, String)]) {
     {
         let mut tracker = ACTIVE_TEXT_MESH_COMPONENTS.lock().unwrap();
 
-        tracker.retain(|&ptr, _| Object::op_Implicit(ptr as *mut Il2CppObject));
+        tracker.retain(|_, active| {
+            let ptr = active.handle.target();
+            !ptr.is_null() && Object::op_Implicit(ptr)
+        });
 
         for (orig, trans) in completed {
             let unity_string = trans.to_il2cpp_string();
 
-            for (&ptr, saved_orig) in tracker.iter() {
-                if saved_orig == orig {
-                    updates_to_apply.push((ptr, unity_string));
+            for active in tracker.values() {
+                if &active.original == orig {
+                    let ptr = active.handle.target();
+                    if !ptr.is_null() && Object::op_Implicit(ptr) {
+                        updates_to_apply.push((ptr as usize, unity_string));
+                    }
                 }
             }
         }
@@ -53,6 +67,13 @@ pub fn apply_translations(completed: &[(String, String)]) {
             get_orig_fn!(set_text_hook, SetTextFn)(ptr as *mut Il2CppObject, unity_string);
         }
     }
+}
+
+pub fn prune_inactive_translation_targets() {
+    ACTIVE_TEXT_MESH_COMPONENTS.lock().unwrap().retain(|_, active| {
+        let ptr = active.handle.target();
+        !ptr.is_null() && Object::op_Implicit(ptr)
+    });
 }
 
 pub fn init(UnityEngine_TextRenderingModule: *const Il2CppImage) {

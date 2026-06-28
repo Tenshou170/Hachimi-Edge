@@ -41,8 +41,8 @@ pub fn on_hooking_finished(hachimi: &Hachimi) {
     wnd_hook::init();
 
     // Detect Wine/Proton and log it
-    if is_wine() {
-        info!("Wine/Proton detected — disabling SMTC and taskbar integration");
+    if crate::windows::capabilities::is_wine() {
+        info!("Wine/Proton detected — disabling SMTC, taskbar progress, and scheduled toast integration");
     }
 
     // Kill unity crash handler (just to be safe)

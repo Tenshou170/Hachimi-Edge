@@ -49,6 +49,10 @@ fn parse_data_map(_data_map: &[(Value, Value)], _config: &crate::core::hachimi::
 
 #[cfg(target_os = "windows")]
 fn parse_data_map(data_map: &[(Value, Value)], config: &crate::core::hachimi::Config) {
+    if !crate::windows::capabilities::supports_scheduled_toasts() {
+        return;
+    }
+
     let mut tp_recovery_time = None;
     let mut rp_recovery_time = None;
     let mut jobs_going_info_array: Option<&Vec<Value>> = None;

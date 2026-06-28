@@ -8,10 +8,19 @@
 *.iml
 
 # AI agent files
+WARP.md
+AGENTS.md
+AGENT.md
 GEMINI.md
 CLAUDE.md
+.cursorrules
+.clinerules
+.windsurfrules
+.github/copilot-instructions.md
 /.gemini
-/.claud/
+/.agents
+/.claude/
+/.kilo
 /.kiro
 
 
@@ -38,5 +47,6 @@ CLAUDE.md
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs and text artifacts
 *.log
+*.txt

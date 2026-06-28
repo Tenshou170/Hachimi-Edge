@@ -31,7 +31,7 @@ extern "C" fn UpdateForce(
 ) {
     let config = Hachimi::instance().config.load();
     if config.physics_update_mode == Some(super::CySpringController::SpringUpdateMode::Mode60FPS) {
-        let target_fps = config.target_fps.unwrap_or(60) as f32;
+        let target_fps = config.target_fps.map(|v| v.clamp(30, 240)).unwrap_or(60) as f32;
         frame_scale = if config.cyspring_mono_uncap_frame_scale {
             (target_fps / 2.0).min(60.0)
         } else {

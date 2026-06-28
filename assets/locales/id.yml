@@ -1,15 +1,20 @@
 hachimi: "Hachimi Edge"
 
-windows:
+windows: 
   menu_open_key: "Panah Kanan"
 
-android:
-  menu_open_key: "Vol Atas + Bawah\n\uf25a atau Ketuk tiga kali kiri atas"
+android: 
+  menu_open_key: "Vol Atas + Bawah\n\ue87c atau Ketuk tiga kali kiri atas"
 
-splash_sub: "\uf015 Tekan %{open_key_str} untuk buka menu."
+splash_sub: "\ue88a Tekan %{open_key_str} untuk buka menu."
 loading_label: "Memuat..."
 search_filter: "Ketik untuk cari..."
 open: "Buka"
+reload: "Muat Ulang"
+check: "Periksa"
+dump: "Dump"
+restart: "Mulai Ulang"
+toggle: "Alihkan"
 cancel: "Batal"
 save: "Simpan"
 done: "Selesai"
@@ -19,48 +24,53 @@ yes: "Ya"
 no: "Tidak"
 ok: "OK"
 retry: "Ulangi"
+bind_key: "Atur tombol"
+set_keybind: 
+  title: "Atur Tombol Pintas"
+  press_any_key: "Tekan tombol apapun…"
+  bound_key: "Tombol yang diatur: %{key}"
 default: "Default"
 off: "Mati"
 on: "Nyala"
 enable: "Nyalakan"
-info: "Info"
-warning: "Peringatan"
 disabled: "Dinonaktifkan"
 minutes: "menit"
+info: "Info"
+warning: "Peringatan"
 confirm_dialog_title: "Konfirmasi"
 soft_restart_confirm_content: "Apa kamu yakin ingin memulai ulang ringan game?"
 in_game_browser_confirm_content: "Apa kamu yakin ingin buka browser dalam game?"
 browser_dialog_title: "Browser"
 
-menu:
-  check_for_updates: "\uf0aa Cek pembaruan"
+menu: 
+  check_for_updates: "\ue923 Cek pembaruan"
   fps_text: "FPS: %{fps}"
-  close_menu: "\uf00d Tutup menu"
-  stats_heading: "\uf022 Status"
+  close_menu: "\ue5cd Tutup menu"
+  stats_heading: "\ue473 Status"
   localize_dict_entries: "entri localize_dict: %{count}"
   hashed_dict_entries: "entri hashed_dict: %{count}"
-  config_heading: "\uf0ad Konfigurasi"
-  open_config_editor: "\uf040 Buka editor konfig"
-  reload_config: "\uf021 Muat ulang konfig"
-  open_first_time_setup: "\uf135 Setup pertama kali"
-  graphics_heading: "\uf03e Grafis"
+  config_heading: "\ue8b8 Konfigurasi"
+  open_config_editor: "\ue8b9 Buka editor konfig"
+  reload_config: "\ue5d5 Muat ulang konfig"
+  open_first_time_setup: "\ue869 Setup pertama kali"
+  graphics_heading: "\ueb97 Grafis"
   fps_label: "FPS"
   vsync_label: "VSync"
   stay_on_top: "Sematkan di atas"
   keep_screen_on: "Cegah layar mati otomatis"
-  translation_heading: "\uf02d Translasi"
-  reload_localized_data: "\uf021 Muat ulang data lokalisasi"
-  tl_check_for_updates: "\uf0aa Periksa pembaruan terjemahan"
-  tl_check_for_updates_pedantic: "\uf0aa Periksa pembaruan terjemahan (pedantik/ketat)"
-  dump_localize_dict: "Ekstrak localize_dump"
-  danger_zone_heading: "\uf071 Zona Rawan"
+  translation_heading: "\ue894 Translasi"
+  reload_localized_data: "\ue5d5 Muat ulang data lokalisasi"
+  tl_check_for_updates: "\ue923 Periksa pembaruan terjemahan"
+  tl_check_for_updates_pedantic: "\ue923 Periksa pembaruan terjemahan (pedantik/ketat)"
+  dump_localize_dict: "\ue2c4 Ekspor Kamus Terjemahan"
+  danger_zone_heading: "\ue8b2 Zona Rawan"
   danger_zone_warning: "Hati-hati! Menggunakan opsi di bawah akan membuat game tidak stabil."
-  soft_restart: "\uf021 Restart ringan"
-  open_in_game_browser: "\uf0ac Buka browser in-game"
-  toggle_game_ui: "\uf06e Atur UI game"
+  soft_restart: "\ue5d5 Restart ringan"
+  open_in_game_browser: "\ue80b Buka browser in-game"
+  toggle_game_ui: "\ue8f4 Atur UI game"
   discord_rpc: "RPC Discord"
 
-notification:
+notification: 
   saved_localize_dump: "Tersimpan sebagai localize_dump.json"
   config_reloaded: "Konfigurasi dimuat ulang."
   config_saved: "Konfigurasi tersimpan."
@@ -78,19 +88,20 @@ notification:
   ipc_softreset_exec: "Kendali IPC soft-reset dijalankan"
   atlas_workaround_reset: "File Atlas dimodifikasi: solusi sementara dinonaktifkan."
   asset_mismatch: "Beberapa aset telah dinonaktifkan karena pembaruan. Periksa log untuk detailnya."
+  error_occurred: "Terjadi kesalahan: %{reason}"
 
-first_time_setup:
+first_time_setup: 
   title: "Setup Pertama Kali"
   welcome_heading: "Selamat Datang"
   welcome_content: >-
     Hachimi telah terpasang! Ini adalah proses pengaturan awal.
     Jika kamu tidak tertarik pada fitur translasi, kamu bisa melewatinya dengan menutup dialog ini.
-
-
     SANGGAHAN (DISCLAIMER):
     Hachimi adalah proyek komunitas. Translasi yang tersedia adalah hasil kontribusi dari beragam komunitas.
     Proyek ini tidak dibuat/didukung oleh Cygames, Inc., dan berpotensi melanggar S&K game ini. Kamu dianggap
     bersedia menerima segala risiko yang ada apabila melanjutkan.
+
+
   translation_repo_heading: "Repositori Translasi"
   select_translation_repo: "Mohon pilih repositori translasi:"
   no_compatible_repo: "Tidak ada repositori yang didukung oleh versi game ini"
@@ -100,14 +111,14 @@ first_time_setup:
     Klik Selesai untuk menyimpan konfigurasi.
     Jika kamu ingin menggunakan fitur translasi, dialog cek pembaruan akan muncul dan mengunduh data translasi.
 
-about:
+about: 
   title: "Tentang"
   copyright: "© 2024-%{year} LeadRDRK, kairusds dan kontributor"
   view_license: "Lihat lisensi"
   open_website: "Buka situs web"
   view_source_code: "Lihat kode sumber"
 
-license:
+license: 
   title: "Lisensi"
   gpl_v3_only_notice: "Teks Lisensi GPL-3.0-only"
   ofl_fonts_header: "Perangkat lunak ini menyertakan font berikut di bawah SIL Open Font License 1.1:"
@@ -117,15 +128,20 @@ license:
   font_alibaba_header: "Alibaba PuHuiTi 3.0"
   font_alibaba_body: "Copyright (c) 2020-2023 Alibaba (China) Co., Ltd. Semua hak dilindungi."
 
-tl_updater:
+tl_updater: 
   title: "Memperbarui..."
+  checking: "Memeriksa..."
   warning: "Fitur translasi tidak bekerja saat progres pembaruan berjalan."
 
-config_editor:
+config_editor: 
   title: "Editor Konfigurasi"
-  general_tab: "\uf013 Umum"
-  graphics_tab: "\uf03e Grafis"
-  gameplay_tab: "\uf11b Gameplay"
+  general_tab: "\ue8b9 Umum"
+  graphics_tab: "\ueb97 Grafis"
+  gameplay_tab: "\ue30f Gameplay"
+  advanced_tab: "\ue869 Lanjutan"
+  advanced_settings_heading: "Lanjutan"
+  experimental_settings_heading: "Eksperimental"
+  developer_settings_heading: "Pengembang"
   language: "Bahasa"
   restore_defaults: "Kembalikan semula"
   disable_overlay: "Matikan overlay (GUI)"
@@ -137,7 +153,7 @@ config_editor:
   meta_index_url: "URL Meta Terjemahan"
   debug_mode: "Mode Debug"
   enable_file_logging: "Nyalakan logging file"
-  apply_atlas_workaround: "\uf013 Terapkan Perbaikan Atlas TL"
+  apply_atlas_workaround: "Terapkan Perbaikan Atlas TL"
   disable_outdated_asset_notif: "Nonaktifkan notifikasi aset usang"
   translator_mode: "Mode Translator"
   skip_first_time_setup: "Lewati setup pertama kali"
@@ -159,6 +175,17 @@ config_editor:
     dan permainan mungkin terganggu. Harap biarkan opsi ini dinonaktifkan jika Anda
     tidak memiliki server terjemahan.
   auto_translate_ui: "Otomatis terjemahkan UI (BISA MERUSAK UI)"
+  notification_tp: "Notifikasi Pemulihan TP"
+  notification_rp: "Notifikasi Pemulihan RP"
+  notification_jobs: "Notifikasi Pekerjaan Selesai"
+  taskbar_show_progress_on_download: "Progres unduhan di taskbar"
+  taskbar_show_progress_on_connecting: "Progres koneksi di taskbar"
+  dump_msgpack: "Ekspor Respons MsgPack"
+  dump_msgpack_request: "Ekspor Permintaan MsgPack"
+  msgpack_notifier: "Aktifkan Notifikasi MsgPack"
+  msgpack_notifier_request: "Sertakan Permintaan di Notifikasi"
+  msgpack_notifier_host: "URL Host Notifikasi"
+  msgpack_notifier_print_error: "Tampilkan Error HTTP ke Konsol"
   target_fps: "Target FPS"
   virtual_resolution_multiplier: "Kelipatan resolusi virtual"
   ui_scale: "Skala UI"
@@ -182,13 +209,41 @@ config_editor:
   force_allow_dynamic_camera: "Paksa nyalakan kamera dinamis (POV)"
   live_theater_allow_same_chara: "Izinkan karakter yang sama untuk konser"
   physics_update_mode: "Mode update fisik"
+  cyspring_mono_uncap_frame_scale: "Hapus Batas Skala Frame CySpring Mono"
+  cyspring_disable_native: "Paksa jalur CySpring Mono (nonaktifkan plugin native)"
   disable_skill_name_translation: "Matikan translasi nama skill"
   hide_ingame_ui_hotkey: "Sembunyikan hotkey UI dalam game"
   hide_ingame_ui_hotkey_info: >-
     Opsi ini memungkinkan tombol pintas untuk mengaktifkan/menonaktifkan UI di dalam game.
     Untuk Android, Anda perlu mengetuk dua kali tombol Volume Atas, atau mengetuk tiga kali di bagian kanan atas layar.
     Untuk PC/Android dengan keyboard, tombolnya adalah Insert dan dapat dikonfigurasi di GUI atau config.
+  unlock_live_chara: "Buka Kunci Karakter/Lagu Live Theater"
+  live_slider_always_show: "Selalu Tampilkan Kontrol Live"
+  live_playback_loop: "Ulangi Pertunjukan Live"
+  champions_live_show_text: "Ganti Teks Champions Meeting Live"
+  champions_live_resource_id: "Judul Champions Meeting"
+  champions_live_year: "Tahun Champions Meeting"
+  captions: "Teks Terjemahan"
+  caption_font_size: "Ukuran Font"
+  caption_bg_alpha: "Opasitas Latar"
+  caption_pos_x: "Posisi X"
+  caption_pos_y: "Posisi Y"
+  caption_color: "Warna Teks"
+  caption_fallback_enable: "Fallback wrap"
+  caption_fallback_tooltip: "Pemisah tiap N karakter"
+  caption_show_logging: "Catat peristiwa tampilan subtitle"
+  caption_show_logging_tooltip: "Saat diaktifkan, visibilitas dan peristiwa subtitle akan ditulis ke output log"
+  caption_format_logging: "Catat pemformatan subtitle"
+  caption_format_logging_tooltip: "Saat diaktifkan, langkah pemformatan subtitle akan ditulis ke output log"
+  caption_logging: "Catat subtitle untuk debugging"
+  caption_logging_tooltip: "Saat diaktifkan, subtitle akan ditulis ke output log"
+  caption_lines_char_count: "Karakter per baris"
+  caption_outline_color: "Warna Garis Tepi"
+  caption_outline_size: "Ukuran Garis Tepi"
+  enable_keyboard_shortcuts: "Aktifkan Pintasan Keyboard Dalam Game"
   discord_rpc: "RPC Discord"
+  enable_smtc: "Aktifkan Kontrol Media Windows"
+  unavailable_wine_proton: "Tidak tersedia di Wine/Proton"
   menu_open_key: "Buka menu hotkey"
   menu_open_key_set: "Atur"
   msaa: "MSAA"
@@ -199,39 +254,6 @@ config_editor:
   skill_info_dialog: "Dialog info skill kustom"
   homescreen_bgseason: "Latar Musim Beranda"
   shadow_resolution: "Resolusi Bayangan"
-  captions: "Teks Terjemahan"
-  caption_font_size: "Ukuran Font"
-  caption_bg_alpha: "Opasitas Latar"
-  caption_pos_x: "Posisi X"
-  caption_pos_y: "Posisi Y"
-  caption_color: "Warna Teks"
-  caption_outline_color: "Warna Garis Tepi"
-  caption_outline_size: "Ukuran Garis Tepi"
-  notification_tp: "Notifikasi Pemulihan TP"
-  notification_rp: "Notifikasi Pemulihan RP"
-  notification_jobs: "Notifikasi Pekerjaan Selesai"
-  taskbar_show_progress_on_download: "Progres unduhan di taskbar"
-  taskbar_show_progress_on_connecting: "Progres koneksi di taskbar"
-  dump_msgpack: "Ekspor Respons MsgPack"
-  dump_msgpack_request: "Ekspor Permintaan MsgPack"
-  msgpack_notifier: "Aktifkan Notifikasi MsgPack"
-  msgpack_notifier_request: "Sertakan Permintaan di Notifikasi"
-  msgpack_notifier_host: "URL Host Notifikasi"
-  msgpack_notifier_print_error: "Tampilkan Error HTTP ke Konsol"
-  unlock_live_chara: "Buka Kunci Karakter/Lagu Live Theater"
-  live_slider_always_show: "Selalu Tampilkan Kontrol Live"
-  live_playback_loop: "Ulangi Pertunjukan Live"
-  champions_live_show_text: "Ganti Teks Champions Meeting Live"
-  champions_live_resource_id: "Judul Champions Meeting"
-  champions_live_year: "Tahun Champions Meeting"
-  cyspring_mono_uncap_frame_scale: "Hapus Batas Skala Frame CySpring Mono"
-  cyspring_disable_native: "Paksa jalur CySpring Mono (nonaktifkan plugin native)"
-  enable_smtc: "Aktifkan Kontrol Media Windows"
-  enable_keyboard_shortcuts: "Aktifkan Pintasan Keyboard Dalam Game"
-  advanced_tab: "\uf0ad Lanjutan"
-  advanced_settings_heading: "Lanjutan"
-  experimental_settings_heading: "Eksperimental"
-  developer_settings_heading: "Pengembang"
   text_debug: "Mode debug teks"
   text_log: "Catat teks yang diproses"
   text_property_dump: "Ekspor properti UI"
@@ -246,45 +268,61 @@ config_editor:
   hide_ingame_ui_hotkey_bind: "Tombol pintas sembunyikan UI"
   ui_loading_show_orientation_guide: "Tampilkan panduan orientasi saat memuat"
   full_screen_res: "Resolusi layar penuh kustom"
+  landscape: "Lanskap"
+  portrait: "Potret"
   localized_data_dir: "Direktori data lokalisasi"
   hook_libc_dlopen: "Paksa hook libc dlopen (Waydroid/emulator)"
   keep_screen_on: "Cegah layar mati otomatis"
 
-theme_editor:
-  title: "Editor Tema GUI"
-  ui_accent_color: "Warna Aksen"
-  ui_window_fill: "Warna Latar Jendela"
-  ui_panel_fill: "Warna Latar Panel"
-  ui_extreme_bg_color: "Latar Input"
-  ui_text_color: "Warna Teks"
-  ui_window_rounding: "Sudut Membulat"
+theme_editor: 
+  title: "Pengaturan Tema"
+  seed_color: "Warna Benih"
+  theme_mode: "Mode Tema"
+  dark: "Gelap"
+  light: "Terang"
+  contrast_level: "Tingkat Kontras"
+  normal: "Normal"
+  medium: "Sedang"
+  high: "Tinggi"
+  scheme_mode: "Skema Warna"
+  auto: "Otomatis (dari benih)"
+  manual: "Manual"
+  manual_colors: "Pengambilalihan Warna"
+  primary: "Primer"
+  surface: "Permukaan"
+  on_surface: "Di Atas Permukaan"
+  transparency: "Transparansi Latar Belakang"
+  corner_radius: "Radius Sudut"
+  translucent_windows: "Jendela Tembus Pandang"
 
-tl_update_dialog:
+tl_update_dialog: 
   title: "Pembaruan Translasi Tersedia"
   content: "Pembaruan translasi tersedia (%{size}). Apa kamu ingin mengunduhnya?"
   content_zip_warning: "Pembaruan translasi tersedia (%{changed_size}). Pembaruan akan diunduh secara arsip (%{download_size})."
 
-update_prompt_dialog:
+update_prompt_dialog: 
   title: "Pembaruan tersedia!"
-  content: "Versi terbaru Hachimi telah tersedia (%{version}). Apa kamu ingin memasangnya? Game akan dimulai ulang saat proses penerapan pembaruan."
+  content: |
+    A new Hachimi update is available (%{version}). Do you want to install it?
+    The game will be restarted in order to apply the update.
   android_content: |
     Update Hachimi Edge baru tersedia (%{version}). Apakah Anda ingin menginstalnya?
-
     Ketuk "Ya" untuk membuka UmaPatcher Edge dan re-patch game Anda.
     (Tidak perlu download ulang full game atau APK, Anda hanya perlu patch lagi seperti biasanya karena UmaPatcher Edge selalu mendownload versi Hachimi Edge terbaru.)
 
-updating_dialog:
+
+updating_dialog: 
   title: "Memperbarui"
   content: "Mengunduh pembaruan, game akan dimulai ulang..."
 
-steam_overlay_conflict_dialog:
+steam_overlay_conflict_dialog: 
   title: "Peringatan"
   content: >-
     Pembelian mungkin tidak bekerja saat overlay Hachimi menyala. Jika overlay Steam muncul saat melakukan 
     transaksi, mohon abaikan pesan ini dan klik tombol Tidak. Jika tidak berfungsi, klik tombol Ya untuk 
     mematikan sementara overlay Hachimi. Game akan dimulai ulang kemudian overlay Hachimi akan mati dan kamu
     bisa melakukan pembelian lagi, setelah itu mulai ulang game untuk menyalakan kembali overlay Hachimi.
-key_names:
+key_names: 
   left: "Panah Kiri"
   right: "Panah Kanan"
   up: "Panah Atas"
@@ -327,3 +365,25 @@ key_names:
   numpad_multiply: "Numpad *"
   numpad_divide: "Numpad /"
   numpad_decimal: "Numpad ."
+  dpad_up: "D-Pad Atas"
+  dpad_down: "D-Pad Bawah"
+  dpad_left: "D-Pad Kiri"
+  dpad_right: "D-Pad Kanan"
+  back: "Kembali"
+  volume_up: "Volume Atas"
+  volume_down: "Volume Bawah"
+  copy: "Salin"
+  cut: "Potong"
+  paste: "Tempel"
+  semicolon: "Titik Koma"
+  comma: "Koma"
+  backslash: "Garis Miring Terbalik"
+  slash: "Garis Miring"
+  left_bracket: "["
+  right_bracket: "]"
+  grave: "Grave"
+  minus: "Minus"
+  period: "Titik"
+  plus: "Plus"
+  equals: "Sama Dengan"
+  unknown: "Tombol %{code}"

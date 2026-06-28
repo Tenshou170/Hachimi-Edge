@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use crate::{core::{Hachimi, utils::wrap_fit_text_il2cpp}, il2cpp::{api::{il2cpp_class_get_type, il2cpp_type_get_object}, ext::{Il2CppObjectExt, Il2CppStringExt, LocalizedDataExt}, hook::{UnityEngine_TextRenderingModule::TextGenerator::mark_as_system_text_component, UnityEngine_UI::Text}, sql::IS_SYSTEM_TEXT_QUERY, symbols::get_method_addr, types::*}};
+use crate::{core::Hachimi, il2cpp::{api::{il2cpp_class_get_type, il2cpp_type_get_object}, ext::{Il2CppObjectExt, LocalizedDataExt}, hook::{UnityEngine_TextRenderingModule::TextGenerator::mark_as_system_text_component, UnityEngine_UI::Text}, sql::IS_SYSTEM_TEXT_QUERY, symbols::get_method_addr, types::*}};
 
 static mut TYPE_OBJECT: *mut Il2CppObject = 0 as _;
 pub fn type_object() -> *mut Il2CppObject {
@@ -51,38 +51,6 @@ fn with_system_text_query(callback: impl FnOnce()) {
 
 type SetSystemTextWithLineHeadWrapFn = extern "C" fn(this: *mut Il2CppObject, system_text: *mut CharacterSystemText, maxCharacter: i32);
 extern "C" fn SetSystemTextWithLineHeadWrap(this: *mut Il2CppObject, system_text: *mut CharacterSystemText, max_character: i32) {
-    let ld = &Hachimi::instance().localized_data.load();
-    let systext = unsafe { &*system_text };
-
-    // Only apply custom wrapping for text that has a localized entry.
-    // For everything else fall through to Reko's best-fit path.
-    if ld.character_system_text_dict
-        .get(&systext.characterId)
-        .and_then(|c| c.get(&systext.voiceId))
-        .is_some()
-    {
-        let cue_sheet = unsafe { (*systext.cueSheet).as_utf16str() }.to_string();
-        let cue_type = cue_sheet.split('_').nth(2).unwrap_or_default();
-        let font_size = Text::get_fontSize(this);
-        debug!("Cue sheet: {}, Font size: {}", cue_type, font_size);
-
-        let max_lines = *ld.config.systext_cue_lines.get(cue_type).unwrap_or_else(||
-            ld.config.systext_cue_lines.get("default").unwrap_or(&4)
-        );
-
-        if let Some(wrapped_text) = wrap_fit_text_il2cpp(systext.text, max_character, max_lines, font_size) {
-            Text::set_horizontalOverflow(this, 1);
-            Text::set_verticalOverflow(this, 1);
-            return Text::set_text(this, wrapped_text);
-        }
-    }
-
-    // Fallback: apply best-fit settings and let the game wrap it,
-    // with IS_SYSTEM_TEXT_QUERY set so GallopUtil skips its own wrapping.
-    Text::set_horizontalOverflow(this, 0);
-    Text::set_resizeTextForBestFit(this, true);
-    Text::set_resizeTextMinSize(this, 14);
-    Text::set_resizeTextMaxSize(this, 30);
     mark_as_system_text_component(this);
 
     with_system_text_query(|| {
@@ -90,27 +58,22 @@ extern "C" fn SetSystemTextWithLineHeadWrap(this: *mut Il2CppObject, system_text
     });
 }
 
-// SetTextWithLineHeadWrap handles plain string system text (e.g. gacha badge labels,
-// mission text, archive text). These call GallopUtil::LineHeadWrapCommon internally
-// to do the actual wrapping. We must NOT set IS_SYSTEM_TEXT_QUERY here — GallopUtil
-// checks that flag and returns the string unchanged when it's set, which would bypass
-// the game's own wrapping and leave text on a single line (archive About text, etc.).
-// We also must NOT set resizeTextForBestFit — components with zero-size bounds at
-// call time (e.g. ScheduleBookTop mission items) crash Unity's best-fit algorithm.
-// Just call through and let the game + GallopUtil handle everything.
 type SetTextWithLineHeadWrapFn = extern "C" fn(this: *mut Il2CppObject, str: *mut Il2CppString, maxCharacter: i32);
 extern "C" fn SetTextWithLineHeadWrap(this: *mut Il2CppObject, str: *mut Il2CppString, max_character: i32) {
-    get_orig_fn!(SetTextWithLineHeadWrap, SetTextWithLineHeadWrapFn)(this, str, max_character);
+    mark_as_system_text_component(this);
+
+    with_system_text_query(|| {
+        get_orig_fn!(SetTextWithLineHeadWrap, SetTextWithLineHeadWrapFn)(this, str, max_character);
+    });
 }
 
-// SetTextWithLineHeadWrapWithColorTag handles text with <color=...> tags (e.g. career
-// story dialogue). Same reasoning as above — no IS_SYSTEM_TEXT_QUERY, no resizeTextForBestFit.
-// We only enable richText so translated <color=...> tags render as colored text instead
-// of literal markup, then let the original + GallopUtil handle wrapping normally.
 type SetTextWithLineHeadWrapWithColorTagFn = extern "C" fn(this: *mut Il2CppObject, str: *mut Il2CppString, maxCharacter: i32);
 extern "C" fn SetTextWithLineHeadWrapWithColorTag(this: *mut Il2CppObject, str: *mut Il2CppString, max_character: i32) {
-    Text::set_richText(this, true);
-    get_orig_fn!(SetTextWithLineHeadWrapWithColorTag, SetTextWithLineHeadWrapWithColorTagFn)(this, str, max_character);
+    mark_as_system_text_component(this);
+
+    with_system_text_query(|| {
+        get_orig_fn!(SetTextWithLineHeadWrapWithColorTag, SetTextWithLineHeadWrapWithColorTagFn)(this, str, max_character);
+    });
 }
 
 pub fn init(umamusume: *const Il2CppImage) {

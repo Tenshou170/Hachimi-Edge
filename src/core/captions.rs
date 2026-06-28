@@ -1,4 +1,4 @@
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::os::raw::c_void;
 use std::ptr::null_mut;
 use std::sync::Mutex;
@@ -17,6 +17,17 @@ struct CaptionState {
     fade_start_time: Option<std::time::Instant>,
     display_time: f32,
     fade_out_time: f32,
+}
+
+#[derive(Clone)]
+struct CaptionSnapshot {
+    font_size: i32,
+    font_color: String,
+    outline_size: String,
+    outline_color: String,
+    pos_x: f32,
+    pos_y: f32,
+    bg_alpha: f32,
 }
 
 impl CaptionState {
@@ -79,12 +90,22 @@ fn get_class(asm: &std::ffi::CStr, ns: &std::ffi::CStr, name: &std::ffi::CStr) -
     }
 }
 
-fn get_runtime_type(asm: &std::ffi::CStr, ns: &std::ffi::CStr, name: &std::ffi::CStr) -> *mut Il2CppObject {
+fn get_runtime_type(asm: &CStr, ns: &CStr, name: &CStr) -> *mut Il2CppObject {
     let k = get_class(asm, ns, name);
     if k.is_null() { return null_mut(); }
     let t = il2cpp_class_get_type(k);
     if t.is_null() { return null_mut(); }
     il2cpp_type_get_object(t) as *mut Il2CppObject
+}
+
+fn klass(obj: *mut Il2CppObject) -> *mut Il2CppClass {
+    if obj.is_null() { null_mut() } else { unsafe { (*obj).klass() } }
+}
+
+fn invoke_method_on(obj: *mut Il2CppObject, name: &CStr, argc: i32, params: *mut *mut c_void) -> *mut Il2CppObject {
+    let k = klass(obj);
+    if k.is_null() { return null_mut(); }
+    invoke_method(k, name, argc, obj as _, params)
 }
 
 fn parse_enum(enum_type: *mut Il2CppObject, value: &str) -> *mut Il2CppObject {
@@ -107,21 +128,15 @@ fn get_enum_int(e: *mut Il2CppObject) -> i32 {
     unsafe { *(il2cpp_object_unbox(r) as *mut u64) as i32 }
 }
 
-// --- #14 fix: mark call sites that read the method pointer as unsafe so the
-// compiler enforces that callers are inside an unsafe block.  The function
-// itself is unchanged; the unsafety is now visible at every call site. ---
+// Mark call sites that read the method pointer as unsafe, so callers
+// must explicitly handle safety. The function itself is unchanged.
 unsafe fn method_pointer(m: *const MethodInfo) -> usize {
     if m.is_null() { return 0; }
     *(m as *const usize)
 }
 
-// --- #11 fix: on Windows, microseh catches structured exceptions (access
-// violations) and resets state.  On Android there is no equivalent OS
-// mechanism, so we use catch_unwind to at least catch Rust panics (bounds
-// checks, unwrap failures, etc.) and reset state instead of aborting.
-// A true SIGSEGV from a null deref will still kill the process, but the
-// defensive null checks throughout the _impl functions make that path
-// unreachable in practice.
+// On Windows, use microseh to catch structured exceptions; on other
+// targets, use catch_unwind to recover from Rust panics and reset state.
 #[cfg(target_os = "windows")]
 fn guarded<F: FnMut()>(mut f: F) {
     if microseh::try_seh(|| f()).is_err() {
@@ -141,7 +156,7 @@ fn guarded<F: FnMut() + std::panic::UnwindSafe>(mut f: F) {
     }
 }
 
-// --- #18 fix: helper to lock STATE without panicking on poison ---
+// Helper to lock STATE without panicking on poison.
 macro_rules! state_lock {
     () => {
         match STATE.lock() {
@@ -155,7 +170,7 @@ macro_rules! state_lock {
 }
 
 fn init_impl() {
-    // --- #18 fix ---
+    // Avoid reinitializing while the current notification is alive.
     let mut st = state_lock!();
     let notif = st.notification();
     if st.inited && !notif.is_null() && is_native_alive(notif) { return; }
@@ -176,7 +191,7 @@ fn init_impl() {
     }
     if canvas.is_null() { return; }
 
-    let transform = invoke_method(unsafe { (*canvas).klass() }, c"get_transform", 0, canvas as _, null_mut());
+    let transform = invoke_method_on(canvas, c"get_transform", 0, null_mut());
     if transform.is_null() { return; }
 
     let res_class = get_class(c"UnityEngine.CoreModule.dll", c"UnityEngine", c"Resources");
@@ -207,36 +222,45 @@ fn init_impl() {
     if new_notif.is_null() { return; }
     st.set_notification(new_notif);
 
-    let go = invoke_method(unsafe { (*new_notif).klass() }, c"get_gameObject", 0, new_notif as _, null_mut());
+    let go = invoke_method_on(new_notif, c"get_gameObject", 0, null_mut());
     if !go.is_null() {
         let mut active: bool = false;
         let mut p: [*mut c_void; 1] = [&mut active as *mut bool as _];
-        invoke_method(unsafe { (*go).klass() }, c"SetActive", 1, go as _, p.as_mut_ptr());
+        invoke_method_on(go, c"SetActive", 1, p.as_mut_ptr());
         st.inited = true;
     }
     if !st.inited { st.clear(); }
 }
 
-fn show_impl(text: &str) {
-    // --- #13/#15 fix: snapshot notif + nk while holding the lock, then
-    // re-validate liveness immediately after dropping it before any il2cpp
-    // call.  This closes the TOCTOU window between the liveness check and
-    // the first use of the raw pointer. ---
+fn snapshot_caption_config() -> CaptionSnapshot {
+    let cfg = crate::core::Hachimi::instance().config.load();
+    CaptionSnapshot {
+        font_size: cfg.caption.caption_font_size,
+        font_color: cfg.caption.caption_color.clone(),
+        outline_size: cfg.caption.caption_outline_size.clone(),
+        outline_color: cfg.caption.caption_outline_color.clone(),
+        pos_x: cfg.caption.caption_pos_x,
+        pos_y: cfg.caption.caption_pos_y,
+        bg_alpha: cfg.caption.caption_bg_alpha,
+    }
+}
+
+fn show_impl(text: &str, line_char_count: i32) {
+    // Snapshot notif and nk while holding the lock, then re-validate
+    // liveness after dropping it before any il2cpp call.
     let (notif, nk) = {
-        // --- #18 fix ---
+        // Avoid panics on poisoned STATE lock.
         let mut st = state_lock!();
         let notif = st.notification();
         if notif.is_null() || !is_native_alive(notif) {
             st.clear();
             return;
         }
-        let nk = unsafe { (*notif).klass() };
+        let nk = klass(notif);
         (notif, nk)
         // lock dropped here
     };
-    // Re-validate: cleanup_impl may have run between the drop and here
-    // (both are scheduled on the main thread, so in practice they are
-    // sequential, but be explicit).
+    // Re-validate after dropping the lock, in case cleanup_impl ran.
     if !is_native_alive(notif) { return; }
 
     let label_f = il2cpp_class_get_field_from_name(nk, c"_Label".as_ptr());
@@ -250,16 +274,28 @@ fn show_impl(text: &str) {
     if label.is_null() || cg.is_null() { return; }
 
     let c_text   = match CString::new(text) { Ok(v) => v, Err(_) => return };
-    let il2_text = il2cpp_string_new(c_text.as_ptr()) as *mut Il2CppObject;
+    let mut il2_text = il2cpp_string_new(c_text.as_ptr()) as *mut Il2CppObject;
+
+    if line_char_count > 0 {
+        let gu_class = get_class(c"umamusume.dll", c"Gallop", c"GallopUtil");
+        if !gu_class.is_null() {
+            let mut lcc = line_char_count;
+            let mut p: [*mut c_void; 2] = [il2_text as _, &mut lcc as *mut i32 as _];
+            let wrapped = invoke_method(gu_class, c"LineHeadWrap", 2, null_mut(), p.as_mut_ptr());
+            if !wrapped.is_null() {
+                il2_text = wrapped;
+            }
+        }
+    }
 
     unsafe {
-        let set_text_fp = method_pointer(il2cpp_class_get_method_from_name((*label).klass(), c"set_text".as_ptr(), 1));
+        let set_text_fp = method_pointer(il2cpp_class_get_method_from_name(klass(label), c"set_text".as_ptr(), 1));
         if set_text_fp != 0 {
             let set_text: extern "C" fn(*mut Il2CppObject, *mut Il2CppObject) = std::mem::transmute(set_text_fp);
             set_text(label, il2_text);
         }
 
-        let set_alpha_fp = method_pointer(il2cpp_class_get_method_from_name((*cg).klass(), c"set_alpha".as_ptr(), 1));
+        let set_alpha_fp = method_pointer(il2cpp_class_get_method_from_name(klass(cg), c"set_alpha".as_ptr(), 1));
         if set_alpha_fp != 0 {
             let set_alpha: extern "C" fn(*mut Il2CppObject, f32) = std::mem::transmute(set_alpha_fp);
             set_alpha(cg, 1.0);
@@ -270,7 +306,7 @@ fn show_impl(text: &str) {
             let get_go: extern "C" fn(*mut Il2CppObject) -> *mut Il2CppObject = std::mem::transmute(go_fp);
             let go = get_go(notif);
             if !go.is_null() {
-                let sa_fp = method_pointer(il2cpp_class_get_method_from_name((*go).klass(), c"SetActive".as_ptr(), 1));
+                let sa_fp = method_pointer(il2cpp_class_get_method_from_name(klass(go), c"SetActive".as_ptr(), 1));
                 if sa_fp != 0 {
                     let set_active: extern "C" fn(*mut Il2CppObject, bool) = std::mem::transmute(sa_fp);
                     set_active(go, true);
@@ -278,6 +314,17 @@ fn show_impl(text: &str) {
             }
         }
     }
+
+    let snap = snapshot_caption_config();
+    set_format_impl(
+        snap.font_size,
+        &snap.font_color,
+        &snap.outline_size,
+        &snap.outline_color,
+        snap.pos_x,
+        snap.pos_y,
+        snap.bg_alpha,
+    );
 
     let mut display_time: f32 = 0.0;
     let mut fade_out:     f32 = 0.5;
@@ -287,7 +334,7 @@ fn show_impl(text: &str) {
     if !fo_f.is_null() { il2cpp_field_get_value(notif, fo_f, &mut fade_out     as *mut f32 as _); }
 
     {
-        // --- #18 fix ---
+        // Update fade state atomically while holding the lock.
         let mut st = state_lock!();
         st.fade_id = st.fade_id.wrapping_add(1);
         st.fade_start_time = Some(std::time::Instant::now());
@@ -295,7 +342,7 @@ fn show_impl(text: &str) {
         st.fade_out_time = fade_out;
     }
 
-    // --- #19 fix: avoid .expect() inside Thread::main_thread() ---
+    // Schedule fade tick on the attached main thread if available.
     let threads = symbols::Thread::attached_threads();
     if let Some(main) = threads.first() {
         main.schedule(fade_tick_global);
@@ -305,14 +352,14 @@ fn show_impl(text: &str) {
 }
 
 fn fade_tick_global() {
-    // --- #13 fix: snapshot under lock, re-validate after drop ---
+    // Snapshot under lock and re-validate after drop.
     let (notif, nk, start_time, display_time, fade_out) = {
-        // --- #18 fix ---
+        // Ensure STATE lock is handled safely.
         let st = state_lock!();
         let notif = st.notification();
         if notif.is_null() || !is_native_alive(notif) { return; }
         let start_time = match st.fade_start_time { Some(t) => t, None => return };
-        let nk = unsafe { (*notif).klass() };
+        let nk = klass(notif);
         (notif, nk, start_time, st.display_time, st.fade_out_time)
         // lock dropped here
     };
@@ -338,7 +385,7 @@ fn fade_tick_global() {
         il2cpp_field_get_value(notif, cg_f, &mut cg as *mut _ as _);
         if !cg.is_null() {
             unsafe {
-                let set_alpha_fp = method_pointer(il2cpp_class_get_method_from_name((*cg).klass(), c"set_alpha".as_ptr(), 1));
+                let set_alpha_fp = method_pointer(il2cpp_class_get_method_from_name(klass(cg), c"set_alpha".as_ptr(), 1));
                 if set_alpha_fp != 0 {
                     let set_alpha: extern "C" fn(*mut Il2CppObject, f32) = std::mem::transmute(set_alpha_fp);
                     set_alpha(cg, alpha);
@@ -354,7 +401,7 @@ fn fade_tick_global() {
                 let get_go: extern "C" fn(*mut Il2CppObject) -> *mut Il2CppObject = std::mem::transmute(go_fp);
                 let go = get_go(notif);
                 if !go.is_null() {
-                    let sa_fp = method_pointer(il2cpp_class_get_method_from_name((*go).klass(), c"SetActive".as_ptr(), 1));
+                    let sa_fp = method_pointer(il2cpp_class_get_method_from_name(klass(go), c"SetActive".as_ptr(), 1));
                     if sa_fp != 0 {
                         let set_active: extern "C" fn(*mut Il2CppObject, bool) = std::mem::transmute(sa_fp);
                         set_active(go, false);
@@ -365,7 +412,7 @@ fn fade_tick_global() {
     }
 
     if !done {
-        // --- #19 fix ---
+        // Schedule the next fade tick on the main thread.
         let threads = symbols::Thread::attached_threads();
         if let Some(main) = threads.first() {
             main.schedule(fade_tick_global);
@@ -374,13 +421,13 @@ fn fade_tick_global() {
 }
 
 fn set_display_time_impl(time: f32) {
-    // --- #13/#15 fix: snapshot under lock, re-validate after drop ---
+    // Snapshot under lock and re-validate after dropping it.
     let (notif, nk) = {
-        // --- #18 fix ---
+        // Avoid mutex poison panics by handling a poisoned STATE lock.
         let st = state_lock!();
         let notif = st.notification();
         if notif.is_null() || !is_native_alive(notif) { return; }
-        let nk = unsafe { (*notif).klass() };
+        let nk = klass(notif);
         (notif, nk)
     };
     if !is_native_alive(notif) { return; }
@@ -400,13 +447,13 @@ fn set_format_impl(
     pos_y: f32,
     bg_alpha: f32,
 ) {
-    // --- #13/#15 fix ---
+    // Snapshot under lock and re-validate after dropping it.
     let (notif, nk) = {
-        // --- #18 fix ---
+        // Avoid mutex poison panics by handling a poisoned STATE lock.
         let st = state_lock!();
         let notif = st.notification();
         if notif.is_null() || !is_native_alive(notif) { return; }
-        let nk = unsafe { (*notif).klass() };
+        let nk = klass(notif);
         (notif, nk)
     };
     if !is_native_alive(notif) { return; }
@@ -416,29 +463,84 @@ fn set_format_impl(
     let mut label: *mut Il2CppObject = null_mut();
     il2cpp_field_get_value(notif, label_f, &mut label as *mut _ as _);
     if label.is_null() { return; }
-    let lk = unsafe { (*label).klass() };
+    let lk = klass(label);
 
-    let target_width  = (font_size as f32 * 20.0).max(600.0).min(1200.0);
-    let target_height = (font_size as f32 * 3.5).max(180.0);
+    // Fetch screen dimensions early, reuse throughout
+    let mut screen_width = 1080;
+    let mut screen_height = 1920;
+    let screen_class = get_class(c"UnityEngine.CoreModule.dll", c"UnityEngine", c"Screen");
+    if !screen_class.is_null() {
+        let w_obj = invoke_method(screen_class, c"get_width", 0, null_mut(), null_mut());
+        if !w_obj.is_null() {
+            screen_width = unsafe { *(il2cpp_object_unbox(w_obj) as *mut i32) };
+        }
+        let h_obj = invoke_method(screen_class, c"get_height", 0, null_mut(), null_mut());
+        if !h_obj.is_null() {
+            screen_height = unsafe { *(il2cpp_object_unbox(h_obj) as *mut i32) };
+        }
+    }
 
-    let label_tr = invoke_method(unsafe { (*label).klass() }, c"get_transform", 0, label as _, null_mut());
+    if Captions::format_log_enabled() {
+        info!("[captions] formatting | requested | font_size={} font_color={} outline_size={} outline_color={} pos_x={} pos_y={} bg_alpha={}",
+            font_size, font_color, outline_size, outline_color, pos_x, pos_y, bg_alpha);
+        // Try reading current font size before modification
+        let current_fs = crate::il2cpp::hook::UnityEngine_UI::Text::get_fontSize(label);
+        info!("[captions] formatting | before set_fontSize current_font_size={}", current_fs);
+    }
+
+    let target_width  = (font_size as f32 * 30.0).max(1000.0);
+    let target_height = (font_size as f32 * 6.0).max(300.0);
+
+    if Captions::format_log_enabled() {
+        info!("[captions] formatting | computed target_width={} target_height={}", target_width, target_height);
+    }
+
+    let label_tr = invoke_method(lk, c"get_transform", 0, label as _, null_mut());
     if !label_tr.is_null() {
-        use crate::il2cpp::hook::UnityEngine_CoreModule::RectTransform;
-        RectTransform::set_sizeDelta(label_tr, Vector2_t { x: target_width, y: target_height });
+        use crate::il2cpp::hook::UnityEngine_CoreModule::{RectTransform, Transform};
+        
+        // Allow text to wrap within generous bounds
+        let label_width = target_width.min(screen_width as f32 * 0.9);
+        let label_height = target_height.min(screen_height as f32 * 0.7);
+        RectTransform::set_sizeDelta(label_tr, Vector2_t { x: label_width, y: label_height });
+        let label_scale = Transform::get_localScale(label_tr);
+
+        if Captions::format_log_enabled() {
+            info!("[captions] formatting | set_sizeDelta for label: width={} height={} (screen: {}x{}) localScale=({}, {}, {})",
+                label_width, label_height, screen_width, screen_height, label_scale.x, label_scale.y, label_scale.z);
+        }
     }
 
     let mut wrap: i32 = 0;
     let mut wp: [*mut c_void; 1] = [&mut wrap as *mut i32 as _];
     invoke_method(lk, c"set_horizontalOverflow", 1, label as _, wp.as_mut_ptr());
 
-    let mut best_fit_off: bool = false;
-    let mut bfp: [*mut c_void; 1] = [&mut best_fit_off as *mut bool as _];
+    let mut vertical_overflow: i32 = 1;
+    let mut vp: [*mut c_void; 1] = [&mut vertical_overflow as *mut i32 as _];
+    invoke_method(lk, c"set_verticalOverflow", 1, label as _, vp.as_mut_ptr());
+
+    let mut best_fit_on: bool = false;
+    let mut bfp: [*mut c_void; 1] = [&mut best_fit_on as *mut bool as _];
     invoke_method(lk, c"set_resizeTextForBestFit", 1, label as _, bfp.as_mut_ptr());
+
+    let mut min_size: i32 = font_size;
+    let mut min_sp: [*mut c_void; 1] = [&mut min_size as *mut i32 as _];
+    invoke_method(lk, c"set_resizeTextMinSize", 1, label as _, min_sp.as_mut_ptr());
+
+    if Captions::format_log_enabled() {
+        info!("[captions] formatting | set_resizeTextForBestFit={} resizeTextMinSize={}", best_fit_on, min_size);
+    }
 
     let mut fs = font_size;
     let mut sp: [*mut c_void; 1] = [&mut fs as *mut i32 as _];
     invoke_method(lk, c"set_fontSize",          1, label as _, sp.as_mut_ptr());
     invoke_method(lk, c"set_resizeTextMaxSize", 1, label as _, sp.as_mut_ptr());
+
+    if Captions::format_log_enabled() {
+        // Read back font size from the Text component to verify it took effect
+        let observed = crate::il2cpp::hook::UnityEngine_UI::Text::get_fontSize(label);
+        info!("[captions] formatting | after set_fontSize observed_font_size={} set_resizeTextMaxSize={}", observed, fs);
+    }
 
     if !font_color.is_empty() {
         let e = parse_enum(get_runtime_type(c"umamusume.dll", c"Gallop", c"FontColorType"), font_color);
@@ -475,16 +577,24 @@ fn set_format_impl(
         if !img_type.is_null() {
             let mut inc: bool = true;
             let mut bgp: [*mut c_void; 2] = [img_type as _, &mut inc as *mut bool as _];
-            let bg = invoke_method(unsafe { (*go).klass() }, c"GetComponentInChildren", 2, go as _, bgp.as_mut_ptr());
+            let bg = invoke_method_on(go, c"GetComponentInChildren", 2, bgp.as_mut_ptr());
             if !bg.is_null() {
+                let bg_k = klass(bg);
                 let mut ba = bg_alpha;
                 let mut p: [*mut c_void; 1] = [&mut ba as *mut f32 as _];
-                invoke_method(unsafe { (*bg).klass() }, c"SetAlpha", 1, bg as _, p.as_mut_ptr());
+                invoke_method(bg_k, c"SetAlpha", 1, bg as _, p.as_mut_ptr());
 
-                let bg_tr = invoke_method(unsafe { (*bg).klass() }, c"get_transform", 0, bg as _, null_mut());
+                let bg_tr = invoke_method(bg_k, c"get_transform", 0, bg as _, null_mut());
                 if !bg_tr.is_null() {
-                    use crate::il2cpp::hook::UnityEngine_CoreModule::RectTransform;
-                    RectTransform::set_sizeDelta(bg_tr, Vector2_t { x: target_width + 50.0, y: target_height + 20.0 });
+                    use crate::il2cpp::hook::UnityEngine_CoreModule::{RectTransform, Transform};
+                    let bg_width = (target_width + 50.0).min(screen_width as f32 * 0.95);
+                    let bg_height = (target_height + 20.0).min(screen_height as f32 * 0.5);
+                    RectTransform::set_sizeDelta(bg_tr, Vector2_t { x: bg_width, y: bg_height });
+                    let bg_scale = Transform::get_localScale(bg_tr);
+
+                    if Captions::format_log_enabled() {
+                        info!("[captions] formatting | set_sizeDelta for bg: width={} height={} localScale=({}, {}, {})", bg_width, bg_height, bg_scale.x, bg_scale.y, bg_scale.z);
+                    }
                 }
             }
         }
@@ -496,12 +606,21 @@ fn set_format_impl(
     il2cpp_field_get_value(notif, cg_f, &mut cg as *mut _ as _);
     if cg.is_null() || !is_native_alive(cg) { return; }
 
-    let cg_tr = invoke_method(unsafe { (*cg).klass() }, c"get_transform", 0, cg as _, null_mut());
+    let cg_tr = invoke_method_on(cg, c"get_transform", 0, null_mut());
     if cg_tr.is_null() { return; }
-    let tr_k = unsafe { (*cg_tr).klass() };
+    let tr_k = klass(cg_tr);
 
-    use crate::il2cpp::hook::UnityEngine_CoreModule::RectTransform;
-    RectTransform::set_sizeDelta(cg_tr, Vector2_t { x: target_width + 100.0, y: target_height + 50.0 });
+    use crate::il2cpp::hook::UnityEngine_CoreModule::{RectTransform, Transform};
+    
+    // Scale container to fit screen bounds
+    let clamped_width = (target_width + 100.0).min(screen_width as f32 * 0.95);
+    let clamped_height = (target_height + 50.0).min(screen_height as f32 * 0.5);
+    RectTransform::set_sizeDelta(cg_tr, Vector2_t { x: clamped_width, y: clamped_height });
+    let cg_scale = Transform::get_localScale(cg_tr);
+
+    if Captions::format_log_enabled() {
+        info!("[captions] formatting | set_sizeDelta for cg_tr: width={} height={} (clamped to screen: {}x{}) localScale=({}, {}, {})", clamped_width, clamped_height, screen_width, screen_height, cg_scale.x, cg_scale.y, cg_scale.z);
+    }
 
     let get_pos_m = il2cpp_class_get_method_from_name(tr_k, c"get_position".as_ptr(), 0);
     let set_pos_m = il2cpp_class_get_method_from_name(tr_k, c"set_position".as_ptr(), 1);
@@ -513,26 +632,16 @@ fn set_format_impl(
             struct Vec3 { x: f32, y: f32, z: f32 }
 
             // Get screen orientation
-            let screen_class = get_class(c"UnityEngine.CoreModule.dll", c"UnityEngine", c"Screen");
-            let mut width = 1080;
-            let mut height = 1920;
-            if !screen_class.is_null() {
-                let w_obj = invoke_method(screen_class, c"get_width", 0, null_mut(), null_mut());
-                if !w_obj.is_null() {
-                    width = unsafe { *(il2cpp_object_unbox(w_obj) as *mut i32) };
-                }
-                let h_obj = invoke_method(screen_class, c"get_height", 0, null_mut(), null_mut());
-                if !h_obj.is_null() {
-                    height = unsafe { *(il2cpp_object_unbox(h_obj) as *mut i32) };
-                }
-            }
-
-            let is_landscape = width > height;
+            let is_landscape = screen_width > screen_height;
             let final_pos_y = if is_landscape {
                 pos_y * 0.55
             } else {
                 pos_y
             };
+
+            if Captions::format_log_enabled() {
+                info!("[captions] formatting | screen for position: width={} height={} landscape={}", screen_width, screen_height, is_landscape);
+            }
 
             let pos = unsafe { &*(il2cpp_object_unbox(pos_obj) as *const Vec3) };
             let mut new_pos = Vec3 { x: pos_x, y: final_pos_y, z: pos.z };
@@ -542,14 +651,35 @@ fn set_format_impl(
     }
 }
 
+#[cfg(test)]
+fn insert_soft_breaks(s: &str, max: usize) -> String {
+    if max == 0 { return s.to_owned(); }
+    let mut out = String::with_capacity(s.len());
+    let mut run = 0usize;
+    for ch in s.chars() {
+        out.push(ch);
+        if ch.is_whitespace() {
+            run = 0;
+        } else {
+            run += 1;
+            if run >= max {
+                // Insert zero-width space as a soft break opportunity
+                out.push('\u{200B}');
+                run = 0;
+            }
+        }
+    }
+    out
+}
+
 fn cleanup_impl() {
-    // --- #13/#15 fix ---
+    // Snapshot notif and invalidate fade id while holding STATE.
     let (notif, nk) = {
-        // --- #18 fix ---
+        // Avoid panics on poisoned STATE lock.
         let mut st = state_lock!();
         let notif = st.notification();
         if notif.is_null() || !is_native_alive(notif) { return; }
-        let nk = unsafe { (*notif).klass() };
+        let nk = klass(notif);
         st.fade_id = st.fade_id.wrapping_add(1);
         (notif, nk)
     };
@@ -561,7 +691,7 @@ fn cleanup_impl() {
         il2cpp_field_get_value(notif, cg_f, &mut cg as *mut _ as _);
         if !cg.is_null() {
             unsafe {
-                let set_alpha_fp = method_pointer(il2cpp_class_get_method_from_name((*cg).klass(), c"set_alpha".as_ptr(), 1));
+                let set_alpha_fp = method_pointer(il2cpp_class_get_method_from_name(klass(cg), c"set_alpha".as_ptr(), 1));
                 if set_alpha_fp != 0 {
                     let set_alpha: extern "C" fn(*mut Il2CppObject, f32) = std::mem::transmute(set_alpha_fp);
                     set_alpha(cg, 0.0);
@@ -576,7 +706,7 @@ fn cleanup_impl() {
             let get_go: extern "C" fn(*mut Il2CppObject) -> *mut Il2CppObject = std::mem::transmute(go_fp);
             let go = get_go(notif);
             if !go.is_null() {
-                let sa_fp = method_pointer(il2cpp_class_get_method_from_name((*go).klass(), c"SetActive".as_ptr(), 1));
+                let sa_fp = method_pointer(il2cpp_class_get_method_from_name(klass(go), c"SetActive".as_ptr(), 1));
                 if sa_fp != 0 {
                     let set_active: extern "C" fn(*mut Il2CppObject, bool) = std::mem::transmute(sa_fp);
                     set_active(go, false);
@@ -593,9 +723,23 @@ impl Captions {
         guarded(init_impl);
     }
 
+    pub fn show_log_enabled() -> bool {
+        crate::core::Hachimi::instance().config.load().caption.caption_show_log_enable
+    }
+
+    pub fn format_log_enabled() -> bool {
+        crate::core::Hachimi::instance().config.load().caption.caption_format_log_enable
+    }
+
     pub fn show(text: &str) {
         let text = text.to_owned();
-        guarded(move || show_impl(&text));
+        guarded(move || show_impl(&text, 0));
+    }
+
+    pub fn show_wrapped(text: &str, max_chars_per_line: i32) {
+        let max = max_chars_per_line.max(0);
+        let text = text.to_owned();
+        guarded(move || show_impl(&text, max));
     }
 
     pub fn set_display_time(time: f32) {
@@ -618,15 +762,15 @@ impl Captions {
     }
 
     pub fn reposition() {
-        let config = crate::core::Hachimi::instance().config.load();
+        let snap = snapshot_caption_config();
         Self::set_format(
-            config.caption.caption_font_size,
-            &config.caption.caption_color,
-            &config.caption.caption_outline_size,
-            &config.caption.caption_outline_color,
-            config.caption.caption_pos_x,
-            config.caption.caption_pos_y,
-            config.caption.caption_bg_alpha,
+            snap.font_size,
+            &snap.font_color,
+            &snap.outline_size,
+            &snap.outline_color,
+            snap.pos_x,
+            snap.pos_y,
+            snap.bg_alpha,
         );
     }
 
@@ -649,5 +793,43 @@ impl Captions {
 
     pub fn reset() {
         if let Ok(mut st) = STATE.lock() { st.clear(); }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::insert_soft_breaks;
+
+    #[test]
+    fn breaks_long_unbroken_run() {
+        let s = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; // 32 a's
+        let out = insert_soft_breaks(s, 8);
+        // Expect zero-width spaces inserted roughly every 8 chars -> at least 3
+        let count = out.matches('\u{200B}').count();
+        assert!(count >= 3, "expected >=3 soft breaks, got {}", count);
+        // Removing ZWSP should yield original
+        let removed: String = out.chars().filter(|&c| c != '\u{200B}').collect();
+        assert_eq!(removed, s);
+    }
+
+    #[test]
+    fn preserves_spaces_and_resets_counter() {
+        let s = "aaaaaaaa aaaaaaaa aaaaaaaa"; // spaces should reset
+        let out = insert_soft_breaks(s, 8);
+        // There should be no ZWSP immediately after a space
+        for (i, ch) in out.chars().enumerate() {
+            if ch == ' ' {
+                let next = out.chars().nth(i+1);
+                if let Some(n) = next {
+                    assert_ne!(n, '\u{200B}');
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn zero_max_returns_original() {
+        let s = "hello world";
+        assert_eq!(insert_soft_breaks(s, 0), s.to_owned());
     }
 }

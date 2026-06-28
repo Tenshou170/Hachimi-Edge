@@ -6,7 +6,7 @@ use windows::{
     core::{HRESULT, Interface, w},
     Win32::{
         Foundation::{HINSTANCE, HMODULE, HWND, LPARAM, LRESULT, RECT, WPARAM}, Graphics::{
-            Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL, D3D_FEATURE_LEVEL_11_0},
+            Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0},
             Direct3D11::{D3D11CreateDeviceAndSwapChain, ID3D11Device, D3D11_CREATE_DEVICE_FLAG, D3D11_SDK_VERSION},
             Dxgi::{
                 Common::{DXGI_FORMAT, DXGI_FORMAT_R8G8B8A8_UNORM},
@@ -51,6 +51,14 @@ static mut PRESENT_ADDR: usize = 0;
 type PresentFn = extern "C" fn(this: *mut c_void, sync_interval: c_uint, flags: c_uint) -> HRESULT;
 extern "C" fn IDXGISwapChain_Present(this: *mut c_void, sync_interval: c_uint, flags: c_uint) -> HRESULT {
     let orig_fn: PresentFn = unsafe { std::mem::transmute(PRESENT_ADDR) };
+
+    // Invoke plugin present callbacks
+    let hachimi = Hachimi::instance();
+    let callbacks = hachimi.present_callbacks.lock().unwrap();
+    for (callback, userdata) in callbacks.iter() {
+        let callback: unsafe extern "C" fn(*mut c_void, *mut c_void) = unsafe { std::mem::transmute(*callback) };
+        unsafe { callback(this, *userdata as *mut c_void); }
+    }
 
     let hwnd = check_hwnd(this);
     if hwnd.0 == std::ptr::null_mut() {
@@ -184,9 +192,26 @@ extern "C" fn IDXGISwapChain_ResizeBuffers(
         return orig_fn(this, buffer_count, width, height, new_format, swap_chain_flags);
     }
 
-    painter.resize_buffers(|| orig_fn(
+    let result = painter.resize_buffers(|| orig_fn(
         this, buffer_count, width, height, new_format, swap_chain_flags
-    ))
+    ));
+
+    // Re-apply "Stay on top" after the swap-chain resize.  ResizeBuffers causes
+    // Windows to reposition/resize the game window, which resets the Z-order and
+    // strips the HWND_TOPMOST flag — even if SetResolution_Injected already set it.
+    // This is the correct place to re-apply because ResizeBuffers is the last
+    // operation that touches the window during an orientation transition.
+    if result.is_ok() {
+        let hachimi = Hachimi::instance();
+        if hachimi.window_always_on_top.load(std::sync::atomic::Ordering::Relaxed) {
+            let hwnd = crate::windows::wnd_hook::get_target_hwnd();
+            if !hwnd.0.is_null() {
+                unsafe { _ = crate::windows::utils::set_window_topmost(hwnd, true); }
+            }
+        }
+    }
+
+    result
 }
 
 static PAINTER: OnceCell<Mutex<D3D11Painter>> = OnceCell::new();
@@ -266,7 +291,7 @@ fn get_swap_chain_vtable() -> Result<*mut usize, Error> {
 
     unsafe {
         D3D11CreateDeviceAndSwapChain(
-            None, D3D_DRIVER_TYPE_HARDWARE, HMODULE::default(), D3D11_CREATE_DEVICE_FLAG(0), Some(&[D3D_FEATURE_LEVEL_11_0]),
+            None, D3D_DRIVER_TYPE_HARDWARE, HMODULE::default(), D3D11_CREATE_DEVICE_FLAG(0), Some(&[D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0]),
             D3D11_SDK_VERSION, Some(&swap_chain_desc), Some(&mut p_swap_chain), Some(&mut p_device),
             Some(&mut feature_level), None
         )

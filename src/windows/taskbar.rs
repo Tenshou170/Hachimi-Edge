@@ -25,6 +25,9 @@ fn get_hwnd() -> HWND {
 }
 
 pub fn init(hwnd: HWND) {
+    if !crate::windows::capabilities::supports_taskbar_progress() {
+        return;
+    }
     TASKBAR_HWND.store(hwnd.0 as isize, Ordering::Release);
     if let Ok(taskbar) = unsafe { CoCreateInstance::<_, ITaskbarList3>(&TaskbarList, None, CLSCTX_INPROC_SERVER) } {
         let _ = unsafe { taskbar.SetProgressState(hwnd, TBPF_NOPROGRESS) };
@@ -35,6 +38,9 @@ pub fn init(hwnd: HWND) {
 }
 
 pub fn set_progress_state(state: TBPFLAG) {
+    if !crate::windows::capabilities::supports_taskbar_progress() {
+        return;
+    }
     if CURRENT_STATE.load(Ordering::Relaxed) == state.0 { return; }
     CURRENT_STATE.store(state.0, Ordering::Relaxed);
     let hwnd = get_hwnd();
@@ -46,6 +52,9 @@ pub fn set_progress_state(state: TBPFLAG) {
 }
 
 pub fn set_progress_value(completed: u64, total: u64) {
+    if !crate::windows::capabilities::supports_taskbar_progress() {
+        return;
+    }
     let completed_i = completed as i64;
     if CURRENT_VALUE.load(Ordering::Relaxed) == completed_i
         && CURRENT_STATE.load(Ordering::Relaxed) == TBPF_NORMAL.0

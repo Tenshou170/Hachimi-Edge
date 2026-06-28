@@ -72,6 +72,13 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
                 });
                 return LRESULT(0);
             }
+            // Generic keybind capture — used by SetKeybindWindow for rebinding
+            // keys like hide_ingame_ui_hotkey_bind.
+            if crate::core::gui::is_keybind_capture_active() {
+                let display = crate::windows::utils::vk_to_display_label(current_key);
+                crate::core::gui::report_keybind_capture(current_key, display);
+                return LRESULT(0);
+            }
             if current_key == Hachimi::instance().config.load().windows.menu_open_key {
                 // --- W-17 fix ---
                 let Some(mut gui) = Gui::instance().map(|m| m.lock().unwrap_or_else(|e| e.into_inner())) else {
@@ -230,7 +237,7 @@ pub fn init() {
             let _ = SetWindowTextW(hwnd, &HSTRING::from(t));
         }
 
-        if !crate::windows::hachimi_impl::is_wine() {
+        if crate::windows::capabilities::supports_taskbar_progress() {
             taskbar::init(hwnd);
         }
 
@@ -259,7 +266,7 @@ pub fn init() {
              }
         }
 
-        if !crate::windows::hachimi_impl::is_wine() {
+        if crate::windows::capabilities::supports_smtc() {
             smtc::init(hwnd);
         }
     }

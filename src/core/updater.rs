@@ -91,6 +91,35 @@ impl Updater {
     pub fn run(self: Arc<Self>) {
         #[cfg(target_os = "windows")]
         {
+            if crate::windows::capabilities::self_update_support() == crate::windows::capabilities::FeatureSupport::WarnOnly {
+                let updater = self.clone();
+                if let Some(mutex) = Gui::instance() {
+                    mutex.lock().unwrap().show_window(Box::new(SimpleYesNoDialog::new(
+                        "Wine/Proton update warning",
+                        "The Windows installer flow may not work correctly under Wine/Proton. Continue anyway?",
+                        move |ok| {
+                            if !ok { return; }
+                            updater.run_windows_update();
+                        }
+                    )));
+                }
+                return;
+            }
+            self.run_windows_update();
+        }
+        #[cfg(target_os = "android")]
+        {
+            use crate::{android::utils, core::hachimi::{UMAPATCHER_INSTALL_URL, UMAPATCHER_PACKAGE_NAME}};
+            utils::open_app_or_fallback(
+                UMAPATCHER_PACKAGE_NAME,
+                &format!("{}.MainActivity", UMAPATCHER_PACKAGE_NAME.replace(".edge", "")),
+                UMAPATCHER_INSTALL_URL
+            );
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    fn run_windows_update(self: Arc<Self>) {
             std::thread::spawn(move || {
                 let dialog_show = Arc::new(std::sync::atomic::AtomicBool::new(true));
                 if let Some(mutex) = Gui::instance() {
@@ -110,16 +139,6 @@ impl Updater {
     
                 dialog_show.store(false, std::sync::atomic::Ordering::Relaxed)
             });
-        }
-        #[cfg(target_os = "android")]
-        {
-            use crate::{android::utils, core::hachimi::{UMAPATCHER_INSTALL_URL, UMAPATCHER_PACKAGE_NAME}};
-            utils::open_app_or_fallback(
-                UMAPATCHER_PACKAGE_NAME,
-                &format!("{}.MainActivity", UMAPATCHER_PACKAGE_NAME.replace(".edge", "")),
-                UMAPATCHER_INSTALL_URL
-            );
-        }
     }
 
     #[cfg(target_os = "windows")]

@@ -6,7 +6,7 @@ use rust_i18n::t;
 use widestring::Utf16Str;
 
 use crate::{
-    core::{ext::Utf16StringExt, gui::Gui, hachimi::{AssetMetadata, Hachimi}},
+    core::{ext::Utf16StringExt, gui::Gui, hachimi::{AssetMetadata, Hachimi}, game::Region},
     il2cpp::{
         api::il2cpp_resolve_icall, ext::{Il2CppObjectExt, Il2CppStringExt}, hook::{
             umamusume::{StoryParamChangeEffect, StoryRaceTextAsset, StoryTimelineData, TextDotData, TextRubyData},
@@ -44,21 +44,25 @@ fn notify_mismatch() {
 pub fn check_asset_bundle_name(this: *mut Il2CppObject, metadata: &AssetMetadata) -> bool {
     if let Some(meta_bundle_name) = &metadata.bundle_name {
         let name_ptr = Object::get_name(this);
-        if !name_ptr.is_null() {
-            let logical_name = unsafe { (*name_ptr).as_utf16str().path_filename() };
-            if let Some(real_hash) = crate::il2cpp::sql::MetaData::get_hash(&logical_name.to_string()) {
-                if real_hash == *meta_bundle_name {
-                    return true;
-                } else {
-                    warn!("[{}] Expected bundle {}, got {}", logical_name, meta_bundle_name, real_hash);
-                    notify_mismatch();
-                    return false;
+        if Hachimi::instance().game.region == Region::Japan {
+            if !name_ptr.is_null() {
+                let logical_name = unsafe { (*name_ptr).as_utf16str().path_filename() };
+                if let Some(real_hash) = crate::il2cpp::sql::MetaData::get_hash(&logical_name.to_string()) {
+                    if real_hash == *meta_bundle_name {
+                        return true;
+                    } else {
+                        warn!("[{}] Expected bundle {}, got {}", logical_name, meta_bundle_name, real_hash);
+                        notify_mismatch();
+                        return false;
+                    }
                 }
+                warn!("[{}] Hash not found in MetaData", logical_name);
+                return false;
             }
-            warn!("[{}] Hash not found in MetaData", logical_name);
-            return false;
+            warn!("Failed to resolve bundle path for metadata check!");
+        } else {
+            return true; // Bypass verification for other regions for now
         }
-        warn!("Failed to resolve bundle path for metadata check!");
     }
 
     true

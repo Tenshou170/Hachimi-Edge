@@ -1,6 +1,7 @@
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicIsize, AtomicU32, Ordering};
 use std::os::windows::ffi::OsStrExt;
+use std::time::SystemTime;
 use once_cell::sync::Lazy;
 use windows::{
     core::{factory, Interface, HSTRING, PCWSTR},
@@ -47,6 +48,7 @@ static TASKBAR_HWND: AtomicIsize = AtomicIsize::new(0);
 /// synchronous LoadAsset_Internal call on the main thread every frame
 /// and tanked FPS after returning to the home screen from gacha.
 static THUMBNAIL_PENDING: AtomicBool = AtomicBool::new(false);
+static LAST_UPDATE: AtomicI64 = AtomicI64::new(0);
 /// Set to true after the first SMTC initialization attempt, regardless of
 /// whether it succeeded. Under Proton/Wine, GetForWindow always fails and
 /// SMTC_INSTANCE stays None, so without this flag on_update would retry
@@ -64,6 +66,9 @@ fn set_playback_status(smtc: &SystemMediaTransportControls, status: MediaPlaybac
 }
 
 pub fn init(hwnd: HWND) {
+    if !crate::windows::capabilities::supports_smtc() {
+        return;
+    }
     if !Hachimi::instance().config.load().windows.enable_smtc {
         return;
     }
@@ -161,7 +166,11 @@ unsafe fn create_shortcut(name: &str) {
 }
 
 pub fn on_update() {
+    if !crate::windows::capabilities::supports_smtc() {
+        return;
+    }
     if !crate::core::Hachimi::instance().config.load().windows.enable_smtc {
+        unregister();
         return;
     }
     // --- W-16 fix: recover from poison instead of unwrap ---
@@ -182,10 +191,10 @@ pub fn on_update() {
             if hwnd.0.is_null() { return; }
 
             let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_MULTITHREADED);
-            let title = if crate::core::Hachimi::instance().game.region == crate::core::game::Region::Japan {
-                "ウマ娘"
-            } else {
-                "Umamusume"
+            let title = match crate::core::Hachimi::instance().game.region {
+                crate::core::game::Region::Japan => "ウマ娘",
+                crate::core::game::Region::Korea => "우마무스메",
+                _ => "Umamusume",
             };
             create_shortcut(&format!("{} (Hachimi)", title));
             if let Ok(interop) = factory::<SystemMediaTransportControls, ISystemMediaTransportControlsInterop>() {
@@ -243,9 +252,18 @@ pub fn on_update() {
         }
     }
 
-    if IS_LIVE_SCENE.load(Ordering::Relaxed) {
+    let now = SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    let should_update = now - LAST_UPDATE.load(Ordering::Relaxed) >= 1000;
+    if should_update {
+        LAST_UPDATE.store(now, Ordering::Relaxed);
+    }
+
+    if IS_LIVE_SCENE.load(Ordering::Relaxed) && should_update {
         update_live_playback(smtc);
-    } else if IS_HOME_SCENE.load(Ordering::Relaxed) {
+    } else if IS_HOME_SCENE.load(Ordering::Relaxed) && should_update {
         update_metadata_home(smtc);
     }
 }
@@ -340,6 +358,7 @@ fn generate_thumbnail_and_update(texture: *mut Il2CppObject, smtc: &SystemMediaT
 
         let smtc_clone = smtc.clone();
         std::thread::spawn(move || {
+            let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_MULTITHREADED);
             let _ = (|| -> Option<()> {
                 let stream = InMemoryRandomAccessStream::new().ok()?;
                 let writer = DataWriter::CreateDataWriter(&stream).ok()?;
@@ -358,6 +377,7 @@ fn generate_thumbnail_and_update(texture: *mut Il2CppObject, smtc: &SystemMediaT
             // Clear the pending flag regardless of success or failure so the
             // next music_id change can trigger a fresh load attempt.
             THUMBNAIL_PENDING.store(false, Ordering::Relaxed);
+            windows::Win32::System::Com::CoUninitialize();
         });
 
         Some(())
@@ -367,15 +387,17 @@ fn generate_thumbnail_and_update(texture: *mut Il2CppObject, smtc: &SystemMediaT
 fn update_metadata(smtc: &SystemMediaTransportControls, music_id: i32) {
     if music_id == 0 { return; }
 
-    // --- W-7 fix: atomic compare ---
-    if CURRENT_MUSIC_ID.load(Ordering::Relaxed) != music_id {
-        if let Ok(updater) = smtc.DisplayUpdater() {
-            let _ = updater.SetThumbnail(None);
-            let _ = updater.Update();
-        }
-        // Reset the pending flag so the new track gets a fresh thumbnail load.
-        THUMBNAIL_PENDING.store(false, Ordering::Relaxed);
+    // --- Prevent constant SQLite query spam if music ID hasn't changed ---
+    if CURRENT_MUSIC_ID.load(Ordering::Relaxed) == music_id {
+        return;
     }
+
+    if let Ok(updater) = smtc.DisplayUpdater() {
+        let _ = updater.SetThumbnail(None);
+        let _ = updater.Update();
+    }
+    // Reset the pending flag so the new track gets a fresh thumbnail load.
+    THUMBNAIL_PENDING.store(false, Ordering::Relaxed);
     CURRENT_MUSIC_ID.store(music_id, Ordering::Relaxed);
 
     let _ = smtc.SetIsPlayEnabled(true);
@@ -743,5 +765,23 @@ fn handle_button_pressed(args: &SystemMediaTransportControlsButtonPressedEventAr
             }
         });
         } // if let Some(main)
+    }
+}
+
+pub fn unregister() {
+    let mut smtc_guard = match SMTC_INSTANCE.lock() {
+        Ok(g) => g,
+        Err(e) => e.into_inner(),
+    };
+    if let Some(smtc) = smtc_guard.take() {
+        let _ = smtc.SetIsEnabled(false);
+        CURRENT_MUSIC_ID.store(-1, Ordering::Relaxed);
+        CURRENT_SCENE_HANDLE.store(-1, Ordering::Relaxed);
+        LAST_STATUS.store(MediaPlaybackStatus::Closed.0, Ordering::Relaxed);
+        LAST_HOME_MUSIC_ID.store(0, Ordering::Relaxed);
+        IS_LIVE_SCENE.store(false, Ordering::Relaxed);
+        IS_HOME_SCENE.store(false, Ordering::Relaxed);
+        SMTC_INIT_ATTEMPTED.store(false, Ordering::Relaxed);
+        info!("SMTC unregistered");
     }
 }

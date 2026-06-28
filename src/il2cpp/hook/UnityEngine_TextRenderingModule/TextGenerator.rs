@@ -130,37 +130,9 @@ extern "C" fn PopulateWithErrors(
     }
     if force_wrap { settings.horizontalOverflow = 0; }
 
-    // Lazily compute the hierarchy path — walking the transform tree is expensive
-    // (multiple IL2CPP boundary crossings per node). Only compute it when at least
-    // one consumer needs it: font/property overrides, captions, PartsCharaMessage
-    // overflow settings, or debug logging.
-    let needs_path = !text_settings.font_overrides.is_empty()
-        || !text_settings.text_properties_overrides.is_empty()
-        || config.caption.caption_enable
-        || (config.text_debug && (config.text_property_dump || config.text_path_debug || config.text_log));
-    // PartsCharaMessage is only present during career story mode, so checking for
-    // it is cheap when needs_path is already true. When needs_path is false we
-    // still need to detect it, but we can do a fast name-only check on the context
-    // object rather than walking the full hierarchy.
-    let path: String = if needs_path {
-        get_hierarchy_path_with_fallback(context, this)
-    } else {
-        // Fast path: only walk if the immediate object name suggests we might be
-        // in a PartsCharaMessage subtree. Avoids full tree walk in the common case.
-        let obj = if !context.is_null() { context } else { this };
-        if !obj.is_null() {
-            let name = unsafe { (*obj).name() };
-            if name.contains("PartsCharaMessage") || name.contains("Message") {
-                get_hierarchy_path_with_fallback(context, this)
-            } else {
-                String::new()
-            }
-        } else {
-            String::new()
-        }
-    };
+    let path = get_hierarchy_path_with_fallback(context, this);
 
-    if !path.is_empty() && path.contains("PartsCharaMessage") {
+    if path.contains("PartsCharaMessage") {
         settings.horizontalOverflow = 0;
         settings.verticalOverflow = 1;
         settings.resizeTextMaxSize = 30;
@@ -223,22 +195,7 @@ extern "C" fn PopulateWithErrors(
         }
     }
 
-    // Caption override: must run last so it wins over anything the translation
-    // repo sets on the Notification(Clone)/Base/Label path (e.g. best_fit: true).
-    if config.caption.caption_enable && path.contains("Notification(Clone)") {
-        settings.horizontalOverflow = 0; // Wrap
-        settings.verticalOverflow = 1;   // Overflow
-        settings.resizeTextForBestFit = false;
-
-        let font_size = settings.fontSize;
-        let target_width = (font_size as f32 * 20.0).max(600.0).min(1200.0);
-        let target_height = (font_size as f32 * 3.5).max(180.0);
-
-        settings.generationExtents.x = target_width;
-        settings.generationExtents.y = target_height;
-    }
-
-    let final_il2cpp_str = if let Some(text) = new_str {
+    if let Some(text) = new_str {
         let processed_text = if has_template {
             let mut template_context = TemplateContext { settings: &mut settings };
             hachimi.template_parser.eval_with_context(text, &mut template_context)
@@ -257,8 +214,7 @@ extern "C" fn PopulateWithErrors(
                     orig_s, processed_text, settings.fontSize, settings.resizeTextForBestFit, settings.horizontalOverflow, settings.verticalOverflow, settings.richText, settings.scaleFactor, settings.fontStyle, settings.textAnchor, path, settings.generationExtents, settings.pivot);
             }
         }
-        let il2cpp_res = processed_text.to_il2cpp_string();
-        il2cpp_res
+        orig_fn(this, processed_text.to_il2cpp_string(), settings, context)
     } else {
         if config.text_debug && config.text_log {
             let orig_s = unsafe { (*str_).as_utf16str().to_string() };
@@ -266,10 +222,8 @@ extern "C" fn PopulateWithErrors(
             info!("[Generic] {}, size: {}, bf: {}, ho: {}, vo: {}, rt: {}, sf: {}, fs: {}, ta: {}, context: {}, extents: {:?}, pivot: {:?}",
                 orig_s, settings.fontSize, settings.resizeTextForBestFit, settings.horizontalOverflow, settings.verticalOverflow, settings.richText, settings.scaleFactor, settings.fontStyle, settings.textAnchor, path, settings.generationExtents, settings.pivot);
         }
-        str_
-    };
-
-    orig_fn(this, final_il2cpp_str, settings, context)
+        orig_fn(this, str_, settings, context)
+    }
 }
 
 fn queue_position_offset(context: *mut Il2CppObject, fallback: *mut Il2CppObject, props: &TextPropertyOverrides) {

@@ -1,28 +1,69 @@
-use std::{fs, path::{Path, PathBuf}, process, sync::{atomic::{self, AtomicBool, AtomicI32}, Arc, Mutex}};
 use arc_swap::ArcSwap;
 use fnv::{FnvHashMap, FnvHashSet};
 use once_cell::sync::OnceCell;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process,
+    sync::{
+        atomic::{self, AtomicBool, AtomicI32},
+        Arc, Mutex,
+    },
+};
 use textwrap::wrap_algorithms::Penalties;
 
-use crate::{core::{plugin_api::Plugin, updater}, gui_impl, hachimi_impl, il2cpp::{self, hook::umamusume::{CySpringController::SpringUpdateMode, GameSystem}, sql::{CharacterData, SkillInfo}}};
+use crate::{
+    core::{plugin_api::Plugin, updater},
+    gui_impl, hachimi_impl,
+    il2cpp::{
+        self,
+        hook::umamusume::{CySpringController::SpringUpdateMode, GameSystem},
+        sql::{CharacterData, SkillInfo},
+    },
+};
 
-use super::{game::{Game, Region}, ipc, plurals, template, template_filters, tl_repo, utils, Error, Interceptor};
+use super::{
+    game::{Game, Region},
+    ipc, plurals, template, template_filters, tl_repo, utils, Error, Interceptor,
+};
 
 pub const REPO_PATH: &str = "Tenshou170/Hachimi-Edge";
 pub const GITHUB_API: &str = "https://api.github.com/repos";
 pub const CODEBERG_API: &str = "https://codeberg.org/api/v1/repos";
 pub const WEBSITE_URL: &str = "https://hachimi.noccu.art";
 pub const UMAPATCHER_PACKAGE_NAME: &str = "dev.LeadRDRK.UmaPatcherEdge";
-pub const UMAPATCHER_INSTALL_URL: &str = "https://github.com/Tenshou170/UmaPatcher-Edge/releases/latest";
+pub const UMAPATCHER_INSTALL_URL: &str =
+    "https://github.com/Tenshou170/UmaPatcher-Edge/releases/latest";
 
 pub static CONFIG_LOAD_ERROR: AtomicBool = AtomicBool::new(false);
+
+fn default_config_field_order() -> Vec<String> {
+    let value = serde_json::to_value(&Config::default())
+        .expect("default Config must serialize to JSON");
+    let obj = value
+        .as_object()
+        .expect("default Config JSON must be an object");
+    obj.keys().cloned().collect()
+}
+
+fn caption_config_fields() -> Vec<String> {
+    let value = serde_json::to_value(&CaptionConfig::default())
+        .expect("default CaptionConfig must serialize to JSON");
+    let obj = value
+        .as_object()
+        .expect("default CaptionConfig JSON must be an object");
+    obj.keys().cloned().collect()
+}
 
 pub struct Hachimi {
     // Hooking stuff
     pub interceptor: Interceptor,
     pub hooking_finished: AtomicBool,
     pub plugins: Mutex<Vec<Plugin>>,
+    pub plugin_init_callbacks: Mutex<Vec<(usize, usize)>>,
+    #[cfg(target_os = "windows")]
+    pub present_callbacks: Mutex<Vec<(usize, usize)>>,
 
     // Localized data
     pub localized_data: ArcSwap<LocalizedData>,
@@ -50,7 +91,7 @@ pub struct Hachimi {
     #[cfg(target_os = "windows")]
     pub discord_rpc: AtomicBool,
 
-    pub updater: Arc<updater::Updater>
+    pub updater: Arc<updater::Updater>,
 }
 
 static INSTANCE: OnceCell<Arc<Hachimi>> = OnceCell::new();
@@ -91,10 +132,13 @@ impl Hachimi {
     }
 
     pub fn instance() -> Arc<Hachimi> {
-        INSTANCE.get().unwrap_or_else(|| {
-            error!("FATAL: Attempted to get Hachimi instance before initialization");
-            process::exit(1);
-        }).clone()
+        INSTANCE
+            .get()
+            .unwrap_or_else(|| {
+                error!("FATAL: Attempted to get Hachimi instance before initialization");
+                process::exit(1);
+            })
+            .clone()
     }
 
     pub fn is_initialized() -> bool {
@@ -103,6 +147,8 @@ impl Hachimi {
 
     fn new() -> Result<Hachimi, Error> {
         let game = Game::init();
+        let config_path = game.data_dir.join("config.json");
+        Self::sanitize_config(&config_path);
         let config = Self::load_config(&game.data_dir, &game.region)?;
 
         config.language.set_locale();
@@ -111,6 +157,9 @@ impl Hachimi {
             interceptor: Interceptor::default(),
             hooking_finished: AtomicBool::new(false),
             plugins: Mutex::default(),
+            plugin_init_callbacks: Mutex::default(),
+            #[cfg(target_os = "windows")]
+            present_callbacks: Mutex::default(),
 
             // Don't load localized data initially since it might fail, logging the error is not possible here
             localized_data: ArcSwap::default(),
@@ -123,7 +172,7 @@ impl Hachimi {
             game,
             template_parser: template::Parser::new(&template_filters::LIST),
 
-            target_fps: AtomicI32::new(config.target_fps.unwrap_or(-1)),
+            target_fps: AtomicI32::new(config.target_fps.map(|v| v.clamp(30, 240)).unwrap_or(-1)),
 
             #[cfg(target_os = "windows")]
             vsync_count: AtomicI32::new(config.windows.vsync_count),
@@ -136,7 +185,7 @@ impl Hachimi {
 
             updater: Arc::default(),
 
-            config: ArcSwap::new(Arc::new(config))
+            config: ArcSwap::new(Arc::new(config)),
         })
     }
 
@@ -146,15 +195,125 @@ impl Hachimi {
         if fs::metadata(&config_path).is_ok() {
             let json = fs::read_to_string(&config_path)?;
             match serde_json::from_str::<Config>(&json) {
-                Ok(config) => Ok(config),
+                Ok(mut config) => {
+                    config.ui_theme_json = None;
+                    Ok(config)
+                }
                 Err(e) => {
-                    eprintln!("Failed to parse config: {}", e);
+                    error!("Failed to parse config: {}", e);
                     CONFIG_LOAD_ERROR.store(true, std::sync::atomic::Ordering::Release);
+
+                    let original_text = json.clone();
+                    if Self::sanitize_config_raw(&original_text, &config_path).is_ok() {
+                        let sanitized_json = fs::read_to_string(&config_path)?;
+                        if let Ok(mut config) = serde_json::from_str::<Config>(&sanitized_json) {
+                            config.ui_theme_json = None;
+                            return Ok(config);
+                        }
+                    }
+
+                    // Preserve the corrupted file to avoid retrying it on every startup.
+                    let backup_path = {
+                        use std::time::{SystemTime, UNIX_EPOCH};
+                        let now = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .map(|d| d.as_secs())
+                            .unwrap_or(0);
+                        config_path.with_extension(format!("corrupt.{}.json", now))
+                    };
+                    if let Err(e2) = fs::write(&backup_path, &original_text) {
+                        error!("Failed to write corrupted config to {:?}: {}", backup_path, e2);
+                    } else {
+                        info!("Moved corrupted config to {:?}", backup_path);
+                    }
+                    let _ = fs::remove_file(&config_path);
                     Ok(Config::default())
                 }
             }
-        }else {
+        } else {
             Ok(Config::default())
+        }
+    }
+
+    fn sanitize_config_raw(raw: &str, config_path: &Path) -> Result<(), Error> {
+        let value: serde_json::Value = serde_json::from_str(raw)?;
+        let obj = match value.as_object() {
+            Some(o) => o,
+            None => return Ok(()),
+        };
+
+        let canonical_fields = default_config_field_order();
+        let canonical_set: std::collections::HashSet<&str> =
+            canonical_fields.iter().map(String::as_str).collect();
+
+        debug_assert!(
+            caption_config_fields()
+                .iter()
+                .all(|field| canonical_set.contains(field.as_str())),
+            "Caption config fields must be preserved in the canonical field order",
+        );
+
+        let mut new_obj = serde_json::Map::new();
+        for key in canonical_fields.iter() {
+            if key == "ui_theme_json" {
+                continue;
+            }
+            if let Some(val) = obj.get(key) {
+                new_obj.insert(key.clone(), val.clone());
+            }
+        }
+
+        new_obj.insert(
+            "config_schema_version".to_string(),
+            serde_json::Value::Number(2.into()),
+        );
+
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(win_cfg) = obj.get("windows") {
+                new_obj.insert("windows".to_string(), win_cfg.clone());
+            }
+        }
+        #[cfg(target_os = "android")]
+        {
+            if let Some(and_cfg) = obj.get("android") {
+                new_obj.insert("android".to_string(), and_cfg.clone());
+            }
+        }
+
+        for (key, val) in obj.iter() {
+            if !canonical_set.contains(key.as_str())
+                && key != "ui_theme_json"
+                && key != "windows"
+                && key != "android"
+            {
+                new_obj.insert(key.clone(), val.clone());
+            }
+        }
+
+        let new_value = serde_json::Value::Object(new_obj);
+        utils::write_json_file(&new_value, config_path)
+    }
+
+    /// Remove legacy theme keys, reorganize config to canonical field order, and update schema version.
+    /// This ensures consistency for users migrating from different forks or updating versions.
+    fn sanitize_config(config_path: &Path) {
+        // 1. File must exist
+        if !config_path.exists() {
+            return;
+        }
+
+        // 2. Read raw JSON
+        let raw = match fs::read_to_string(config_path) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("sanitize_config: failed to read {:?}: {}", config_path, e);
+                return;
+            }
+        };
+
+        if let Err(e) = Self::sanitize_config_raw(&raw, config_path) {
+            error!("sanitize_config: failed to sanitize {:?}: {}", config_path, e);
         }
     }
 
@@ -168,7 +327,26 @@ impl Hachimi {
         };
 
         new_config.language.set_locale();
+
+        // Keep atomic mirror fields in sync with the freshly loaded config.
+        #[cfg(target_os = "windows")]
+        {
+            self.window_always_on_top.store(
+                new_config.windows.window_always_on_top,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            self.discord_rpc.store(
+                new_config.windows.discord_rpc,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            self.vsync_count.store(
+                new_config.windows.vsync_count,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+        }
+
         self.config.store(Arc::new(new_config));
+        crate::core::captions::Captions::reposition_scheduled();
     }
 
     pub fn save_config(&self, config: &Config) -> Result<(), Error> {
@@ -183,7 +361,28 @@ impl Hachimi {
         self.save_config(&config)?;
 
         config.language.set_locale();
+
+        // Sync the derived atomic mirror fields so runtime code (e.g.
+        // re_apply_topmost after an orientation change) always reads the
+        // latest values without needing to lock the ArcSwap<Config>.
+        #[cfg(target_os = "windows")]
+        {
+            self.window_always_on_top.store(
+                config.windows.window_always_on_top,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            self.discord_rpc.store(
+                config.windows.discord_rpc,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            self.vsync_count.store(
+                config.windows.vsync_count,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+        }
+
         self.config.store(Arc::new(config));
+        crate::core::captions::Captions::reposition_scheduled();
         Ok(())
     }
 
@@ -238,14 +437,15 @@ impl Hachimi {
         }
 
         // Prevent double initialization
-        if self.hooking_finished.load(atomic::Ordering::Relaxed) { return false; }
+        if self.hooking_finished.load(atomic::Ordering::Relaxed) {
+            return false;
+        }
 
         if hachimi_impl::is_il2cpp_lib(filename) {
             info!("Got il2cpp handle");
             il2cpp::symbols::set_handle(handle);
             false
-        }
-        else {
+        } else {
             false
         }
     }
@@ -308,7 +508,10 @@ impl Hachimi {
                     std::thread::sleep(std::time::Duration::from_secs(5));
 
                     let config = self.config.load();
-                    if config.bg_update_mode == BgUpdateMode::Disabled || config.bg_update_interval_sec == 0 || config.translator_mode {
+                    if config.bg_update_mode == BgUpdateMode::Disabled
+                        || config.bg_update_interval_sec == 0
+                        || config.translator_mode
+                    {
                         elapsed = 0;
                         continue;
                     }
@@ -323,7 +526,10 @@ impl Hachimi {
                     if elapsed >= config.bg_update_interval_sec {
                         elapsed = 0;
                         let silent = config.bg_update_mode == BgUpdateMode::Silent;
-                        info!("Running background translation update check (Silent: {})...", silent);
+                        info!(
+                            "Running background translation update check (Silent: {})...",
+                            silent
+                        );
                         self.tl_updater.clone().check_for_updates(false, silent);
                     }
                 }
@@ -334,7 +540,8 @@ impl Hachimi {
 
 fn default_serde_instance<'a, T: Deserialize<'a>>() -> Option<T> {
     let empty_data = std::iter::empty::<((), ())>();
-    let empty_deserializer = serde::de::value::MapDeserializer::<_, serde::de::value::Error>::new(empty_data);
+    let empty_deserializer =
+        serde::de::value::MapDeserializer::<_, serde::de::value::Error>::new(empty_data);
     T::deserialize(empty_deserializer).ok()
 }
 
@@ -342,16 +549,65 @@ fn default_serde_instance<'a, T: Deserialize<'a>>() -> Option<T> {
 pub enum BgUpdateMode {
     Disabled,
     Periodic,
-    Silent
+    Silent,
 }
 impl Default for BgUpdateMode {
-    fn default() -> Self { Self::Disabled }
+    fn default() -> Self {
+        Self::Disabled
+    }
+}
+
+/// Light or Dark overlay theme.
+#[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+pub enum UiThemeMode {
+    Dark,
+    Light,
+}
+impl Default for UiThemeMode {
+    fn default() -> Self {
+        Self::Dark
+    }
+}
+
+/// MD3 contrast level.
+#[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+pub enum UiContrastLevel {
+    Normal,
+    Medium,
+    High,
+}
+impl Default for UiContrastLevel {
+    fn default() -> Self {
+        Self::Normal
+    }
+}
+
+/// How the color scheme is derived.
+#[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+pub enum UiColorSchemeMode {
+    /// Full MD3 tonal palette generated from ui_theme_seed (default).
+    Auto,
+    /// Use ui_manual_colors overrides for individual MD3 roles.
+    Manual,
+}
+impl Default for UiColorSchemeMode {
+    fn default() -> Self {
+        Self::Auto
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct CaptionConfig {
     #[serde(default)]
     pub caption_enable: bool,
+    #[serde(default, alias = "caption_log_enable")]
+    pub caption_show_log_enable: bool,
+    #[serde(default)]
+    pub caption_format_log_enable: bool,
+    #[serde(default)]
+    pub caption_fallback_enable: bool,
+    #[serde(default = "CaptionConfig::default_lines_char_count")]
+    pub caption_lines_char_count: i32,
     #[serde(default = "CaptionConfig::default_font_size")]
     pub caption_font_size: i32,
     #[serde(default = "CaptionConfig::default_color")]
@@ -372,6 +628,10 @@ impl Default for CaptionConfig {
     fn default() -> Self {
         Self {
             caption_enable: false,
+            caption_show_log_enable: false,
+            caption_format_log_enable: false,
+            caption_fallback_enable: false,
+            caption_lines_char_count: CaptionConfig::default_lines_char_count(),
             caption_font_size: 50,
             caption_color: "White".to_owned(),
             caption_outline_size: "L".to_owned(),
@@ -384,90 +644,73 @@ impl Default for CaptionConfig {
 }
 
 impl CaptionConfig {
-    fn default_font_size() -> i32 { 50 }
-    fn default_color() -> String { "White".to_owned() }
-    fn default_outline_size() -> String { "L".to_owned() }
-    fn default_outline_color() -> String { "Brown".to_owned() }
-    fn default_bg_alpha() -> f32 { 0.0 }
-    fn default_pos_x() -> f32 { 0.0 }
-    fn default_pos_y() -> f32 { -3.0 }
+    fn default_font_size() -> i32 {
+        50
+    }
+    fn default_lines_char_count() -> i32 {
+        26
+    }
+    fn default_color() -> String {
+        "White".to_owned()
+    }
+    fn default_outline_size() -> String {
+        "L".to_owned()
+    }
+    fn default_outline_color() -> String {
+        "Brown".to_owned()
+    }
+    fn default_bg_alpha() -> f32 {
+        0.0
+    }
+    fn default_pos_x() -> f32 {
+        0.0
+    }
+    fn default_pos_y() -> f32 {
+        -3.0
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Config {
+    // General
     #[serde(default)]
-    pub debug_mode: bool,
-    #[serde(default)]
-    pub enable_file_logging: bool,
-    #[serde(default)]
-    pub apply_atlas_workaround: bool,
-    #[serde(default)]
-    pub disable_outdated_asset_notif: bool,
-    #[serde(default)]
-    pub translator_mode: bool,
+    pub language: Language,
     #[serde(default)]
     pub disable_gui: bool,
     #[serde(default)]
     pub disable_gui_once: bool,
-    #[serde(default)]
-    pub text_debug: bool,
-    #[serde(default)]
-    pub text_log: bool,
-    #[serde(default)]
-    pub text_property_dump: bool,
-    #[serde(default)]
-    pub text_localize_dump: bool,
-    #[serde(default)]
-    pub text_position_debug: bool,
-    #[serde(default)]
-    pub text_path_debug: bool,
-    pub localized_data_dir: Option<String>,
-    pub target_fps: Option<i32>,
-    #[serde(default = "Config::default_open_browser_url")]
-    pub open_browser_url: String,
-    #[serde(default = "Config::default_virtual_res_mult")]
-    pub virtual_res_mult: f32,
-    pub translation_repo_index: Option<String>,
-    #[serde(default)]
-    pub skip_first_time_setup: bool,
-    #[serde(default)]
-    pub lazy_translation_updates: bool,
-    #[serde(default)]
-    pub disable_auto_update_check: bool,
-    #[serde(default)]
-    pub dump_msgpack: bool,
-    #[serde(default)]
-    pub dump_msgpack_request: bool,
-    #[serde(default)]
-    pub msgpack_notifier: bool,
-    #[serde(default)]
-    pub msgpack_notifier_request: bool,
-    #[serde(default = "Config::default_msgpack_notifier_host")]
-    pub msgpack_notifier_host: String,
-    #[serde(default = "Config::default_msgpack_notifier_connection_timeout_ms")]
-    pub msgpack_notifier_connection_timeout_ms: u64,
-    #[serde(default)]
-    pub msgpack_notifier_print_error: bool,
-    #[serde(default)]
-    pub unlock_live_chara: bool,
-    #[serde(default)]
-    pub notification_tp: bool,
-    #[serde(default)]
-    pub notification_rp: bool,
-    #[serde(default)]
-    pub notification_jobs: bool,
-
-    #[serde(default)]
-    pub bg_update_mode: BgUpdateMode,
-    #[serde(default = "Config::default_bg_update_interval_sec")]
-    pub bg_update_interval_sec: u64,
-
-    #[serde(default)]
-    pub disable_translations: bool,
     #[serde(default = "Config::default_gui_scale")]
     pub gui_scale: f32,
+
+    // Theme settings
+    #[serde(default = "Config::default_ui_theme_seed")]
+    pub ui_theme_seed: egui::Color32,
+    /// Runtime-only theme cache. Do not persist generated JSON in saved config.
+    #[serde(default, skip_serializing)]
+    pub ui_theme_json: Option<serde_json::Value>,
+    #[serde(default = "Config::default_ui_theme_mode")]
+    pub ui_theme_mode: UiThemeMode,
+    #[serde(default)]
+    pub ui_contrast_level: UiContrastLevel,
+    #[serde(default)]
+    pub ui_color_scheme_mode: UiColorSchemeMode,
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub ui_manual_colors: std::collections::HashMap<String, [u8; 3]>,
+    #[serde(default = "Config::default_ui_surface_alpha")]
+    pub ui_surface_alpha: u8,
+    #[serde(default = "Config::default_ui_window_rounding")]
+    pub ui_window_rounding: f32,
+    #[serde(default)]
+    pub ui_translucent_windows: bool,
+
+    // Graphics
+    pub target_fps: Option<i32>,
+    #[serde(default = "Config::default_virtual_res_mult")]
+    pub virtual_res_mult: f32,
     #[serde(default = "Config::default_ui_scale")]
     pub ui_scale: f32,
+    #[serde(default = "Config::default_ui_animation_scale")]
+    pub ui_animation_scale: f32,
     #[serde(default = "Config::default_render_scale")]
     pub render_scale: f32,
     #[serde(default)]
@@ -478,14 +721,17 @@ pub struct Config {
     pub shadow_resolution: crate::il2cpp::hook::umamusume::CameraData::ShadowResolution,
     #[serde(default)]
     pub graphics_quality: crate::il2cpp::hook::umamusume::GraphicSettings::GraphicsQuality,
+
+    // Gameplay
+    pub physics_update_mode: Option<SpringUpdateMode>,
+    #[serde(default)]
+    pub cyspring_mono_uncap_frame_scale: bool,
+    #[serde(default)]
+    pub cyspring_disable_native: bool,
     #[serde(default = "Config::default_story_choice_auto_select_delay")]
     pub story_choice_auto_select_delay: f32,
     #[serde(default = "Config::default_story_tcps_multiplier")]
     pub story_tcps_multiplier: f32,
-    #[serde(default)]
-    pub enable_ipc: bool,
-    #[serde(default)]
-    pub ipc_listen_all: bool,
     #[serde(default)]
     pub force_allow_dynamic_camera: bool,
     #[serde(default)]
@@ -496,33 +742,10 @@ pub struct Config {
     pub skill_info_dialog: bool,
     #[serde(default)]
     pub homescreen_bgseason: crate::il2cpp::hook::umamusume::TimeUtil::BgSeason,
-    pub sugoi_url: Option<String>,
-    #[serde(default)]
-    pub auto_translate_stories: bool,
-    #[serde(default)]
-    pub auto_translate_localize: bool,
     #[serde(default)]
     pub disable_skill_name_translation: bool,
     #[serde(default)]
     pub hide_ingame_ui_hotkey: bool,
-    #[serde(flatten)]
-    pub caption: CaptionConfig,
-    #[serde(default)]
-    pub language: Language,
-    #[serde(default = "Config::default_meta_index_url")]
-    pub meta_index_url: String,
-    #[serde(default)]
-    pub ipv4_only: bool,
-    pub physics_update_mode: Option<SpringUpdateMode>,
-    #[serde(default)]
-    pub cyspring_mono_uncap_frame_scale: bool,
-    /// When true, forces the Mono (managed) physics path by overwriting the
-    /// static `isNative` field on `CySpringNative` to false after its cctor.
-    /// Useful for users experiencing physics glitches with the native plugin.
-    #[serde(default)]
-    pub cyspring_disable_native: bool,
-    #[serde(default = "Config::default_ui_animation_scale")]
-    pub ui_animation_scale: f32,
     #[serde(default)]
     pub live_slider_always_show: bool,
     #[serde(default)]
@@ -536,25 +759,93 @@ pub struct Config {
     #[serde(default)]
     pub hide_now_loading: bool,
     #[serde(default)]
-    pub replace_to_builtin_font: bool,
-    #[serde(default)]
     pub custom_title_name: Option<String>,
     #[serde(default)]
     pub disabled_hooks: FnvHashSet<String>,
+    #[serde(flatten)]
+    pub caption: CaptionConfig,
 
-    // theme settings
-    #[serde(default = "Config::default_ui_accent")]
-    pub ui_accent_color: egui::Color32,
-    #[serde(default = "Config::default_window_fill")]
-    pub ui_window_fill: egui::Color32,
-    #[serde(default = "Config::default_panel_fill")]
-    pub ui_panel_fill: egui::Color32,
-    #[serde(default = "Config::default_extreme_bg")]
-    pub ui_extreme_bg_color: egui::Color32,
-    #[serde(default = "Config::default_text_color")]
-    pub ui_text_color: egui::Color32,
-    #[serde(default = "Config::default_window_rounding")]
-    pub ui_window_rounding: f32,
+    // Advanced
+    #[serde(default)]
+    pub enable_file_logging: bool,
+    #[serde(default)]
+    pub enable_ipc: bool,
+    #[serde(default)]
+    pub ipc_listen_all: bool,
+    #[serde(default)]
+    pub ipv4_only: bool,
+    #[serde(default = "Config::default_meta_index_url")]
+    pub meta_index_url: String,
+    pub localized_data_dir: Option<String>,
+    #[serde(default)]
+    pub translator_mode: bool,
+    #[serde(default)]
+    pub apply_atlas_workaround: bool,
+    #[serde(default)]
+    pub disable_outdated_asset_notif: bool,
+    #[serde(default)]
+    pub replace_to_builtin_font: bool,
+    #[serde(default)]
+    pub skip_first_time_setup: bool,
+    #[serde(default)]
+    pub lazy_translation_updates: bool,
+    #[serde(default)]
+    pub disable_auto_update_check: bool,
+    #[serde(default)]
+    pub bg_update_mode: BgUpdateMode,
+    #[serde(default = "Config::default_bg_update_interval_sec")]
+    pub bg_update_interval_sec: u64,
+    #[serde(default)]
+    pub disable_translations: bool,
+    #[serde(default)]
+    pub sugoi_url: Option<String>,
+    #[serde(default)]
+    pub auto_translate_stories: bool,
+    #[serde(default)]
+    pub auto_translate_localize: bool,
+    #[serde(default)]
+    pub unlock_live_chara: bool,
+    #[serde(default)]
+    pub msgpack_notifier: bool,
+    #[serde(default)]
+    pub msgpack_notifier_request: bool,
+    #[serde(default = "Config::default_msgpack_notifier_host")]
+    pub msgpack_notifier_host: String,
+    #[serde(default = "Config::default_msgpack_notifier_connection_timeout_ms")]
+    pub msgpack_notifier_connection_timeout_ms: u64,
+    #[serde(default)]
+    pub msgpack_notifier_print_error: bool,
+    #[serde(default)]
+    pub dump_msgpack: bool,
+    #[serde(default)]
+    pub dump_msgpack_request: bool,
+    #[serde(default)]
+    pub enable_smtc: bool,
+    #[serde(default)]
+    pub notification_tp: bool,
+    #[serde(default)]
+    pub notification_rp: bool,
+    #[serde(default)]
+    pub notification_jobs: bool,
+    #[serde(default)]
+    pub debug_mode: bool,
+    #[serde(default)]
+    pub text_debug: bool,
+    #[serde(default)]
+    pub text_log: bool,
+    #[serde(default)]
+    pub text_property_dump: bool,
+    #[serde(default)]
+    pub text_localize_dump: bool,
+    #[serde(default)]
+    pub text_position_debug: bool,
+    #[serde(default)]
+    pub text_path_debug: bool,
+    #[serde(default = "Config::default_open_browser_url")]
+    pub open_browser_url: String,
+    pub translation_repo_index: Option<String>,
+    #[serde(default = "Config::default_config_schema_version")]
+    pub config_schema_version: u32,
 
     #[cfg(target_os = "windows")]
     #[serde(flatten)]
@@ -562,31 +853,70 @@ pub struct Config {
 
     #[cfg(target_os = "android")]
     #[serde(flatten)]
-    pub android: hachimi_impl::Config
+    pub android: hachimi_impl::Config,
 }
 
 impl Config {
-    fn default_open_browser_url() -> String { "https://rekodesuwa.com".to_owned() }
-    fn default_virtual_res_mult() -> f32 { 1.0 }
-    fn default_msgpack_notifier_host() -> String { "http://localhost:4693".to_owned() }
-    fn default_msgpack_notifier_connection_timeout_ms() -> u64 { 1000 }
-    fn default_ui_scale() -> f32 { 1.0 }
-    fn default_render_scale() -> f32 { 1.0 }
-    fn default_gui_scale() -> f32 { 1.0 }
-    fn default_story_choice_auto_select_delay() -> f32 { 1.2 }
-    fn default_story_tcps_multiplier() -> f32 { 3.0 }
-    fn default_meta_index_url() -> String { "https://rekodesuwa.com/tl-en/meta.json".to_owned() }
-    fn default_ui_animation_scale() -> f32 { 1.0 }
-    fn default_live_vocals_swap() -> [i32; 6] { [0; 6] }
-    fn default_champions_live_resource_id() -> i32 { 15 }
-    fn default_champions_live_year() -> i32 { 2025 }
-    pub fn default_ui_accent() -> egui::Color32 { egui::Color32::from_rgb(100, 150, 240) }
-    pub fn default_window_fill() -> egui::Color32 { egui::Color32::from_rgba_premultiplied(27, 27, 27, 220) }
-    pub fn default_panel_fill() -> egui::Color32 { egui::Color32::from_rgba_premultiplied(27, 27, 27, 220) }
-    pub fn default_extreme_bg() -> egui::Color32 { egui::Color32::from_rgb(15, 15, 15) }
-    pub fn default_text_color() -> egui::Color32 { egui::Color32::from_gray(170) }
-    pub fn default_window_rounding() -> f32 { 10.0 }
-    fn default_bg_update_interval_sec() -> u64 { 3600 }
+    fn default_open_browser_url() -> String {
+        "https://rekodesuwa.com".to_owned()
+    }
+    fn default_virtual_res_mult() -> f32 {
+        1.0
+    }
+    fn default_msgpack_notifier_host() -> String {
+        "http://localhost:4693".to_owned()
+    }
+    fn default_msgpack_notifier_connection_timeout_ms() -> u64 {
+        1000
+    }
+    fn default_ui_scale() -> f32 {
+        1.0
+    }
+    fn default_render_scale() -> f32 {
+        1.0
+    }
+    fn default_gui_scale() -> f32 {
+        1.0
+    }
+    fn default_story_choice_auto_select_delay() -> f32 {
+        1.2
+    }
+    fn default_story_tcps_multiplier() -> f32 {
+        3.0
+    }
+    fn default_meta_index_url() -> String {
+        "https://rekodesuwa.com/tl-en/meta.json".to_owned()
+    }
+    fn default_ui_animation_scale() -> f32 {
+        1.0
+    }
+    fn default_live_vocals_swap() -> [i32; 6] {
+        [0; 6]
+    }
+    fn default_champions_live_resource_id() -> i32 {
+        15
+    }
+    fn default_champions_live_year() -> i32 {
+        2025
+    }
+    pub fn default_ui_theme_seed() -> egui::Color32 {
+        egui::Color32::from_rgb(100, 150, 240)
+    }
+    fn default_ui_theme_mode() -> UiThemeMode {
+        UiThemeMode::Dark
+    }
+    pub fn default_ui_surface_alpha() -> u8 {
+        255
+    }
+    pub fn default_ui_window_rounding() -> f32 {
+        10.0
+    }
+    fn default_config_schema_version() -> u32 {
+        2
+    }
+    fn default_bg_update_interval_sec() -> u64 {
+        3600
+    }
 }
 
 impl Default for Config {
@@ -601,7 +931,7 @@ pub struct OsOption<T> {
     android: Option<T>,
 
     #[cfg(target_os = "windows")]
-    windows: Option<T>
+    windows: Option<T>,
 }
 
 impl<T> OsOption<T> {
@@ -639,12 +969,15 @@ pub enum Language {
     BPortuguese,
 
     #[serde(rename = "fil")]
-    Filipino
+    Filipino,
 }
 
 impl Default for Language {
     fn default() -> Self {
-        let locale = sys_locale::get_locale().as_deref().unwrap_or("en").to_lowercase();
+        let locale = sys_locale::get_locale()
+            .as_deref()
+            .unwrap_or("en")
+            .to_lowercase();
         if locale.contains("zh-hk") || locale.contains("zh-tw") || locale.contains("zh-hant") {
             Self::TChinese
         } else if locale.contains("zh") {
@@ -674,7 +1007,7 @@ impl Language {
         Self::Indonesian.choice(),
         Self::Spanish.choice(),
         Self::BPortuguese.choice(),
-        Self::Filipino.choice()
+        Self::Filipino.choice(),
     ];
 
     pub fn set_locale(&self) {
@@ -690,7 +1023,7 @@ impl Language {
             Language::Indonesian => "id",
             Language::Spanish => "es",
             Language::BPortuguese => "pt-br",
-            Language::Filipino => "fil"
+            Language::Filipino => "fil",
         }
     }
 
@@ -703,7 +1036,7 @@ impl Language {
             Language::Indonesian => "Bahasa Indonesia",
             Language::Spanish => "Español (ES)",
             Language::BPortuguese => "Português (Brasil)",
-            Language::Filipino => "Filipino"
+            Language::Filipino => "Filipino",
         }
     }
 
@@ -770,7 +1103,9 @@ pub struct TextSettings {
 }
 
 impl TextSettings {
-    fn default_font_scale() -> f32 { 1.0 }
+    fn default_font_scale() -> f32 {
+        1.0
+    }
 }
 
 impl Default for TextSettings {
@@ -828,14 +1163,14 @@ pub struct LocalizedData {
     pub hashed_dict: FnvHashMap<u64, String>,
     pub text_data_dict: FnvHashMap<i32, FnvHashMap<i32, String>>, // {"category": {"index": "text"}}
     pub character_system_text_dict: FnvHashMap<i32, FnvHashMap<i32, String>>, // {"character_id": {"voice_id": "text"}}
-    pub race_jikkyo_comment_dict: FnvHashMap<i32, String>, // {"id": "text"}
-    pub race_jikkyo_message_dict: FnvHashMap<i32, String>, // {"id": "text"}
+    pub race_jikkyo_comment_dict: FnvHashMap<i32, String>,                    // {"id": "text"}
+    pub race_jikkyo_message_dict: FnvHashMap<i32, String>,                    // {"id": "text"}
     assets_path: Option<PathBuf>,
 
     pub plural_form: plurals::Resolver,
     pub ordinal_form: plurals::Resolver,
 
-    pub wrapper_penalties: Penalties
+    pub wrapper_penalties: Penalties,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -851,6 +1186,7 @@ pub struct CustomRubyDef {
     pub ruby_text: String,
 }
 
+
 impl LocalizedData {
     fn new(config: &Config, data_dir: &Path) -> Result<LocalizedData, Error> {
         if config.disable_translations {
@@ -863,7 +1199,12 @@ impl LocalizedData {
 
             // Create .nomedia
             #[cfg(target_os = "android")]
-            { _ = fs::OpenOptions::new().create_new(true).write(true).open(ld_path.join(".nomedia")); }
+            {
+                _ = fs::OpenOptions::new()
+                    .create_new(true)
+                    .write(true)
+                    .open(ld_path.join(".nomedia"));
+            }
 
             let ld_config_path = ld_path.join("config.json");
             path = Some(ld_path);
@@ -871,13 +1212,11 @@ impl LocalizedData {
             if fs::metadata(&ld_config_path).is_ok() {
                 let json = fs::read_to_string(&ld_config_path)?;
                 serde_json::from_str(&json)?
-            }
-            else {
+            } else {
                 warn!("Localized data config not found");
                 LocalizedDataConfig::default()
             }
-        }
-        else {
+        } else {
             path = None;
             LocalizedDataConfig::default()
         };
@@ -888,35 +1227,57 @@ impl LocalizedData {
         let wrapper_penalties = Self::parse_wrap_penalties_or_default(&config.wrapper_penalties);
 
         Ok(LocalizedData {
-            localize_dict: Self::load_dict_static(&path, config.localize_dict.as_ref()).unwrap_or_default(),
-            hashed_dict: Self::load_dict_static(&path, config.hashed_dict.as_ref()).unwrap_or_default(),
-            text_data_dict: Self::load_dict_static(&path, config.text_data_dict.as_ref()).unwrap_or_default(),
-            character_system_text_dict: Self::load_dict_static(&path, config.character_system_text_dict.as_ref()).unwrap_or_default(),
-            race_jikkyo_comment_dict: Self::load_dict_static(&path, config.race_jikkyo_comment_dict.as_ref()).unwrap_or_default(),
-            race_jikkyo_message_dict: Self::load_dict_static(&path, config.race_jikkyo_message_dict.as_ref()).unwrap_or_default(),
-            assets_path: path.as_ref()
-                .map(|p| config.assets_dir.as_ref()
-                    .map(|dir| p.join(dir))
-                )
+            localize_dict: Self::load_dict_static(&path, config.localize_dict.as_ref())
+                .unwrap_or_default(),
+            hashed_dict: Self::load_dict_static(&path, config.hashed_dict.as_ref())
+                .unwrap_or_default(),
+            text_data_dict: Self::load_dict_static(&path, config.text_data_dict.as_ref())
+                .unwrap_or_default(),
+            character_system_text_dict: Self::load_dict_static(
+                &path,
+                config.character_system_text_dict.as_ref(),
+            )
+            .unwrap_or_default(),
+            race_jikkyo_comment_dict: Self::load_dict_static(
+                &path,
+                config.race_jikkyo_comment_dict.as_ref(),
+            )
+            .unwrap_or_default(),
+            race_jikkyo_message_dict: Self::load_dict_static(
+                &path,
+                config.race_jikkyo_message_dict.as_ref(),
+            )
+            .unwrap_or_default(),
+            assets_path: path
+                .as_ref()
+                .map(|p| config.assets_dir.as_ref().map(|dir| p.join(dir)))
                 .unwrap_or_default(),
 
             plural_form,
             ordinal_form,
 
             text_settings: {
-                let settings: TextSettings = Self::load_dict_static(&path, config.text_config.as_ref()).unwrap_or_default();
-                info!("Loaded {} text overrides.", settings.text_properties_overrides.len());
+                let settings: TextSettings =
+                    Self::load_dict_static(&path, config.text_config.as_ref()).unwrap_or_default();
+                info!(
+                    "Loaded {} text overrides.",
+                    settings.text_properties_overrides.len()
+                );
                 ArcSwap::new(Arc::new(settings))
             },
 
             wrapper_penalties,
 
             config,
-            path
+            path,
         })
     }
 
-    fn load_dict_static_ex<T: DeserializeOwned, P: AsRef<Path>>(ld_path_opt: &Option<PathBuf>, rel_path_opt: Option<P>, silent_fs_error: bool) -> Option<T> {
+    fn load_dict_static_ex<T: DeserializeOwned, P: AsRef<Path>>(
+        ld_path_opt: &Option<PathBuf>,
+        rel_path_opt: Option<P>,
+        silent_fs_error: bool,
+    ) -> Option<T> {
         let Some(ld_path) = ld_path_opt else {
             return None;
         };
@@ -946,37 +1307,45 @@ impl LocalizedData {
         Some(dict)
     }
 
-    fn load_dict_static<T: DeserializeOwned, P: AsRef<Path>>(ld_path_opt: &Option<PathBuf>, rel_path_opt: Option<P>) -> Option<T> {
+    fn load_dict_static<T: DeserializeOwned, P: AsRef<Path>>(
+        ld_path_opt: &Option<PathBuf>,
+        rel_path_opt: Option<P>,
+    ) -> Option<T> {
         Self::load_dict_static_ex(ld_path_opt, rel_path_opt, false)
     }
 
-    pub fn load_dict<T: DeserializeOwned, P: AsRef<Path>>(&self, rel_path_opt: Option<P>) -> Option<T> {
+    pub fn load_dict<T: DeserializeOwned, P: AsRef<Path>>(
+        &self,
+        rel_path_opt: Option<P>,
+    ) -> Option<T> {
         Self::load_dict_static(&self.path, rel_path_opt)
     }
 
-    pub fn load_assets_dict<T: DeserializeOwned, P: AsRef<Path>>(&self, rel_path_opt: Option<P>) -> Option<T> {
+    pub fn load_assets_dict<T: DeserializeOwned, P: AsRef<Path>>(
+        &self,
+        rel_path_opt: Option<P>,
+    ) -> Option<T> {
         Self::load_dict_static_ex(&self.assets_path, rel_path_opt, true)
     }
 
     fn parse_plural_form_or_default(opt: &Option<String>) -> Result<plurals::Resolver, Error> {
         if let Some(plural_form) = opt {
             Ok(plurals::Resolver::Expr(plurals::Ast::parse(plural_form)?))
-        }
-        else {
+        } else {
             Ok(plurals::Resolver::Function(|_| 0))
         }
     }
 
     fn parse_wrap_penalties_or_default(opt: &Option<PenaltiesConfig>) -> Penalties {
         let Some(cfg) = opt else {
-            return Penalties::new()
+            return Penalties::new();
         };
         Penalties {
             nline_penalty: cfg.nline_penalty,
             overflow_penalty: cfg.overflow_penalty,
             short_last_line_fraction: cfg.short_last_line_fraction,
             short_last_line_penalty: cfg.short_last_line_penalty,
-            hyphen_penalty: cfg.hyphen_penalty
+            hyphen_penalty: cfg.hyphen_penalty,
         }
     }
 
@@ -991,13 +1360,19 @@ impl LocalizedData {
     pub fn load_asset_metadata<P: AsRef<Path>>(&self, rel_path: P) -> AssetMetadata {
         let mut path = rel_path.as_ref().to_owned();
         path.set_extension("json");
-        self.load_assets_dict(Some(path)).unwrap_or_else(|| AssetInfo::<()>::default()).metadata()
+        self.load_assets_dict(Some(path))
+            .unwrap_or_else(|| AssetInfo::<()>::default())
+            .metadata()
     }
 
-    pub fn load_asset_info<P: AsRef<Path>, T: DeserializeOwned>(&self, rel_path: P) -> AssetInfo<T> {
+    pub fn load_asset_info<P: AsRef<Path>, T: DeserializeOwned>(
+        &self,
+        rel_path: P,
+    ) -> AssetInfo<T> {
         let mut path = rel_path.as_ref().to_owned();
         path.set_extension("json");
-        self.load_assets_dict(Some(path)).unwrap_or_else(|| AssetInfo::default())
+        self.load_assets_dict(Some(path))
+            .unwrap_or_else(|| AssetInfo::default())
     }
 
     pub fn load_custom_story_ruby(&self, ast_ruby_name: &str) -> Option<Vec<CustomRubyBlock>> {
@@ -1007,12 +1382,17 @@ impl LocalizedData {
 
         let id_str = filename_no_ext.strip_prefix("ast_ruby_")?;
 
-        if id_str.len() < 6 { return None; }
+        if id_str.len() < 6 {
+            return None;
+        }
 
         let category_id = &id_str[0..2];
         let story_id = &id_str[2..6];
 
-        let path = format!("story/data/{}/{}/{}.json", category_id, story_id, filename_no_ext);
+        let path = format!(
+            "story/data/{}/{}/{}.json",
+            category_id, story_id, filename_no_ext
+        );
 
         self.load_assets_dict(Some(path))
     }
@@ -1076,7 +1456,7 @@ pub struct LocalizedDataConfig {
 
     // RESERVED
     #[serde(default)]
-    pub _debug: i32
+    pub _debug: i32,
 }
 
 #[derive(Deserialize, Clone)]
@@ -1090,7 +1470,6 @@ pub struct UITextConfig {
     pub position_offset_x2: Option<f32>,
     pub position_offset_y2: Option<f32>,
 }
-
 
 impl Default for LocalizedDataConfig {
     fn default() -> Self {
@@ -1108,7 +1487,7 @@ pub struct AssetInfo<T> {
     #[serde(default)]
     windows: AssetMetadata,
 
-    pub data: Option<T>
+    pub data: Option<T>,
 }
 
 // Can't derive(Default), see rust-lang/rust#26925
@@ -1121,7 +1500,7 @@ impl<T> Default for AssetInfo<T> {
             #[cfg(target_os = "windows")]
             windows: Default::default(),
 
-            data: None
+            data: None,
         }
     }
 }
@@ -1146,7 +1525,7 @@ impl<T> AssetInfo<T> {
 
 #[derive(Deserialize, Clone, Default)]
 pub struct AssetMetadata {
-    pub bundle_name: Option<String>
+    pub bundle_name: Option<String>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -1155,7 +1534,7 @@ pub struct PenaltiesConfig {
     overflow_penalty: usize,
     short_last_line_fraction: usize,
     short_last_line_penalty: usize,
-    hyphen_penalty: usize
+    hyphen_penalty: usize,
 }
 
 #[derive(Deserialize, Clone)]
@@ -1173,9 +1552,15 @@ pub struct SkillFormatting {
     pub name_sp_mult: f32,
 }
 impl SkillFormatting {
-    fn default_length() -> i32 { 18 }
-    fn default_lines() -> i32 { 1 }
-    fn default_mult() -> f32 { 1.0 }
+    fn default_length() -> i32 {
+        18
+    }
+    fn default_lines() -> i32 {
+        1
+    }
+    fn default_mult() -> f32 {
+        1.0
+    }
 }
 
 impl Default for SkillFormatting {
@@ -1185,6 +1570,127 @@ impl Default for SkillFormatting {
             desc_length: 18,
             name_short_lines: 1,
             name_short_mult: 1.0,
-            name_sp_mult: 1.0 }
+            name_sp_mult: 1.0,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{caption_config_fields, default_config_field_order, CaptionConfig, Config, Hachimi, Region};
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn default_config_field_order_contains_caption_fields() {
+        let order = default_config_field_order();
+        let caption_fields = caption_config_fields();
+
+        for field in caption_fields {
+            assert!(order.contains(&field), "caption field '{}' is missing from canonical order", field);
+        }
+    }
+
+    #[test]
+    fn caption_config_fields_match_struct_fields() {
+        let fields = caption_config_fields();
+        let mut expected = vec![
+            "caption_enable".to_string(),
+            "caption_show_log_enable".to_string(),
+            "caption_format_log_enable".to_string(),
+            "caption_fallback_enable".to_string(),
+            "caption_lines_char_count".to_string(),
+            "caption_font_size".to_string(),
+            "caption_color".to_string(),
+            "caption_outline_size".to_string(),
+            "caption_outline_color".to_string(),
+            "caption_bg_alpha".to_string(),
+            "caption_pos_x".to_string(),
+            "caption_pos_y".to_string(),
+        ];
+        let mut actual = fields.clone();
+        expected.sort();
+        actual.sort();
+
+        assert_eq!(actual, expected, "caption config fields changed unexpectedly");
+    }
+
+    #[test]
+    fn config_default_is_serializable() {
+        let _ = serde_json::to_value(&Config::default()).expect("default Config must serialize");
+    }
+
+    #[test]
+    fn caption_config_default_is_serializable() {
+        let _ = serde_json::to_value(&CaptionConfig::default()).expect("default CaptionConfig must serialize");
+    }
+
+    #[test]
+    fn sanitize_config_preserves_unknown_keys() {
+        let mut data = serde_json::Map::new();
+        data.insert("language".to_string(), serde_json::Value::String("en".to_string()));
+        data.insert("config_schema_version".to_string(), serde_json::Value::Number(1.into()));
+        data.insert("ui_theme_json".to_string(), serde_json::Value::String("{}".to_string()));
+        data.insert("some_custom_key".to_string(), serde_json::Value::String("custom".to_string()));
+
+        let json = serde_json::Value::Object(data);
+        let temp_dir = std::env::temp_dir().join(format!("hachimi_sanitize_test_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let config_path = temp_dir.join("config.json");
+        fs::write(&config_path, serde_json::to_string(&json).expect("serialize test config")).expect("write temp config");
+
+        Hachimi::sanitize_config(&config_path);
+
+        let reloaded: serde_json::Value = serde_json::from_str(&fs::read_to_string(&config_path).expect("read sanitized config")).expect("parse sanitized config");
+        let obj = reloaded.as_object().expect("sanitized config object");
+
+        assert_eq!(obj.get("some_custom_key").and_then(|v| v.as_str()), Some("custom"));
+        assert_eq!(obj.get("config_schema_version").and_then(|v| v.as_u64()), Some(2));
+        assert!(!obj.contains_key("ui_theme_json"));
+    }
+
+    #[test]
+    fn sanitize_config_rewrites_duplicate_fields() {
+        let test_json = r#"
+        {
+          "language": "en",
+          "config_schema_version": 2,
+          "enable_smtc": false,
+          "enable_smtc": true
+        }
+        "#;
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "hachimi_duplicate_field_test_{}",
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let config_path = temp_dir.join("config.json");
+        fs::write(&config_path, test_json).expect("write duplicate-key config");
+
+        Hachimi::sanitize_config(&config_path);
+
+        let sanitized = fs::read_to_string(&config_path).expect("read sanitized config");
+        serde_json::from_str::<Config>(&sanitized)
+            .expect("sanitized config must deserialize into Config");
+    }
+
+    #[test]
+    fn load_config_sanitizes_duplicate_keys_on_parse_failure() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "hachimi_load_sanitize_test_{}",
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let config_path = temp_dir.join("config.json");
+        fs::write(
+            &config_path,
+            r#"{ "language": "en", "config_schema_version": 2, "enable_smtc": false, "enable_smtc": true }"#,
+        )
+        .expect("write duplicate-key config");
+
+        let config = Hachimi::load_config(&temp_dir, &Region::Unknown)
+            .expect("load config should recover from duplicate keys");
+        assert!(config.windows.enable_smtc);
     }
 }

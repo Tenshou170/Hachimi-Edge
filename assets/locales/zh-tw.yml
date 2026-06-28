@@ -1,15 +1,20 @@
 hachimi: "Hachimi Edge"
 
-windows:
+windows: 
   menu_open_key: "右方向鍵"
 
-android:
-  menu_open_key: "提高音量鍵 + 降低音量鍵\n\uf25a 或 三擊左上角"
+android: 
+  menu_open_key: "提高音量鍵 + 降低音量鍵\n\ue87c 或 三擊左上角"
 
-splash_sub: "\uf015 按下 %{open_key_str} 來打開選單。"
+splash_sub: "\ue88a 按下 %{open_key_str} 來打開選單。"
 loading_label: "載入中"
 search_filter: "輸入以搜尋..."
 open: "開啟"
+reload: "重載"
+check: "檢查"
+dump: "導出"
+restart: "重啟"
+toggle: "切換"
 cancel: "取消"
 save: "儲存"
 done: "完成"
@@ -19,6 +24,11 @@ yes: "是"
 no: "否"
 ok: "OK"
 retry: "重試"
+bind_key: "綁定按鍵"
+set_keybind: 
+  title: "設定快捷鍵"
+  press_any_key: "按下任意按鍵…"
+  bound_key: "已綁定按鍵：%{key}"
 default: "預設"
 off: "關閉"
 on: "開啟"
@@ -32,38 +42,39 @@ soft_restart_confirm_content: "您是否想要軟重啟本遊戲？"
 in_game_browser_confirm_content: "您是否想要開啟遊戲內瀏覽器？"
 browser_dialog_title: "瀏覽器"
 
-menu:
-  check_for_updates: "\uf0aa 檢查更新"
+menu: 
+  check_for_updates: "\ue923 檢查更新"
   fps_text: "FPS: %{fps}"
-  close_menu: "\uf00d 關閉選單"
-  stats_heading: "\uf022 狀態"
+  close_menu: "\ue5cd 關閉選單"
+  stats_heading: "\ue473 狀態"
   localize_dict_entries: "localize_dict 載入數量: %{count}"
   hashed_dict_entries: "hashed_dict 載入數量: %{count}"
-  config_heading: "\uf0ad 設置"
-  open_config_editor: "\uf040 開啟設置編輯器"
-  reload_config: "\uf021 重新載入設置"
-  open_first_time_setup: "\uf135 開啟設定精靈"
-  graphics_heading: "\uf03e 圖像"
+  config_heading: "\ue8b8 設置"
+  open_config_editor: "\ue8b9 開啟設置編輯器"
+  reload_config: "\ue5d5 重新載入設置"
+  open_first_time_setup: "\ue869 開啟設定精靈"
+  graphics_heading: "\ueb97 圖像"
   fps_label: "FPS"
   vsync_label: "垂直同步"
   stay_on_top: "保持在最上層"
   keep_screen_on: "防止螢幕逾時"
-  translation_heading: "\uf02d 翻譯"
-  reload_localized_data: "\uf021 重新載入翻譯數據"
-  tl_check_for_updates: "\uf0aa 檢查翻譯更新"
-  tl_check_for_updates_pedantic: "\uf0aa 檢查翻譯更新（深度模式）"
-  dump_localize_dict: "導出 localize dict"
-  danger_zone_heading: "\uf071 危險區域"
+  translation_heading: "\ue894 翻譯"
+  reload_localized_data: "\ue5d5 重新載入翻譯數據"
+  tl_check_for_updates: "\ue923 檢查翻譯更新"
+  tl_check_for_updates_pedantic: "\ue923 檢查翻譯更新（深度模式）"
+  dump_localize_dict: "\ue2c4 匯出在地化字典"
+  danger_zone_heading: "\ue8b2 危險區域"
   danger_zone_warning: "更改這些選項可能會導致遊戲異常，請小心使用！"
-  soft_restart: "\uf021 軟重啟"
-  open_in_game_browser: "\uf0ac 開啟遊戲內瀏覽器"
-  toggle_game_ui: "\uf06e 開啟/關閉遊戲 UI"
+  soft_restart: "\ue5d5 軟重啟"
+  open_in_game_browser: "\ue80b 開啟遊戲內瀏覽器"
+  toggle_game_ui: "\ue8f4 開啟/關閉遊戲 UI"
   discord_rpc: "Discord RPC"
 
-notification:
+notification: 
   saved_localize_dump: "保存至 localize_dump.json"
   config_reloaded: "已重新載入設置。"
   config_saved: "已保存設置。"
+  config_error: "設置檔案已損毀，將使用預設值..."
   localized_data_reloaded: "已重新載入翻譯資料。"
   checking_for_tl_updates: "檢查翻譯更新"
   no_tl_updates: "沒有可用的翻譯更新。"
@@ -72,20 +83,22 @@ notification:
   errors_during_update: "更新時發生 %{count} 個錯誤，請確認日誌以獲取更多資訊。"
   checking_for_updates: "檢查更新"
   no_updates: "無可用的更新。"
-  ipc_softreset_exec: "已遠端軟重啟（IPC）。"
   press_to_set_menu_key: "請在遊戲視窗按下新的按鍵以設為開啟選單按鍵。"
   menu_open_key_set: "已設置開啟選單按鍵為 %{key}"
+  ipc_softreset_exec: "已遠端軟重啟（IPC）。"
   atlas_workaround_reset: "偵測到 Atlas 檔案更新：已重新套用 Atlas 翻譯修復。"
-  config_error: "設置檔案已損毀，將使用預設值..."
   asset_mismatch: "部分資源因版本更新已被停用，請查看日誌了解詳情。"
+  error_occurred: "發生錯誤: %{reason}"
 
-first_time_setup:
+first_time_setup: 
   title: "設定精靈"
   welcome_heading: "歡迎"
   welcome_content: >-
     歡迎使用 Hachimi！此設定精靈將會引導您完成翻譯器的初始化。
     如果您不需要使用翻譯功能，您可以關閉此對話框。
     您也可以隨時在設置編輯器中更改這些選項。
+
+
   translation_repo_heading: "翻譯資料庫"
   select_translation_repo: "選擇一個翻譯資料庫："
   no_compatible_repo: "沒有與此遊戲版本相容的翻譯資料庫。"
@@ -96,14 +109,14 @@ first_time_setup:
     點擊完成後，配置將被保存並檢查更新，
     這將提示您下載新的翻譯數據。
 
-about:
+about: 
   title: "關於"
   copyright: "© 2024-%{year} LeadRDRK, kairusds and contributors"
   view_license: "查看許可證"
   open_website: "開啟網站"
   view_source_code: "查看原始碼"
 
-license:
+license: 
   title: "許可證"
   gpl_v3_only_notice: "GPL-3.0-only 許可證文本"
   ofl_fonts_header: "本軟體包含以下字體，遵循 SIL Open Font License 1.1："
@@ -113,17 +126,20 @@ license:
   font_alibaba_header: "阿里巴巴普惠體 3.0"
   font_alibaba_body: "Copyright (c) 2020-2023 Alibaba (China) Co., Ltd. All rights reserved."
 
-tl_updater:
+tl_updater: 
   title: "更新中"
-  warning: |
-    在進行更新時，
-    將無法使用翻譯功能。
+  checking: "正在檢查..."
+  warning: "Translations will not work while update is in progress"
 
-config_editor:
+config_editor: 
   title: "設置編輯器"
-  general_tab: "\uf013 一般"
-  graphics_tab: "\uf03e 圖像"
-  gameplay_tab: "\uf11b 遊戲"
+  general_tab: "\ue8b9 一般"
+  graphics_tab: "\ueb97 圖像"
+  gameplay_tab: "\ue30f 遊戲"
+  advanced_tab: "\ue869 進階"
+  advanced_settings_heading: "進階"
+  experimental_settings_heading: "實驗性"
+  developer_settings_heading: "開發者"
   language: "語言"
   restore_defaults: "還原預設值"
   disable_overlay: "禁用覆蓋層 (GUI)"
@@ -148,6 +164,14 @@ config_editor:
   disable_translations: "禁用翻譯"
   enable_ipc: "啟用 IPC"
   ipc_listen_all: "監聽所有 IPC 地址"
+  auto_translate_stories: "自動翻譯劇情"
+  auto_tl_warning: >-
+    注意：此功能無法獨立運行，需要外部設置。
+    啟用此選項需要您的電腦上安裝相容的翻譯伺服器，
+    或使用提供 API 的雲服務（如 py3translationServer 或 Sugoi Toolkit）。
+    若未運行伺服器，將無法進行額外翻譯，且可能影響遊戲運行。
+    如果您沒有可用的翻譯伺服器，請保持此選項關閉。
+  auto_translate_ui: "自動翻譯 UI\n(可能會導致UI錯誤)"
   notification_tp: "TP 恢復通知"
   notification_rp: "RP 恢復通知"
   notification_jobs: "任務完成通知"
@@ -159,14 +183,6 @@ config_editor:
   msgpack_notifier_request: "在通知器中包含請求"
   msgpack_notifier_host: "通知器主機 URL"
   msgpack_notifier_print_error: "將 HTTP 錯誤輸出至主控台"
-  auto_translate_stories: "自動翻譯劇情"
-  auto_tl_warning: >-
-    注意：此功能無法獨立運行，需要外部設置。
-    啟用此選項需要您的電腦上安裝相容的翻譯伺服器，
-    或使用提供 API 的雲服務（如 py3translationServer 或 Sugoi Toolkit）。
-    若未運行伺服器，將無法進行額外翻譯，且可能影響遊戲運行。
-    如果您沒有可用的翻譯伺服器，請保持此選項關閉。
-  auto_translate_ui: "自動翻譯 UI\n(可能會導致UI錯誤)"
   target_fps: "目標 FPS"
   virtual_resolution_multiplier: "虛擬解析度倍率"
   ui_scale: "UI 比例"
@@ -190,22 +206,44 @@ config_editor:
   force_allow_dynamic_camera: "強制允許動態相機"
   live_theater_allow_same_chara: "演唱會劇場中\n允許設置相同角色"
   physics_update_mode: "物理運算模式"
-  disable_skill_name_translation: "停用技能名稱翻譯"
   cyspring_mono_uncap_frame_scale: "CySpring Mono 幀率縮放解鎖"
   cyspring_disable_native: "強制 CySpring Mono 路徑（停用原生插件）"
+  disable_skill_name_translation: "停用技能名稱翻譯"
+  hide_ingame_ui_hotkey: "隱藏遊戲內 UI 快捷鍵"
+  hide_ingame_ui_hotkey_info: >-
+    此選項允許使用快捷鍵切換遊戲內介面（UI）的顯示。
+    Android 端，您需要雙擊「音量上鍵」，或連續三次點擊螢幕右上角。
+    對於配備鍵盤的 PC/Android 裝置，預設按鍵為 Insert，並可在 GUI 或設定檔中進行更改。
   unlock_live_chara: "解鎖 Live 劇場角色/歌曲"
   live_slider_always_show: "始終顯示 Live 進度條"
   live_playback_loop: "循環播放 Live 演出"
   champions_live_show_text: "覆蓋冠軍賽 Live 文字"
   champions_live_resource_id: "冠軍賽標題"
   champions_live_year: "冠軍賽年份"
-  hide_ingame_ui_hotkey: "隱藏遊戲內 UI 快捷鍵"
-  hide_ingame_ui_hotkey_info: >-
-    此選項允許使用快捷鍵切換遊戲內介面（UI）的顯示。
-    Android 端，您需要雙擊「音量上鍵」，或連續三次點擊螢幕右上角。
-    對於配備鍵盤的 PC/Android 裝置，預設按鍵為 Insert，並可在 GUI 或設定檔中進行更改。
+  captions: "字幕"
+  caption_font_size: "字體大小"
+  caption_bg_alpha: "背景不透明度"
+  caption_pos_x: "位置 X"
+  caption_pos_y: "位置 Y"
+  caption_color: "文字顏色"
+  caption_fallback_enable: "回退換行"
+  caption_fallback_tooltip: "每 N 個字元插入軟換行"
+  caption_show_logging: "記錄字幕顯示事件"
+  caption_show_logging_tooltip: "啟用後，字幕可見性與事件將寫入日誌輸出"
+  caption_format_logging: "記錄字幕格式化"
+  caption_format_logging_tooltip: "啟用後，字幕格式化步驟將寫入日誌輸出"
+  caption_logging: "記錄字幕以便除錯"
+  caption_logging_tooltip: "啟用後，字幕會寫入日誌輸出"
+  caption_lines_char_count: "每行字元數"
+  caption_outline_color: "描邊顏色"
+  caption_outline_size: "描邊大小"
+  enable_keyboard_shortcuts: "啟用遊戲內鍵盤快捷鍵"
+  discord_rpc: "Discord RPC"
+  enable_smtc: "啟用 Windows 媒體控制"
+  unavailable_wine_proton: "在 Wine/Proton 下無法使用"
   menu_open_key: "選單開啟熱鍵"
-  menu_open_key_set: "按下按鍵進行設定"
+  menu_open_key_set: "設定"
+  msaa: "MSAA"
   render_scale: "渲染比例"
   aniso_level: "各向異性過濾"
   live_vocals_swap: "Live演唱人聲切換"
@@ -213,22 +251,6 @@ config_editor:
   skill_info_dialog: "自訂技能資訊視窗"
   homescreen_bgseason: "主介面背景季節"
   shadow_resolution: "陰影解析度"
-  captions: "字幕"
-  caption_font_size: "字體大小"
-  caption_bg_alpha: "背景不透明度"
-  caption_pos_x: "位置 X"
-  caption_pos_y: "位置 Y"
-  caption_color: "文字顏色"
-  caption_outline_color: "描邊顏色"
-  caption_outline_size: "描邊大小"
-  enable_keyboard_shortcuts: "啟用遊戲內鍵盤快捷鍵"
-  discord_rpc: "Discord RPC"
-  enable_smtc: "啟用 Windows 媒體控制"
-  msaa: "MSAA"
-  advanced_tab: "\uf0ad 進階"
-  advanced_settings_heading: "進階"
-  experimental_settings_heading: "實驗性"
-  developer_settings_heading: "開發者"
   text_debug: "文字除錯模式"
   text_log: "記錄已處理的文字"
   text_property_dump: "匯出 UI 屬性"
@@ -243,40 +265,54 @@ config_editor:
   hide_ingame_ui_hotkey_bind: "隱藏 UI 快捷鍵"
   ui_loading_show_orientation_guide: "載入時顯示方向引導"
   full_screen_res: "自訂全螢幕解析度"
+  landscape: "橫屏"
+  portrait: "豎屏"
   localized_data_dir: "本地化資料目錄"
   hook_libc_dlopen: "強制 libc dlopen 掛鉤（Waydroid/模擬器）"
   keep_screen_on: "防止螢幕逾時"
 
-theme_editor:
-  title: "界面主題編輯器"
-  ui_accent_color: "重點色"
-  ui_window_fill: "視窗背景顏色"
-  ui_panel_fill: "面板背景顏色"
-  ui_extreme_bg_color: "輸入框背景"
-  ui_text_color: "文字顏色"
-  ui_window_rounding: "圓角程度"
+theme_editor: 
+  title: "主題設定"
+  seed_color: "種子顏色"
+  theme_mode: "主題模式"
+  dark: "深色"
+  light: "淺色"
+  contrast_level: "對比度"
+  normal: "普通"
+  medium: "中等"
+  high: "高"
+  scheme_mode: "配色方案"
+  auto: "自動（基於種子色）"
+  manual: "手動"
+  manual_colors: "顏色覆寫"
+  primary: "主色"
+  surface: "表面色"
+  on_surface: "表面文字色"
+  transparency: "背景主題透明度"
+  corner_radius: "圓角半徑"
+  translucent_windows: "半透明視窗"
 
-tl_update_dialog:
+tl_update_dialog: 
   title: "有可用的更新"
   content: "有可用的更新 (%{size})，是否要下載？"
   content_zip_warning: "有新的翻譯更新可用（%{changed_size}）。此更新將改為下載完整的封存檔（%{download_size}）。"
 
-update_prompt_dialog:
+update_prompt_dialog: 
   title: "有可用的更新"
   content: |
     目前有可用的更新 (%{version})，是否要安裝？
     遊戲將重新啟動以套用更新內容。
   android_content: |
     檢測到 Hachimi Edge 的新版本 (%{version})。是否更新？
-
     點擊「是」將跳轉至 UmaPatcher Edge，在其中重新為當前遊戲補丁以更新 Hachimi。
     (無需重新下載完整遊戲文件或 APK，重新為當前遊戲版本的 APK 補丁並安裝即可，UmaPatcher Edge 將自動下載最新版本的 Hachimi Edge。)
 
-updating_dialog:
+
+updating_dialog: 
   title: "更新中"
   content: "正在下載更新，遊戲將會在稍後重啟…"
 
-steam_overlay_conflict_dialog:
+steam_overlay_conflict_dialog: 
   title: "注意"
   content: >-
     啟用 Hachimi GUI 時，遊戲內購功能可能無法正常運作。
@@ -284,7 +320,7 @@ steam_overlay_conflict_dialog:
     如果無法進行購買，請按「是」以暫時停用 Hachimi GUI 並關閉遊戲。
     下次啟動遊戲時，Hachimi GUI 將被停用，此時您可以正常進行購買。
     購買完成後，請重新啟動遊戲以重新啟用 Hachimi GUI。
-key_names:
+key_names: 
   left: "左方向鍵"
   right: "右方向鍵"
   up: "上方向鍵"
@@ -327,3 +363,25 @@ key_names:
   numpad_multiply: "小鍵盤 *"
   numpad_divide: "小鍵盤 /"
   numpad_decimal: "小鍵盤 ."
+  dpad_up: "十字鍵上"
+  dpad_down: "十字鍵下"
+  dpad_left: "十字鍵左"
+  dpad_right: "十字鍵右"
+  back: "返回"
+  volume_up: "音量加"
+  volume_down: "音量減"
+  copy: "複製"
+  cut: "剪切"
+  paste: "貼上"
+  semicolon: "分號"
+  comma: "逗號"
+  backslash: "反斜線"
+  slash: "斜線"
+  left_bracket: "["
+  right_bracket: "]"
+  grave: "反引號"
+  minus: "減號"
+  period: "點"
+  plus: "加號"
+  equals: "等號"
+  unknown: "按鍵 %{code}"

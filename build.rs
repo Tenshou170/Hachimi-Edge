@@ -4,7 +4,10 @@ fn setup_windows_build() {
     // Link proxy export defs
     let absolute_path = std::fs::canonicalize("src/windows/proxy/exports.def").unwrap();
     if std::env::var("CARGO_CFG_TARGET_ENV").unwrap() == "msvc" {
-        println!("cargo:rustc-cdylib-link-arg=/DEF:{}", absolute_path.display());
+        println!(
+            "cargo:rustc-cdylib-link-arg=/DEF:{}",
+            absolute_path.display()
+        );
     } else {
         // I have to remove the '/DEF:' every time I cross compile on linux, so might as well do this
         println!("cargo:rustc-cdylib-link-arg={}", absolute_path.display());
@@ -21,7 +24,9 @@ fn command_output_to_string(output: Output) -> String {
 
 fn execute_command(command: &mut Command) -> Option<Output> {
     let output = command.output().ok()?;
-    if !output.status.success() { return None; }
+    if !output.status.success() {
+        return None;
+    }
     Some(output)
 }
 
@@ -29,12 +34,13 @@ fn setup_version_env() {
     let mut version_str = "v".to_owned() + env!("CARGO_PKG_VERSION");
 
     if execute_command(Command::new("git").args(["--version"])).is_some() {
-        if let Some(output) = execute_command(Command::new("git").args(["rev-parse", "--short", "HEAD"])) {
+        if let Some(output) =
+            execute_command(Command::new("git").args(["rev-parse", "--short", "HEAD"]))
+        {
             version_str.push_str("-");
             let output_str = command_output_to_string(output);
-            version_str.push_str(&output_str[..output_str.len()-1]); // remove \n
-        }
-        else {
+            version_str.push_str(&output_str[..output_str.len() - 1]); // remove \n
+        } else {
             println!("cargo:warning=Failed to retrieve git commit hash");
         }
 
@@ -42,58 +48,80 @@ fn setup_version_env() {
             if !output.stdout.is_empty() && std::env::var("HACHIMI_IGNORE_DIRTY").is_err() {
                 version_str.push_str("-dirty");
             }
-        }
-        else {
+        } else {
             println!("cargo:warning=Failed to retrieve git repo status");
         }
 
-        if let Some(output) = execute_command(Command::new("git").args(["rev-parse", "--git-dir"])) {
-            println!("cargo:rerun-if-changed={}", command_output_to_string(output));
-        }
-        else {
+        if let Some(output) = execute_command(Command::new("git").args(["rev-parse", "--git-dir"]))
+        {
+            println!(
+                "cargo:rerun-if-changed={}",
+                command_output_to_string(output)
+            );
+        } else {
             println!("cargo:warning=Failed to retrieve git directory");
         }
-    }
-    else {
+    } else {
         println!("cargo:warning=Failed to execute git. Is git installed?");
     }
 
     println!("cargo:rustc-env=HACHIMI_DISPLAY_VERSION={}", version_str);
 }
 
+fn hard_compile_error(message: &str) -> ! {
+    println!("cargo:warning={}", message);
+    panic!("\n{}\n", message);
+}
+
 fn main() {
     let host = std::env::var("HOST").unwrap();
     let target = std::env::var("TARGET").unwrap();
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+
+    if target_os == "linux" {
+        hard_compile_error(
+            "========================================================================\n\
+             ERROR: Linux targets are not supported by Hachimi Edge.\n\
+             Hachimi Edge is an Android/Windows game hook and does not compile as a Linux build.\n\
+             \n\
+             Supported check/build commands:\n\
+               Windows check:  cargo xcheck\n\
+               Windows build:  cargo xbuild\n\
+               Android check:  cargo acheck\n\
+               Android build:  cargo abuild\n\
+             ========================================================================",
+        );
+    }
+
+    if target_os == "windows" && target_env == "gnu" {
+        hard_compile_error(
+            "========================================================================\n\
+             ERROR: Windows GNU/MinGW targets are not supported by Hachimi Edge.\n\
+             Use the Windows MSVC target through cargo-xwin instead.\n\
+             \n\
+             Supported Windows commands:\n\
+               cargo xcheck\n\
+               cargo xbuild\n\
+             ========================================================================",
+        );
+    }
 
     if host.contains("linux") && target.contains("windows") {
-        if target.contains("gnu") {
-            panic!(
-                "\n========================================================================\n\
-                 ERROR: Building for Windows using the GNU target (MinGW) on Linux is not supported.\n\
-                 Contributors on Linux MUST use cargo-xwin to target x86_64-pc-windows-msvc.\n\
-                 \n\
-                 Please use the provided cargo-xwin aliases:\n\
-                   cargo xcheck\n\
-                   cargo xbuild\n\
-                 ========================================================================\n"
-            );
-        }
-
         if std::env::var("CL_FLAGS").is_err() || std::env::var("LIB").is_err() {
-            panic!(
-                "\n========================================================================\n\
+            hard_compile_error(
+                "========================================================================\n\
                  ERROR: Compiling for Windows MSVC on Linux requires cargo-xwin.\n\
                  It seems you are running raw cargo commands instead of the cargo-xwin wrapper.\n\
                  \n\
-                 Please use the provided cargo-xwin aliases:\n\
+                 Supported Windows commands:\n\
                    cargo xcheck\n\
                    cargo xbuild\n\
-                 ========================================================================\n"
+                 ========================================================================",
             );
         }
     }
 
-    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os == "windows" {
         setup_windows_build();
     } else if target_os == "android" {

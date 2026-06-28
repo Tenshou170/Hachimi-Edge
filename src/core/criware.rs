@@ -36,20 +36,21 @@ static CAPTION_REQUESTS: Lazy<Mutex<Vec<CaptionData>>> = Lazy::new(|| Mutex::def
 
 static CUE_SHEET_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"_(?:9)*(\d{4})(?:\d{2})*_(\d{4})*_*(\d{2})*(?:\d{2})*$").unwrap());
 
-// ============================================================================
 // Caption filter rules
-// Edit these constants to tune which cues show captions.
+// These constants control which captions are shown by the CriWare hook.
+// Edit the lists below to tune caption visibility for cue names, voice IDs,
+// character IDs, training scenes, and view IDs.
 //
-// Rules are organised into groups. Within each group, suppression rules are
-// listed first, followed immediately by any exception rules that can override
-// them. Constants with no exceptions are noted as such.
-// ============================================================================
+// Rules are evaluated in order by group. Within each group, suppression rules
+// appear first and any exception rules appear immediately after. If a cue is
+// suppressed by a rule and no exception applies, it remains hidden.
+//
+// Group 1 is checked first, then Group 2, then Group 3, and so on. Group 5
+// can override all earlier suppression rules for specific views.
 
-// ----------------------------------------------------------------------------
 // Group 1 — Cue name patterns
-// Unconditional — no exceptions apply.
-// Any cue whose name contains one of these substrings is always suppressed.
-// ----------------------------------------------------------------------------
+// Any cue whose name contains one of these substrings is suppressed.
+// Add or remove substrings here to hide or allow cues based on name patterns.
 
 const SUPPRESS_CUE_NAME_PATTERNS: &[&str] = &[
     "snd_voi_story",
@@ -66,22 +67,18 @@ const SUPPRESS_CUE_NAME_PATTERNS: &[&str] = &[
     "_factorresearch_"
 ];
 
-// ----------------------------------------------------------------------------
 // Group 2 — Voice ID blocklist
 // Unconditional — no exceptions apply.
 // Any cue whose voice_id appears in this list is always suppressed.
-// ----------------------------------------------------------------------------
 
 const SUPPRESS_VOICE_IDS: &[i32] = &[
     95001,
 ];
 
-// ----------------------------------------------------------------------------
 // Group 3 — NPC / system character range
 // Suppresses cues from characters at or above the chara_id threshold
 // (generic system voices, NPCs, etc.).
 // Exception: specific voice IDs listed below are allowed through regardless.
-// ----------------------------------------------------------------------------
 
 /// chara_ids at or above this value are treated as NPC / system characters.
 const SUPPRESS_NPC_CHARA_ID_THRESHOLD: i32 = 9000;
@@ -93,12 +90,10 @@ const EXCEPT_NPC_ALLOW_VOICE_IDS: &[i32] = &[
     70000,
 ];
 
-// ----------------------------------------------------------------------------
 // Group 4 — Training scene filter
 // Applies only to cues whose name contains "_training_".
 // Suppresses low-index MasterCharacterSystemText entry IDs (generic ambient
 // lines) and specific extra IDs. Several exception rules can override this.
-// ----------------------------------------------------------------------------
 
 /// Entry IDs below this threshold are suppressed in training scenes.
 const SUPPRESS_TRAINING_CUE_ID_BELOW: i32 = 29;
@@ -142,13 +137,11 @@ const EXCEPT_TRAINING_SCENE_ALLOWED_VIEW_IDS: &[i32] = &[
     5901,
 ];
 
-// ----------------------------------------------------------------------------
 // Group 5 — View ID filter
 // Suppresses or force-shows captions based on the current SceneManager
 // view ID, independently of all other rules.
 // Force-show takes priority: if the view is in the allow list, all other
 // suppression rules (including the suppression list below) are bypassed.
-// ----------------------------------------------------------------------------
 
 /// View IDs where captions are always suppressed, regardless of cue name,
 /// voice ID, or character ID.
@@ -230,7 +223,7 @@ fn process_cue_info(acb: usize, info: *mut CueInfo) {
 
     let config = Hachimi::instance().config.load();
     if !config.caption.caption_enable { return; }
-    let do_log = config.debug_mode;
+    let do_log = crate::core::captions::Captions::show_log_enabled();
 
     let cue_name = unsafe {
         // --- #8 fix: CStr::from_ptr walks until \0 with no length bound.
@@ -491,16 +484,25 @@ fn process_caption_requests() {
         crate::core::captions::Captions::set_display_time(length);
 
         let config = Hachimi::instance().config.load();
-        crate::core::captions::Captions::set_format(
-            config.caption.caption_font_size,
-            &config.caption.caption_color,
-            &config.caption.caption_outline_size,
-            &config.caption.caption_outline_color,
-            config.caption.caption_pos_x,
-            config.caption.caption_pos_y,
-            config.caption.caption_bg_alpha,
-        );
-        crate::core::captions::Captions::show(&localized_text);
+        if crate::core::captions::Captions::show_log_enabled() {
+            info!("[criware] caption config: enable={} font_size={} color={} outline_size={} outline_color={} pos_x={} pos_y={} bg_alpha={} fallback={} lines={}",
+                config.caption.caption_enable,
+                config.caption.caption_font_size,
+                config.caption.caption_color,
+                config.caption.caption_outline_size,
+                config.caption.caption_outline_color,
+                config.caption.caption_pos_x,
+                config.caption.caption_pos_y,
+                config.caption.caption_bg_alpha,
+                config.caption.caption_fallback_enable,
+                config.caption.caption_lines_char_count);
+        }
+        if config.caption.caption_fallback_enable {
+            crate::core::captions::Captions::show_wrapped(&localized_text, config.caption.caption_lines_char_count);
+        } else {
+            crate::core::captions::Captions::show(&localized_text);
+        }
+        crate::core::captions::Captions::reposition_scheduled();
     }
 }
 

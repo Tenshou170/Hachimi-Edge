@@ -28,7 +28,7 @@ Hachimi Edge 是一個使用 Rust 編寫的跨平台遊戲增強與翻譯模組�
 ## 2. 依賴項配置 (實現界面視覺一致性)
 
 為了與官方發布的構建版本（例如自定義 Combo Box 大小和 UI 渲染）保持絕對的視覺一致性，Hachimi Edge 需要針對自定義修補版本的 Egui 進行編譯。
-此過程**完全由 Cargo 自動處理**。`Cargo.toml` 中已預先配置好 Git 補丁（指向 Git Fork 倉庫 `THShafi170/egui` 的 `hachimi-patches` 分支）。在編譯項目时，Cargo 會自動拉取、緩存並應用這些修改，無需開發人員進行任何手動克隆、修補或運行本地設置腳本！
+此過程**完全由 Cargo 自動處理**。`Cargo.toml` 中已預先配置好 Git 補丁（指向 Git Fork 倉庫 `Tenshou170/egui` 的 `main` 分支）。在編譯項目时，Cargo 會自動拉取、緩存並應用這些修改，無需開發人員進行任何手動克隆、修補或運行本地設置腳本！
 
 ---
 
@@ -50,22 +50,31 @@ mklink /J ndk C:\path\to\android-ndk-r27d
 
 *注意：`ndk` 連結已被 Git 自動忽略。*
 
+> [!IMPORTANT]
+> **開發機作業系統配置 (`.cargo/config.toml`)**:
+> 請根據您的開發機系統是 Windows 還是 Linux/macOS，相應地切換 [.cargo/config.toml](file:///.cargo/config.toml) 中的配置：
+> - **Windows 開發者**: 保持預設的 Windows 配置行啟用（預設已啟用）。
+> - **Linux/macOS 開發者**: 註釋掉 Windows 相關的配置行，並取消註釋 `[alias]`、`[target.aarch64-linux-android]` 和 `[env]` 下對應的 Linux 配置行。
+
 ---
 
 ## 4. 編譯模組
 
 ### Windows (x64)
 
-#### 在 Windows 上構建：
+#### 檢查程式碼：
+使用我們預配置的 Cargo 別名：
 ```bash
-cargo build --target x86_64-pc-windows-msvc --release
+cargo xcheck
 ```
+*(在 Windows 主機上原生檢查；在 Linux/macOS 主機上通過 `cargo-xwin` 交叉檢查)。*
 
-#### 在 Linux 上交叉編譯：
-使用我們預先配置的 Cargo 別名（它會調用 `cargo-xwin`）：
+#### 編譯 DLL：
+使用我們預配置的 Cargo 別名：
 ```bash
 cargo xbuild
 ```
+*(在 Windows 主機上原生構建；在 Linux/macOS 主機上通過 `cargo-xwin` 交叉編譯)。*
 
 **構建產物**：`target/x86_64-pc-windows-msvc/release/hachimi.dll`
 
@@ -97,5 +106,5 @@ RELEASE=1 ./tools/android/build.sh
 
 *   `cargo abuild`: 使用本地 `ndk` 符號連結在 release 模式下編譯 Android 版本。
 *   `cargo acheck`: 用於 Android 目標的快速編譯器檢查。
-*   `cargo xbuild`: 運行 `cargo xwin` 在 Linux 主機上交叉編譯 Windows 版本。
-*   `cargo xcheck`: 用於 Windows 交叉編譯目標的快速編譯器檢查。
+*   `cargo xbuild`: 編譯 Windows 版本（在 Windows 主機上原生構建；在 Linux/macOS 主機上運行 `cargo-xwin` 進行交叉編譯）。
+*   `cargo xcheck`: 用於 Windows 目標的快速編譯器檢查（在 Windows 主機上原生檢查；在 Linux/macOS 主机上通過 `cargo-xwin` 交叉檢查）。
