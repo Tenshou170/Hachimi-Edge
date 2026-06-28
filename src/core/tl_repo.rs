@@ -514,7 +514,6 @@ impl Updater {
                 };
 
                 let updater = Hachimi::instance().tl_updater.clone();
-                let etag_to_skip = new_etag.clone();
 
                 mutex
                     .lock()
@@ -524,7 +523,6 @@ impl Updater {
                         &dialog_message,
                         move |ok| {
                             if !ok {
-                                updater.skip_update(etag_to_skip);
                                 updater.clear_pending_update();
                                 return;
                             }

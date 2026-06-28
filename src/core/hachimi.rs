@@ -345,6 +345,9 @@ impl Hachimi {
             );
         }
 
+        #[cfg(target_os = "android")]
+        crate::android::hachimi_impl::set_keep_screen_on(new_config.android.keep_screen_on);
+
         self.config.store(Arc::new(new_config));
         crate::core::captions::Captions::reposition_scheduled();
     }
@@ -380,6 +383,9 @@ impl Hachimi {
                 std::sync::atomic::Ordering::Relaxed,
             );
         }
+
+        #[cfg(target_os = "android")]
+        crate::android::hachimi_impl::set_keep_screen_on(config.android.keep_screen_on);
 
         self.config.store(Arc::new(config));
         crate::core::captions::Captions::reposition_scheduled();
