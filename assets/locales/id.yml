@@ -80,6 +80,7 @@ notification:
   no_tl_updates: "Tidak ada pembaruan translasi."
   update_failed: "Pembaruan gagal: %{reason}"
   update_completed: "Pembaruan berhasil."
+  mod_update_completed: "Pembaruan addon berhasil."
   errors_during_update: "%{count} error terjadi ketika pembaruan. Mohon periksa log untuk info lanjutan."
   checking_for_updates: "Memeriksa pembaruan..."
   no_updates: "Tidak ada pembaruan."
@@ -163,6 +164,8 @@ config_editor:
   bg_update_periodic: "Berkala (Tanya)"
   bg_update_silent: "Senyap (Otomatis)"
   bg_update_interval: "Interval pembaruan latar belakang"
+  disable_mod_downloads: "Matikan unduhan addon"
+  translation_repo_index_mod: "URL indeks addon translasi"
   disable_translations: "Matikan translasi"
   enable_ipc: "Nyalakan IPC"
   ipc_listen_all: "Buka IPC listen-all"
@@ -299,6 +302,8 @@ tl_update_dialog:
   title: "Pembaruan Translasi Tersedia"
   content: "Pembaruan translasi tersedia (%{size}). Apa kamu ingin mengunduhnya?"
   content_zip_warning: "Pembaruan translasi tersedia (%{changed_size}). Pembaruan akan diunduh secara arsip (%{download_size})."
+  title_mod: "Pembaruan Addon Tersedia"
+  content_mod: "Pembaruan addon translasi tersedia (%{size}). Apa kamu ingin mengunduhnya?"
 
 update_prompt_dialog: 
   title: "Pembaruan tersedia!"

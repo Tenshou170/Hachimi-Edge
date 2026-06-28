@@ -80,6 +80,7 @@ notification:
   no_tl_updates: "Không có bản cập nhật bản dịch."
   update_failed: "Cập nhật thất bại: %{reason}"
   update_completed: "Cập nhật thành công."
+  mod_update_completed: "Cập nhật addon thành công."
   errors_during_update: "%{count} lỗi đã xảy ra trong lúc cập nhật. Kiểm tra log để biết thêm thông tin."
   checking_for_updates: "Đang kiểm tra cập nhật..."
   no_updates: "Không có bản cập nhật."
@@ -159,6 +160,8 @@ config_editor:
   bg_update_periodic: "Định kỳ (Hỏi)"
   bg_update_silent: "Im lặng (Tự động)"
   bg_update_interval: "Khoảng thời gian cập nhật nền"
+  disable_mod_downloads: "Tắt tải xuống addon"
+  translation_repo_index_mod: "URL chỉ mục addon bản dịch"
   disable_translations: "Tắt bản dịch"
   enable_ipc: "Bật IPC"
   ipc_listen_all: "IPC listen all"
@@ -295,6 +298,8 @@ tl_update_dialog:
   title: "Bản cập nhật mới"
   content: "Đã có bản cập nhật bản dịch mới (%{size}). Bạn có muốn tải về không?"
   content_zip_warning: "Đã có bản cập nhật dịch thuật mới (%{changed_size}). Bản cập nhật này sẽ tải về toàn bộ tệp lưu trữ (%{download_size}) thay thế."
+  title_mod: "Có bản cập nhật addon mới"
+  content_mod: "Đã có bản cập nhật addon bản dịch mới (%{size}). Bạn có muốn tải về không?"
 
 update_prompt_dialog: 
   title: "Bản cập nhật mới"

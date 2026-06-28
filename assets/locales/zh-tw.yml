@@ -80,6 +80,7 @@ notification:
   no_tl_updates: "沒有可用的翻譯更新。"
   update_failed: "更新失敗: %{reason}"
   update_completed: "更新完成。"
+  mod_update_completed: "附加元件更新完成。"
   errors_during_update: "更新時發生 %{count} 個錯誤，請確認日誌以獲取更多資訊。"
   checking_for_updates: "檢查更新"
   no_updates: "無可用的更新。"
@@ -161,6 +162,8 @@ config_editor:
   bg_update_periodic: "定期（提示）"
   bg_update_silent: "靜默（自動）"
   bg_update_interval: "背景更新間隔"
+  disable_mod_downloads: "禁用附加元件下載"
+  translation_repo_index_mod: "翻譯附加元件索引 URL"
   disable_translations: "禁用翻譯"
   enable_ipc: "啟用 IPC"
   ipc_listen_all: "監聽所有 IPC 地址"
@@ -296,6 +299,8 @@ tl_update_dialog:
   title: "有可用的更新"
   content: "有可用的更新 (%{size})，是否要下載？"
   content_zip_warning: "有新的翻譯更新可用（%{changed_size}）。此更新將改為下載完整的封存檔（%{download_size}）。"
+  title_mod: "有可用的附加元件更新"
+  content_mod: "有可用的翻譯附加元件更新 (%{size})，是否要下載？"
 
 update_prompt_dialog: 
   title: "有可用的更新"

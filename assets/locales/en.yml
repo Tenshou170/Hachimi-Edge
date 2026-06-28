@@ -80,6 +80,7 @@ notification:
   no_tl_updates: "No translation updates available."
   update_failed: "Update failed: %{reason}"
   update_completed: "Update completed."
+  mod_update_completed: "Addon update completed."
   errors_during_update: "%{count} errors occurred during update. Check logs for more info."
   checking_for_updates: "Checking for updates..."
   no_updates: "No updates available."
@@ -163,6 +164,8 @@ config_editor:
   bg_update_periodic: "Periodic (Prompt)"
   bg_update_silent: "Silent (Auto)"
   bg_update_interval: "Background update interval"
+  disable_mod_downloads: "Disable addon downloads"
+  translation_repo_index_mod: "Translation addon index URL"
   disable_translations: "Disable translations"
   enable_ipc: "Enable IPC"
   ipc_listen_all: "IPC listen all"
@@ -300,6 +303,8 @@ tl_update_dialog:
   title: "New update available"
   content: "A new translation update is available (%{size}). Do you want to download it?"
   content_zip_warning: "A new translation update is available (%{changed_size}). This update will download the full archive (%{download_size}) instead."
+  title_mod: "New addon update available"
+  content_mod: "A new translation addon update is available (%{size}). Do you want to download it?"
 
 update_prompt_dialog:
   title: "New update available"

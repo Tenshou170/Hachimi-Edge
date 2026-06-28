@@ -486,13 +486,35 @@ impl Hachimi {
         self.game.data_dir.join(rel_path)
     }
 
+    pub fn get_localized_data_dirs(&self) -> Vec<String> {
+        let mut dirs = Vec::new();
+        if let Ok(entries) = fs::read_dir(&self.game.data_dir) {
+            for entry in entries.flatten() {
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_dir() {
+                        let name = entry.file_name().to_string_lossy().into_owned();
+                        if name.starts_with("localized_data") {
+                            dirs.push(name);
+                        }
+                    }
+                }
+            }
+        }
+        if !dirs.contains(&"localized_data".to_string()) {
+            dirs.push("localized_data".to_string());
+        }
+        dirs.sort();
+        dirs
+    }
+
     pub fn run_auto_update_check(&self) {
         if !self.config.load().disable_auto_update_check {
             // Check for hachimi updates first, then translations
             // Don't auto check for tl updates if it's not up to date
             self.updater.clone().check_for_updates(|new_update| {
                 let hachimi = Hachimi::instance();
-                if !new_update && !hachimi.config.load().translator_mode {
+                let config = hachimi.config.load();
+                if !new_update && !config.translator_mode {
                     hachimi.tl_updater.clone().check_for_updates(false, false);
                 }
             });
@@ -844,6 +866,10 @@ pub struct Config {
     #[serde(default = "Config::default_open_browser_url")]
     pub open_browser_url: String,
     pub translation_repo_index: Option<String>,
+    #[serde(default)]
+    pub translation_repo_index_mod: Option<String>,
+    #[serde(default)]
+    pub disable_mod_downloads: bool,
     #[serde(default = "Config::default_config_schema_version")]
     pub config_schema_version: u32,
 

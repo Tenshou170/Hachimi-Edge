@@ -80,6 +80,7 @@ notification:
   no_tl_updates: "No hay actualizaciones."
   update_failed: "Actualización fallida: %{reason}"
   update_completed: "Actualización completada."
+  mod_update_completed: "Actualización de addon completada."
   errors_during_update: "Se produjeron errores al actualizar (%{count}). Comprueba los registros para más detalles."
   checking_for_updates: "Buscando actualizaciones..."
   no_updates: "No hay actualizaciones."
@@ -165,6 +166,8 @@ config_editor:
   bg_update_periodic: "Periódico (Preguntar)"
   bg_update_silent: "Silencioso (Automático)"
   bg_update_interval: "Intervalo de actualización en segundo plano"
+  disable_mod_downloads: "Desactivar descargas de addons"
+  translation_repo_index_mod: "URL del índice de addons de traducción"
   disable_translations: "Desactivar traducciones"
   enable_ipc: "Habilitar IPC"
   ipc_listen_all: "IPC escuchar todo"
@@ -301,6 +304,8 @@ tl_update_dialog:
   title: "Nueva actualización disponible"
   content: "Existen nuevos datos de traducción (%{size}).\n¿Deseas descargarlos ahora?"
   content_zip_warning: "Existen nuevos datos de traducción (%{changed_size}).\nEsta actualización descargará el archivo completo (%{download_size})."
+  title_mod: "Nueva actualización de addon disponible"
+  content_mod: "Existen nuevos datos de addon de traducción (%{size}).\n¿Deseas descargarlos ahora?"
 
 update_prompt_dialog: 
   title: "Nueva actualización disponible"

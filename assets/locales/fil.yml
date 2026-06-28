@@ -80,6 +80,7 @@ notification:
   no_tl_updates: "Walang available na update sa translations."
   update_failed: "Nabigo ang pag-update: %{reason}"
   update_completed: "Tapos na ang pag-update."
+  mod_update_completed: "Tapos na ang pag-update ng addon."
   errors_during_update: "May %{count} na error na nangyari habang naga-update. Suriin ang mga log para sa mga detalye."
   checking_for_updates: "Tinitignan kung may update..."
   no_updates: "Walang update na available."
@@ -165,6 +166,8 @@ config_editor:
   bg_update_periodic: "Pana-panahon (Tanungin)"
   bg_update_silent: "Tahimik (Awtomatiko)"
   bg_update_interval: "Agwat ng background update"
+  disable_mod_downloads: "I-disable ang pag-download ng addon"
+  translation_repo_index_mod: "URL ng translation addon index"
   disable_translations: "I-disable ang pag-translate"
   enable_ipc: "I-enable ang IPC"
   ipc_listen_all: "IPC listen all"
@@ -300,6 +303,8 @@ tl_update_dialog:
   title: "May bagong update"
   content: "May bagong update sa translations (%{size}). Gusto mo ba ito i-download?"
   content_zip_warning: "May bagong update sa translations (%{changed_size}). Ida-download ng update na ito ang buong archive (%{download_size}) sa halip."
+  title_mod: "May bagong update sa addon"
+  content_mod: "May bagong update sa translation addon (%{size}). Gusto mo ba ito i-download?"
 
 update_prompt_dialog: 
   title: "May bagong update"
