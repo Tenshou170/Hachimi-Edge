@@ -127,6 +127,7 @@ license:
 
 tl_updater: 
   title: "Đang cập nhật..."
+  title_mod: "Đang cập nhật addon..."
   checking: "Đang kiểm tra..."
   warning: "Bản dịch sẽ không hoạt động trong lúc đang cập nhật"
 

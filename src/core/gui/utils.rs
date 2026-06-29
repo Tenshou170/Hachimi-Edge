@@ -50,10 +50,15 @@ pub fn ime_scroll_padding(_ctx: &egui::Context) -> f32 {
 #[derive(Default)]
 pub struct LiveSliderCache {
     pub director_class: usize,
-    pub director_instance_field: usize,
+    pub get_instance_method: usize,
     pub get_current_time: usize,
     pub get_total_time: usize,
     pub is_pause_live: usize,
+    // SceneManager photo-mode fields — non-null when photo mode is active
+    pub scene_manager_class: usize,
+    pub scene_manager_get_instance: usize,
+    pub photo_check_field: usize,
+    pub photo_library_field: usize,
 }
 
 #[cfg(target_os = "windows")]

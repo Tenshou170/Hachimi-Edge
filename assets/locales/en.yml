@@ -131,6 +131,7 @@ license:
 
 tl_updater:
   title: "Updating..."
+  title_mod: "Updating addon..."
   checking: "Checking..."
   warning: "Translations will not work while update is in progress"
 

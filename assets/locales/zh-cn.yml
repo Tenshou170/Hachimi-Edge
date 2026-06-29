@@ -131,6 +131,7 @@ license:
 
 tl_updater: 
   title: "更新中..."
+  title_mod: "更新附加组件..."
   checking: "正在检查..."
   warning: "翻译功能在更新期间将暂时不可用"
 

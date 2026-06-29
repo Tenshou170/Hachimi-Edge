@@ -478,6 +478,7 @@ impl Hachimi {
         hachimi_impl::on_hooking_finished(self);
 
         Hachimi::instance().start_bg_update_thread();
+        Hachimi::instance().run_auto_update_check();
 
         for plugin in self.plugins.lock().unwrap().iter() {
             info!("Initializing plugin: {}", plugin.name);

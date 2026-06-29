@@ -129,6 +129,7 @@ license:
 
 tl_updater: 
   title: "更新中"
+  title_mod: "更新附加元件..."
   checking: "正在檢查..."
   warning: "Translations will not work while update is in progress"
 

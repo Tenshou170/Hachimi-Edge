@@ -131,6 +131,7 @@ license:
 
 tl_updater: 
   title: "Memperbarui..."
+  title_mod: "Memperbarui addon..."
   checking: "Memeriksa..."
   warning: "Fitur translasi tidak bekerja saat progres pembaruan berjalan."
 

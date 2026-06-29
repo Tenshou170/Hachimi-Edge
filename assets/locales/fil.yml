@@ -133,6 +133,7 @@ license:
 
 tl_updater: 
   title: "Ina-update..."
+  title_mod: "Ina-update ang addon..."
   checking: "Sinusuri..."
   warning: "Hindi gagana ang mga translations habang ina-update."
 

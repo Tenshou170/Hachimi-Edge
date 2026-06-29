@@ -131,6 +131,7 @@ license:
 
 tl_updater: 
   title: "Atualizando..."
+  title_mod: "Atualizando addon..."
   checking: "Verificando..."
   warning: "As traduções não irão funcionar enquanto uma atualização estiver sendo realizada"
 

@@ -18,7 +18,22 @@ pub fn on_hooking_finished(_hachimi: &Hachimi) {
 }
 
 /// Sets or clears FLAG_KEEP_SCREEN_ON (0x80) on the game's window.
+/// The flag must be applied on the Android UI/main thread — calling
+/// addFlags/clearFlags from a render or background thread raises
+/// CalledFromWrongThreadException. We schedule through the IL2CPP main
+/// thread (which Unity runs on the Android UI thread) to guarantee this.
 pub fn set_keep_screen_on(enable: bool) {
+    if enable {
+        crate::il2cpp::symbols::Thread::main_thread().schedule(apply_keep_screen_on_true);
+    } else {
+        crate::il2cpp::symbols::Thread::main_thread().schedule(apply_keep_screen_on_false);
+    }
+}
+
+fn apply_keep_screen_on_true()  { apply_keep_screen_on(true);  }
+fn apply_keep_screen_on_false() { apply_keep_screen_on(false); }
+
+fn apply_keep_screen_on(enable: bool) {
     let Some(vm) = super::main::java_vm() else { return };
     let Ok(mut env) = vm.attach_current_thread() else { return };
 

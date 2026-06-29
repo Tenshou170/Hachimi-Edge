@@ -65,7 +65,7 @@ use super::{
     hachimi::{self, Language, REPO_PATH, WEBSITE_URL},
     http::AsyncRequest,
     md3_theme,
-    tl_repo::{self, RepoInfo},
+    tl_repo::RepoInfo,
     utils::SendPtr,
     Hachimi,
 };
@@ -136,8 +136,6 @@ pub struct Gui {
     notifications: Vec<Md3Snackbar>,
     next_notification_id: u32,
     windows: Vec<BoxedAppWindow>,
-
-    pub is_live_scene: bool,
 }
 
 const PIXELS_PER_POINT_RATIO: f32 = 3.0 / 1080.0;
@@ -293,16 +291,10 @@ impl Gui {
             notifications: Vec::new(),
             next_notification_id: 0,
             windows,
-
-            is_live_scene: false,
         };
 
         unsafe {
             INSTANCE.set(Mutex::new(instance)).unwrap_unchecked();
-
-            // Doing auto update check here to ensure that the updater can access the gui
-            hachimi.run_auto_update_check();
-
             INSTANCE.get().unwrap_unchecked()
         }
     }
@@ -417,10 +409,13 @@ impl Gui {
 
         unsafe {
             let (
-                director_instance_field,
+                get_instance_method,
                 get_current_time_addr,
                 get_total_time_addr,
                 is_pause_live_addr,
+                sm_get_instance,
+                photo_check_field,
+                photo_library_field,
             ) = {
                 let mut cache_guard = LIVE_SLIDER_CACHE.lock().unwrap_or_else(|e| e.into_inner());
                 let cache = cache_guard.get_or_insert_with(|| {
@@ -436,9 +431,12 @@ impl Gui {
                     };
 
                     cache.director_class = dir_class as usize;
-                    cache.director_instance_field =
-                        crate::il2cpp::symbols::get_field_from_name(dir_class, c"_instance")
-                            as usize;
+                    cache.get_instance_method =
+                        crate::il2cpp::api::il2cpp_class_get_method_from_name(
+                            dir_class,
+                            c"get_Instance".as_ptr(),
+                            0,
+                        ) as usize;
                     cache.get_current_time = crate::il2cpp::symbols::get_method_addr_cached(
                         dir_class,
                         c"get_LiveCurrentTime",
@@ -454,26 +452,98 @@ impl Gui {
                         c"IsPauseLive",
                         0,
                     );
+
+                    // SceneManager photo-mode fields
+                    if let Ok(sm_class) = crate::il2cpp::symbols::get_class(image, c"Gallop", c"SceneManager") {
+                        cache.scene_manager_class = sm_class as usize;
+                        cache.scene_manager_get_instance =
+                            crate::il2cpp::api::il2cpp_class_get_method_from_name(
+                                sm_class,
+                                c"get_Instance".as_ptr(),
+                                0,
+                            ) as usize;
+                        cache.photo_check_field =
+                            crate::il2cpp::api::il2cpp_class_get_field_from_name(
+                                sm_class,
+                                c"PhotoCheckObject".as_ptr(),
+                            ) as usize;
+                        cache.photo_library_field =
+                            crate::il2cpp::api::il2cpp_class_get_field_from_name(
+                                sm_class,
+                                c"PhotoLibraryObject".as_ptr(),
+                            ) as usize;
+                    }
+
                     cache
                 });
                 (
-                    cache.director_instance_field,
+                    cache.get_instance_method,
                     cache.get_current_time,
                     cache.get_total_time,
                     cache.is_pause_live,
+                    cache.scene_manager_get_instance,
+                    cache.photo_check_field,
+                    cache.photo_library_field,
                 )
             };
-            if director_instance_field == 0
+            if get_instance_method == 0
                 || get_current_time_addr == 0
                 || get_total_time_addr == 0
             {
                 return;
             }
 
-            let director: *mut crate::il2cpp::types::Il2CppObject =
-                crate::il2cpp::symbols::get_static_field_object_value(
-                    director_instance_field as *mut crate::il2cpp::types::FieldInfo,
+            // Hide the slider when the in-game photo mode is active
+            if sm_get_instance != 0 && (photo_check_field != 0 || photo_library_field != 0) {
+                let sm_method = sm_get_instance as *const crate::il2cpp::types::MethodInfo;
+                let mut exc: *mut crate::il2cpp::types::Il2CppException = std::ptr::null_mut();
+                let sm = crate::il2cpp::api::il2cpp_runtime_invoke(
+                    sm_method,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    &mut exc,
                 );
+                if !sm.is_null() && exc.is_null() {
+                    let in_photo_mode = if photo_check_field != 0 {
+                        let mut val: *mut crate::il2cpp::types::Il2CppObject = std::ptr::null_mut();
+                        crate::il2cpp::api::il2cpp_field_get_value(
+                            sm,
+                            photo_check_field as *mut crate::il2cpp::types::FieldInfo,
+                            &mut val as *mut _ as *mut std::ffi::c_void,
+                        );
+                        !val.is_null()
+                    } else {
+                        false
+                    } || if photo_library_field != 0 {
+                        let mut val: *mut crate::il2cpp::types::Il2CppObject = std::ptr::null_mut();
+                        crate::il2cpp::api::il2cpp_field_get_value(
+                            sm,
+                            photo_library_field as *mut crate::il2cpp::types::FieldInfo,
+                            &mut val as *mut _ as *mut std::ffi::c_void,
+                        );
+                        !val.is_null()
+                    } else {
+                        false
+                    };
+
+                    if in_photo_mode {
+                        IS_LIVE_SLIDER_ACTIVE.store(false, atomic::Ordering::Release);
+                        return;
+                    }
+                }
+            }
+
+            let director: *mut crate::il2cpp::types::Il2CppObject = {
+                let method = get_instance_method as *const crate::il2cpp::types::MethodInfo;
+                let mut exc: *mut crate::il2cpp::types::Il2CppException = std::ptr::null_mut();
+                let obj = crate::il2cpp::api::il2cpp_runtime_invoke(
+                    method,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    &mut exc,
+                );
+                if !exc.is_null() { std::ptr::null_mut() } else { obj }
+            };
             if director.is_null() {
                 return;
             }
@@ -1460,14 +1530,19 @@ impl Gui {
         let ctx = &self.context;
         let scale = get_scale(ctx);
 
-        let progress = Hachimi::instance()
-            .tl_updater
-            .progress()
-            .unwrap_or_else(|| {
-                // Assume that update is complete
-                self.update_progress_visible = false;
-                tl_repo::UpdateProgress::new(1, 1)
-            });
+        let tl_updater = Hachimi::instance().tl_updater.clone();
+
+        // Show mod progress if active, otherwise fall back to main TL progress
+        let (progress, is_mod) = if let Some(p) = tl_updater.mod_progress() {
+            (p, true)
+        } else if let Some(p) = tl_updater.progress() {
+            (p, false)
+        } else {
+            // Neither active — hide the overlay
+            self.update_progress_visible = false;
+            return;
+        };
+
         let ratio = progress.current as f32 / progress.total as f32;
 
         // Center-top card, 80% screen width, MD3 styled
@@ -1480,7 +1555,9 @@ impl Gui {
                 let pad_h = 16.0 * scale;
                 let pad_v = 10.0 * scale;
                 let is_downloading = Hachimi::instance().tl_updater.is_downloading();
-                let title = if is_downloading {
+                let title = if is_mod {
+                    t!("tl_updater.title_mod")
+                } else if is_downloading {
                     t!("tl_updater.title")
                 } else {
                     t!("tl_updater.checking")
