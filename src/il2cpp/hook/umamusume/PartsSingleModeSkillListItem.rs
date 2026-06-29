@@ -190,7 +190,7 @@ pub fn init(umamusume: *const Il2CppImage) {
         new_hook!(UpdateItem_addr, UpdateItemJp);
     }
     else {
-        let UpdateItem_addr = get_method_addr(PartsSingleModeSkillListItem, c"UpdateItem", 2);
+        let UpdateItem_addr = get_method_addr(PartsSingleModeSkillListItem, c"UpdateItem", 3);
         new_hook!(UpdateItem_addr, UpdateItemOther);
     }
 

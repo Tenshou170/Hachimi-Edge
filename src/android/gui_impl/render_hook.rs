@@ -122,6 +122,14 @@ fn init_painter() -> Result<&'static mut egui_glow::Painter, Error> {
     }
 
     info!("Painter initialized");
+
+    // Apply keep_screen_on here since the Activity window is guaranteed
+    // to exist at this point. Calling it earlier (e.g. on_hooking_finished)
+    // runs on the IL2CPP thread before the window is accessible.
+    if Hachimi::instance().config.load().android.keep_screen_on {
+        crate::android::hachimi_impl::set_keep_screen_on(true);
+    }
+
     Ok(unsafe { PAINTER.get_mut().unwrap_unchecked() })
 }
 

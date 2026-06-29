@@ -164,6 +164,7 @@ config_editor:
   bg_update_periodic: "Periódico (Perguntar)"
   bg_update_silent: "Silencioso (Automático)"
   bg_update_interval: "Intervalo de atualização em segundo plano"
+  bg_update_interval_unit: "min"
   disable_mod_downloads: "Desabilitar downloads de addons"
   translation_repo_index_mod: "URL do índice de addons de tradução"
   disable_translations: "Desabilitar traduções"

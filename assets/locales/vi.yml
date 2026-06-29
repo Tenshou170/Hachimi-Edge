@@ -160,6 +160,7 @@ config_editor:
   bg_update_periodic: "Định kỳ (Hỏi)"
   bg_update_silent: "Im lặng (Tự động)"
   bg_update_interval: "Khoảng thời gian cập nhật nền"
+  bg_update_interval_unit: "phút"
   disable_mod_downloads: "Tắt tải xuống addon"
   translation_repo_index_mod: "URL chỉ mục addon bản dịch"
   disable_translations: "Tắt bản dịch"

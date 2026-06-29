@@ -1097,6 +1097,8 @@ pub struct CommonOverrides {
     pub text_anchor: Option<i32>,
     pub pivot_x: Option<f32>,
     pub pivot_y: Option<f32>,
+    pub sizedelta_x: Option<f32>,
+    pub sizedelta_y: Option<f32>,
     pub position_offset_x: Option<f32>,
     pub position_offset_y: Option<f32>,
     pub text_override: Option<String>,

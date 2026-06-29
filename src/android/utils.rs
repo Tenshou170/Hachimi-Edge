@@ -109,7 +109,17 @@ pub fn check_keyboard_status() -> bool {
         // if the gap between bottom of screen and bottom of visible area is > 200dp, keyboard is likely up
         let height_diff = display_height - visible_bottom;
         Ok(height_diff > (display_height / 4)) // using 25% of screen as threshold
-    })().unwrap_or(false);
+    })();
+
+    let is_visible = match is_visible {
+        Ok(v) => v,
+        Err(_) => {
+            if env.exception_check().unwrap_or(false) {
+                let _ = env.exception_clear();
+            }
+            false
+        }
+    };
 
     let old = IS_IME_VISIBLE.swap(is_visible, Ordering::AcqRel);
     if old != is_visible {
@@ -223,20 +233,30 @@ pub fn get_device_api_level(env: *mut jni::sys::JNIEnv) -> i32 {
 pub fn get_screen_dimensions(mut env: JNIEnv) -> (i32, i32) {
     let Some(activity) = get_activity(unsafe { env.unsafe_clone() }) else { return (0, 0) };
 
-    let wm = env.call_method(activity, "getWindowManager", "()Landroid/view/WindowManager;", &[])
-        .ok().and_then(|v| v.l().ok()).unwrap();
-    let display = env.call_method(wm, "getDefaultDisplay", "()Landroid/view/Display;", &[])
-        .ok().and_then(|v| v.l().ok()).unwrap();
+    let result = (|| -> jni::errors::Result<(i32, i32)> {
+        let wm = env.call_method(activity, "getWindowManager", "()Landroid/view/WindowManager;", &[])?.l()?;
+        let display = env.call_method(wm, "getDefaultDisplay", "()Landroid/view/Display;", &[])?.l()?;
 
-    let dm_class = env.find_class("android/util/DisplayMetrics").unwrap();
-    let dm = env.new_object(dm_class, "()V", &[]).unwrap();
+        let dm_class = env.find_class("android/util/DisplayMetrics")?;
+        let dm = env.new_object(dm_class, "()V", &[])?;
 
-    env.call_method(display, "getRealMetrics", "(Landroid/util/DisplayMetrics;)V", &[(&dm).into()]).unwrap();
+        env.call_method(display, "getRealMetrics", "(Landroid/util/DisplayMetrics;)V", &[JValue::from(&dm)])?;
 
-    let width = env.get_field(&dm, "widthPixels", "I").unwrap().i().unwrap();
-    let height = env.get_field(&dm, "heightPixels", "I").unwrap().i().unwrap();
+        let width = env.get_field(&dm, "widthPixels", "I")?.i()?;
+        let height = env.get_field(&dm, "heightPixels", "I")?.i()?;
 
-    (width, height)
+        Ok((width, height))
+    })();
+
+    match result {
+        Ok(dims) => dims,
+        Err(_) => {
+            if env.exception_check().unwrap_or(false) {
+                let _ = env.exception_clear();
+            }
+            (0, 0)
+        }
+    }
 }
 
 pub fn set_audio_capture_policy_all() {
@@ -281,6 +301,9 @@ pub fn set_audio_capture_policy_all() {
 
     if let Err(e) = result {
         info!("JNI Audio Error: {:?}", e);
+        if env.exception_check().unwrap_or(false) {
+            let _ = env.exception_clear();
+        }
     }
 }
 

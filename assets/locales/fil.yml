@@ -166,6 +166,7 @@ config_editor:
   bg_update_periodic: "Pana-panahon (Tanungin)"
   bg_update_silent: "Tahimik (Awtomatiko)"
   bg_update_interval: "Agwat ng background update"
+  bg_update_interval_unit: "min"
   disable_mod_downloads: "I-disable ang pag-download ng addon"
   translation_repo_index_mod: "URL ng translation addon index"
   disable_translations: "I-disable ang pag-translate"

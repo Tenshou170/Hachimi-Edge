@@ -164,6 +164,7 @@ config_editor:
   bg_update_periodic: "定期（提示）"
   bg_update_silent: "静默（自动）"
   bg_update_interval: "后台更新间隔"
+  bg_update_interval_unit: "分钟"
   disable_mod_downloads: "禁用附加组件下载"
   translation_repo_index_mod: "翻译附加组件索引 URL"
   disable_translations: "禁用翻译功能"

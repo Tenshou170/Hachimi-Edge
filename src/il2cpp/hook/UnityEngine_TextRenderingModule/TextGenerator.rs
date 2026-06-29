@@ -174,6 +174,8 @@ extern "C" fn PopulateWithErrors(
             }
 
             if common.position_offset_x.is_some() || common.position_offset_y.is_some()
+                || common.sizedelta_x.is_some() || common.sizedelta_y.is_some()
+                || common.pivot_x.is_some() || common.pivot_y.is_some()
                 || props.sibling_name.is_some() || props.siblings.as_ref().map(|s: &Vec<SiblingOverride>| !s.is_empty()).unwrap_or(false)
             {
                 queue_position_offset(context, this, props);
@@ -232,7 +234,10 @@ fn queue_position_offset(context: *mut Il2CppObject, fallback: *mut Il2CppObject
 
     let mut actions = Vec::new();
 
-    if props.common.position_offset_x.is_some() || props.common.position_offset_y.is_some() || props.common.font_size.is_some() {
+    if props.common.position_offset_x.is_some() || props.common.position_offset_y.is_some()
+        || props.common.sizedelta_x.is_some() || props.common.sizedelta_y.is_some()
+        || props.common.pivot_x.is_some() || props.common.pivot_y.is_some()
+        || props.common.font_size.is_some() {
         let mut transform = unsafe { (*start_obj).transform() };
         if !transform.is_null() {
             let ancestor_levels = props.position_target_ancestor.unwrap_or(0);
@@ -364,6 +369,16 @@ fn apply_common_overrides(
                 let mut pivot = RectTransform::get_pivot(target);
                 pivot.y = py;
                 RectTransform::set_pivot(target, pivot);
+            }
+            if let Some(sdx) = props.sizedelta_x {
+                let mut sizedelta = RectTransform::get_sizeDelta(target);
+                sizedelta.x = sdx;
+                RectTransform::set_sizeDelta(target, sizedelta);
+            }
+            if let Some(sdy) = props.sizedelta_y {
+                let mut sizedelta = RectTransform::get_sizeDelta(target);
+                sizedelta.y = sdy;
+                RectTransform::set_sizeDelta(target, sizedelta);
             }
 
             if props.position_offset_x.is_some() || props.position_offset_y.is_some() {

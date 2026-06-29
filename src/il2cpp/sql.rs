@@ -698,12 +698,14 @@ impl MetaData {
     fn load_from_db() -> Self {
         let mut logical_name_to_hash = FnvHashMap::default();
 
-        let meta_path = std::path::PathBuf::from(crate::core::utils::get_data_path()).join("meta");
-        let db_path_str = meta_path.to_string_lossy().to_string();
+        let db_path_str = crate::core::utils::get_meta_path();
 
         let conn = Connection::new();
 
-        AUTO_UNLOCK_NEXT_DB.store(true, Ordering::Relaxed);
+        // Only JP region encrypts the meta DB
+        if Hachimi::instance().game.region == crate::core::game::Region::Japan {
+            AUTO_UNLOCK_NEXT_DB.store(true, Ordering::Relaxed);
+        }
 
         if Connection::Open(conn, db_path_str.to_il2cpp_string(), std::ptr::null_mut(), std::ptr::null_mut(), 0) {
             let sql = "SELECT n, h FROM a";
@@ -884,4 +886,41 @@ pub fn get_champions_resources() -> Vec<String> {
         Connection::CloseDB(conn);
     }
     items
+}
+
+/// Queries the meta DB for the highest champions live year index present as an asset,
+/// falling back to the current calendar year if the DB is unavailable.
+pub fn get_champions_live_max_year() -> i32 {
+    use chrono::{Utc, Datelike};
+    let mut max_year = Utc::now().year(); // safe fallback
+    let db_path_str = crate::core::utils::get_meta_path();
+
+    let conn = Connection::new();
+    if Hachimi::instance().game.region == crate::core::game::Region::Japan {
+        AUTO_UNLOCK_NEXT_DB.store(true, Ordering::Relaxed);
+    }
+    if Connection::Open(conn, db_path_str.to_il2cpp_string(), ptr::null_mut(), ptr::null_mut(), 0) {
+        let sql = "SELECT n FROM a WHERE n LIKE 'live/image/champions/tex_championslive_year_%'";
+        let query = Connection::Query(conn, sql.to_il2cpp_string());
+
+        if !query.is_null() {
+            let mut max_idx = -1;
+            while Query::Step(query) {
+                let text_ptr = Query::GetText(query, 0);
+                if let Some(text) = unsafe { text_ptr.as_ref() }.map(|s| s.as_utf16str().to_string()) {
+                    if let Some(idx_str) = text.strip_prefix("live/image/champions/tex_championslive_year_") {
+                        if let Ok(idx) = idx_str.parse::<i32>() {
+                            max_idx = max_idx.max(idx);
+                        }
+                    }
+                }
+            }
+            Query::Dispose(query);
+            if max_idx >= 0 {
+                max_year = 2022 + max_idx;
+            }
+        }
+        Connection::CloseDB(conn);
+    }
+    max_year
 }

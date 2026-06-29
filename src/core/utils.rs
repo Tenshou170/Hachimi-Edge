@@ -448,7 +448,13 @@ pub fn wrap_fit_text(string: &str, base_line_width: i32, mut max_line_count: i32
     loop {
         let wrapped = wrap_text_internal(string, line_width.round() as i32, line_width_multiplier);
         if wrapped.len() as i32 <= max_line_count {
-            return Some(add_size_tag(&wrapped.join("\n"), font_size.round() as i32));
+            let new_size = font_size.round() as i32;
+            let new_text = wrapped.join("\n");
+            return Some(if new_size != base_font_size {
+                add_size_tag(&new_text, new_size)
+            } else {
+                new_text
+            });
         }
 
         let prev_max_line_count = max_line_count;
@@ -638,17 +644,18 @@ pub fn get_data_path() -> String {
         static CACHED: OnceLock<String> = OnceLock::new();
         CACHED.get_or_init(|| {
             use crate::{
-                core::game::Region,
                 il2cpp::hook::UnityEngine_CoreModule::Application,
-                windows::utils::get_game_dir
+                windows::utils::{get_exec_path, get_game_dir},
             };
 
-            let game = &Hachimi::instance().game;
-            let jp_steam_data_path = get_game_dir()
-                .join("UmamusumePrettyDerby_Jpn_Data")
-                .join("Persistent");
-            let new_jp_dmm_data_path = get_game_dir()
-                .join("umamusume_Data")
+            let exec_name = get_exec_path()
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+            let data_folder_name = format!("{}_Data", exec_name);
+            let local_data_path = get_game_dir()
+                .join(data_folder_name)
                 .join("Persistent");
 
             let dir_ok = |path: &std::path::Path| {
@@ -659,14 +666,31 @@ pub fn get_data_path() -> String {
                     && path.join("master").join("master.mdb").exists()
             };
 
-            if game.region == Region::Japan && game.is_steam_release && dir_ok(&jp_steam_data_path) {
-                jp_steam_data_path.to_string_lossy().to_string()
-            } else if game.region == Region::Japan && !game.is_steam_release && dir_ok(&new_jp_dmm_data_path) {
-                new_jp_dmm_data_path.to_string_lossy().to_string()
+            if dir_ok(&local_data_path) {
+                local_data_path.to_string_lossy().to_string()
             } else {
                 unsafe { (*Application::get_persistentDataPath()).as_utf16str() }.to_string()
             }
         }).clone()
+    }
+}
+
+pub fn get_meta_path() -> String {
+    #[cfg(target_os = "android")]
+    {
+        format!("{}/meta", get_data_path())
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use crate::{core::game::Region, windows::utils::get_game_dir};
+        let game = &Hachimi::instance().game;
+        if game.region == Region::Taiwan {
+            // Komoe stores the meta DB in the game directory root
+            get_game_dir().join("meta").to_string_lossy().to_string()
+        } else {
+            format!("{}/meta", get_data_path())
+        }
     }
 }
 

@@ -9,6 +9,8 @@ use crate::core::gui::save_and_reload_config;
 use crate::core::hachimi;
 #[allow(unused_imports)]
 use crate::core::Hachimi;
+#[allow(unused_imports)]
+use egui_material3::{MaterialButton, MaterialNumberField};
 use egui_material3::*;
 use egui_material3::theme::get_global_color;
 use rust_i18n::t;
@@ -101,11 +103,19 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
         ]);
 
     if config.bg_update_mode != hachimi::BgUpdateMode::Disabled {
-        // Use list_tile_number for the interval — label above, number field below
         let mut minutes = (config.bg_update_interval_sec / 60) as i32;
         let prev_minutes = minutes;
-        ConfigEditor::list_tile_number(ui, t!("config_editor.bg_update_interval"),
-            &mut minutes, 1..=10080, 1.0, Some("min"));
+
+        let unit_str = t!("config_editor.bg_update_interval_unit");
+        ConfigEditor::list_tile_number(
+            ui,
+            t!("config_editor.bg_update_interval"),
+            &mut minutes,
+            1..=10080,
+            1.0,
+            Some(&unit_str),
+        );
+
         if minutes != prev_minutes {
             config.bg_update_interval_sec = (minutes as u64) * 60;
         }

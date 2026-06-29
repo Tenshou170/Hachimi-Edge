@@ -12,10 +12,9 @@ pub fn is_criware_lib(filename: &str) -> bool {
     filename.ends_with("libcri_ware_unity.so")
 }
 
-pub fn on_hooking_finished(hachimi: &Hachimi) {
-    if hachimi.config.load().android.keep_screen_on {
-        set_keep_screen_on(true);
-    }
+pub fn on_hooking_finished(_hachimi: &Hachimi) {
+    // keep_screen_on is applied later in init_painter(), once the Activity
+    // window is guaranteed to exist.
 }
 
 /// Sets or clears FLAG_KEEP_SCREEN_ON (0x80) on the game's window.
@@ -38,6 +37,9 @@ pub fn set_keep_screen_on(enable: bool) {
 
     if let Err(e) = result {
         warn!("set_keep_screen_on({}): {:?}", enable, e);
+        if env.exception_check().unwrap_or(false) {
+            let _ = env.exception_clear();
+        }
     }
 }
 

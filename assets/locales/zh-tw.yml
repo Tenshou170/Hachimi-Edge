@@ -162,6 +162,7 @@ config_editor:
   bg_update_periodic: "定期（提示）"
   bg_update_silent: "靜默（自動）"
   bg_update_interval: "背景更新間隔"
+  bg_update_interval_unit: "分鐘"
   disable_mod_downloads: "禁用附加元件下載"
   translation_repo_index_mod: "翻譯附加元件索引 URL"
   disable_translations: "禁用翻譯"

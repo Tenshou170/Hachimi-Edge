@@ -86,9 +86,14 @@ pub fn dump_strings() -> BTreeMap<String, String> {
 
 pub fn init(umamusume: *const Il2CppImage) {
     get_class_or_return!(umamusume, Gallop, Localize);
-    find_nested_class_or_return!(Localize, JP);
 
-    let Get_addr = get_method_overload_addr(JP, "Get", &[Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE]);
+    let Get_addr = if Hachimi::instance().game.region == crate::core::game::Region::Taiwan {
+        // Komoe/Taiwan release uses the top-level Localize class directly
+        get_method_overload_addr(Localize, "Get", &[Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE])
+    } else {
+        find_nested_class_or_return!(Localize, JP);
+        get_method_overload_addr(JP, "Get", &[Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE])
+    };
 
     new_hook!(Get_addr, Get);
 }
