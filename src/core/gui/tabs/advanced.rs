@@ -86,13 +86,6 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
     ConfigEditor::list_tile_switch(ui, t!("config_editor.lazy_translation_updates"),     &mut config.lazy_translation_updates,     true);
     ConfigEditor::list_tile_switch(ui, t!("config_editor.disable_auto_update_check"),    &mut config.disable_auto_update_check,    true);
 
-    // Translation addon index URL
-    {
-        let mut url = config.translation_repo_index_mod.clone().unwrap_or_default();
-        if ConfigEditor::list_tile_text_field(ui, t!("config_editor.translation_repo_index_mod"), &mut url).changed() {
-            config.translation_repo_index_mod = if url.is_empty() { None } else { Some(url) };
-        }
-    }
     ConfigEditor::list_tile_switch(ui, t!("config_editor.disable_mod_downloads"), &mut config.disable_mod_downloads, true);
 
     ConfigEditor::list_tile_combo(ui, t!("config_editor.bg_update_mode"), "bg_update_mode",

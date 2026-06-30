@@ -14,6 +14,7 @@ pub struct FirstTimeSetupWindow {
     index_request: Arc<AsyncRequest<Vec<RepoInfo>>>,
     current_page: usize,
     current_tl_repo: Option<String>,
+    current_tl_repo_mod: Option<String>,
     has_auto_selected: bool,
 }
 
@@ -28,6 +29,7 @@ impl FirstTimeSetupWindow {
             index_request: Arc::new(tl_repo::new_meta_index_request()),
             current_page: 0,
             current_tl_repo: None,
+            current_tl_repo_mod: None,
             has_auto_selected: false,
         }
     }
@@ -142,6 +144,7 @@ impl AppWindow for FirstTimeSetupWindow {
                                                 .find(|r| r.is_recommended(current_lang_str))
                                             {
                                                 self.current_tl_repo = Some(matched.index.clone());
+                                                self.current_tl_repo_mod = matched.index_mod.clone();
                                             }
                                             self.has_auto_selected = true;
                                         }
@@ -186,39 +189,37 @@ impl AppWindow for FirstTimeSetupWindow {
                                                                 ui.separator();
                                                             }
                                                         }
+                                        
+                                        // Build label with addon indicator
+                                        let has_addon = repo.index_mod.is_some();
+                                        let addon_suffix = if has_addon { " (+ addon)" } else { "" };
 
-                                                        // Visual indicator for auto-selected matched language repo
-                                                        if is_matched && is_selected {
-                                                            let repo_label =
-                                                                format!("★ {}", repo.name);
-                                                            ui.add(MaterialRadio::new(
-                                                                &mut selected_repo,
-                                                                repo.index.clone(),
-                                                                repo_label,
-                                                            ));
-                                                            if let Some(short_desc) =
-                                                                &repo.short_desc
-                                                            {
-                                                                ui.label(
-                                                                    egui::RichText::new(short_desc)
-                                                                        .small(),
-                                                                );
-                                                            }
-                                                        } else {
-                                                            ui.add(MaterialRadio::new(
-                                                                &mut selected_repo,
-                                                                repo.index.clone(),
-                                                                &repo.name,
-                                                            ));
-                                                            if let Some(short_desc) =
-                                                                &repo.short_desc
-                                                            {
-                                                                ui.label(
-                                                                    egui::RichText::new(short_desc)
-                                                                        .small(),
-                                                                );
-                                                            }
-                                                        }
+                                        // Visual indicator for auto-selected matched language repo
+                                        if is_matched && is_selected {
+                                            let repo_label = format!("★ {}{}", repo.name, addon_suffix);
+                                            if ui.add(MaterialRadio::new(
+                                                &mut selected_repo,
+                                                repo.index.clone(),
+                                                repo_label,
+                                            )).changed() {
+                                                self.current_tl_repo_mod = repo.index_mod.clone();
+                                            }
+                                            if let Some(short_desc) = &repo.short_desc {
+                                                ui.label(egui::RichText::new(short_desc).small());
+                                            }
+                                        } else {
+                                            let repo_label = format!("{}{}", repo.name, addon_suffix);
+                                            if ui.add(MaterialRadio::new(
+                                                &mut selected_repo,
+                                                repo.index.clone(),
+                                                repo_label,
+                                            )).changed() {
+                                                self.current_tl_repo_mod = repo.index_mod.clone();
+                                            }
+                                            if let Some(short_desc) = &repo.short_desc {
+                                                ui.label(egui::RichText::new(short_desc).small());
+                                            }
+                                        }
 
                                                         last_section = Some(is_matched);
                                                     }
@@ -255,6 +256,7 @@ impl AppWindow for FirstTimeSetupWindow {
 
             if !page_open {
                 self.config.translation_repo_index = self.current_tl_repo.clone();
+                self.config.translation_repo_index_mod = self.current_tl_repo_mod.clone();
             }
 
             save_and_reload_config(self.config.clone());
