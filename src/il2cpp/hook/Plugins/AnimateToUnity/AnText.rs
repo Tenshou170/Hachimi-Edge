@@ -1,5 +1,4 @@
 use std::ptr::null_mut;
-use std::sync::atomic::Ordering;
 
 use crate::{
     core::Hachimi,
@@ -112,7 +111,10 @@ extern "C" fn _UpdateText(this: *mut Il2CppObject) {
 
     let text = unsafe { (*text_ptr).as_utf16str() };
     let has_template = text.as_slice().contains(&36); // 36 = '$'
-    let has_story_title = crate::il2cpp::hook::umamusume::PartsSingleModeStoryEventTitle::HAS_STORY_EVENT_TITLE.load(Ordering::Relaxed);
+    let has_story_title = match crate::il2cpp::hook::umamusume::PartsSingleModeStoryEventTitle::LAST_STORY_EVENT_TITLE.read() {
+        Ok(s) => !s.is_empty(),
+        Err(_) => false,
+    };
 
     // Only allocate a String when at least one consumer needs it.
     if has_story_title || has_template {
@@ -158,7 +160,10 @@ extern "C" fn _UpdateText(this: *mut Il2CppObject, method: usize) {
 
     let text = unsafe { (*text_ptr).as_utf16str() };
     let has_template = text.as_slice().contains(&36); // 36 = '$'
-    let has_story_title = crate::il2cpp::hook::umamusume::PartsSingleModeStoryEventTitle::HAS_STORY_EVENT_TITLE.load(Ordering::Relaxed);
+    let has_story_title = match crate::il2cpp::hook::umamusume::PartsSingleModeStoryEventTitle::LAST_STORY_EVENT_TITLE.read() {
+        Ok(s) => !s.is_empty(),
+        Err(_) => false,
+    };
 
     if has_story_title || has_template {
         let text_str = text.to_string();
