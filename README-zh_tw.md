@@ -1,4 +1,4 @@
-<img align="left" width="80" height="80" src="assets/icon.png">
+﻿<img align="left" width="80" height="80" src="assets/icon.png">
 
 # Hachimi Edge
 
