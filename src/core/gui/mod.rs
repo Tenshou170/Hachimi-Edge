@@ -347,7 +347,6 @@ impl Gui {
             enable_gui_landscape_ratio,
         );
 
-        // --- only push a new pixels_per_point and screen_rect to egui
         // when something actually changed. set_pixels_per_point triggers a full
         // egui relayout, so calling it every frame at the same value wastes CPU.
         let prev_ppp = self.context.pixels_per_point();

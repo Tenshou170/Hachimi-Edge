@@ -90,6 +90,10 @@ static SCREEN_HEIGHT: AtomicI32 = AtomicI32::new(0);
 
 type NativeInjectEventFn = extern "C" fn(env: JNIEnv, obj: JObject, input_event: JObject, extra_param: jint) -> jboolean;
 extern "C" fn nativeInjectEvent(mut env: JNIEnv, obj: JObject, input_event: JObject, extra_param: jint) -> jboolean {
+    if input_event.is_null() {
+        return 0;
+    }
+
     let handle_event = |env: &mut JNIEnv| -> jni::errors::Result<Option<jboolean>> {
         let action = env.call_method(&input_event, "getAction", "()I", &[])?.i()?;
         let action_masked = action & ACTION_MASK;

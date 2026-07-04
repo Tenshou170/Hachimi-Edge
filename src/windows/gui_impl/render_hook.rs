@@ -65,7 +65,6 @@ extern "C" fn IDXGISwapChain_Present(this: *mut c_void, sync_interval: c_uint, f
         return orig_fn(this, sync_interval, flags);
     }
 
-    // --- RH-1 fix: recover from mutex poison instead of panicking on every frame ---
     let mut gui = Gui::instance_or_init("windows.menu_open_key")
         .lock()
         .unwrap_or_else(|e| e.into_inner());
@@ -73,12 +72,11 @@ extern "C" fn IDXGISwapChain_Present(this: *mut c_void, sync_interval: c_uint, f
         Ok(v) => v,
         Err(e) => {
             error!("{}", e);
-            info!("Unhooking IDXGISwapChain hooks");
+            info!("Unhooking IDXGISwapChain hooks (deferred)");
 
             let res = orig_fn(this, sync_interval, flags);
-            let interceptor = &Hachimi::instance().interceptor;
-            interceptor.unhook(IDXGISwapChain_Present as *const () as usize);
-            interceptor.unhook(IDXGISwapChain_ResizeBuffers as *const () as usize);
+            crate::core::hook_utils::defer_unhook(IDXGISwapChain_Present as *const () as usize);
+            crate::core::hook_utils::defer_unhook(IDXGISwapChain_ResizeBuffers as *const () as usize);
             return res;
         }
     };
@@ -87,7 +85,6 @@ extern "C" fn IDXGISwapChain_Present(this: *mut c_void, sync_interval: c_uint, f
         return orig_fn(this, sync_interval, flags);
     }
     // Check if this is the right swap chain
-    // --- RH-2 fix: recover from mutex poison ---
     let mut painter = painter_mutex.lock().unwrap_or_else(|e| e.into_inner());
     if this != painter.swap_chain().as_raw() {
         return orig_fn(this, sync_interval, flags);
@@ -115,13 +112,11 @@ extern "C" fn IDXGISwapChain_Present(this: *mut c_void, sync_interval: c_uint, f
                 let x = rect.min.x * zoom;
                 let y = rect.max.y * zoom;
                 let y_unity = height as f32 - y;
-                // --- RH-3 fix: recover from mutex poison ---
                 if let Ok(mut pos) = IME_COMPOSITION_POS.lock() {
                     *pos = (x, y_unity);
                 }
 
                 crate::il2cpp::symbols::Thread::main_thread().schedule(|| {
-                    // --- RH-3 fix ---
                     let (x, y_unity) = IME_COMPOSITION_POS.lock()
                         .map(|g| *g)
                         .unwrap_or((0.0, 0.0));
@@ -178,15 +173,13 @@ extern "C" fn IDXGISwapChain_ResizeBuffers(
         Ok(v) => v,
         Err(e) => {
             error!("{}", e);
-            info!("Unhooking IDXGISwapChain hooks");
+            info!("Unhooking IDXGISwapChain hooks (deferred)");
 
-            let interceptor = &Hachimi::instance().interceptor;
-            interceptor.unhook(IDXGISwapChain_Present as *const () as usize);
-            interceptor.unhook(IDXGISwapChain_ResizeBuffers as *const () as usize);
+            crate::core::hook_utils::defer_unhook(IDXGISwapChain_Present as *const () as usize);
+            crate::core::hook_utils::defer_unhook(IDXGISwapChain_ResizeBuffers as *const () as usize);
             return orig_fn(this, buffer_count, width, height, new_format, swap_chain_flags);
         }
     };
-    // --- RH-4 fix: recover from mutex poison in ResizeBuffers ---
     let mut painter = painter_mutex.lock().unwrap_or_else(|e| e.into_inner());
     if this != painter.swap_chain().as_raw() {
         return orig_fn(this, buffer_count, width, height, new_format, swap_chain_flags);
@@ -250,8 +243,7 @@ unsafe extern "system" fn dummy_wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARA
 }
 
 fn get_swap_chain_vtable() -> Result<*mut usize, Error> {
-    // --- RH-5 fix: GetModuleHandleW(None) is infallible for the current
-    // process, but map the error to our Error type instead of unwrap. ---
+    // process, but map the error to our Error type instead of unwrap.
     let hmodule = unsafe { GetModuleHandleW(None) }
         .map_err(|e| Error::RuntimeError(format!("GetModuleHandleW failed: {}", e)))?;
 

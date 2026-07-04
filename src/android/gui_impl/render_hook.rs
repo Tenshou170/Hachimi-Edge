@@ -44,10 +44,10 @@ extern "C" fn eglSwapBuffers(display: EGLDisplay, surface: EGLSurface) -> EGLBoo
         Ok(v) => v,
         Err(e) => {
             error!("{}", e);
-            info!("Unhooking eglSwapBuffers");
+            info!("Unhooking eglSwapBuffers (deferred)");
 
             let res = orig_fn(display, surface);
-            Hachimi::instance().interceptor.unhook(eglSwapBuffers as usize);
+            crate::core::hook_utils::defer_unhook(eglSwapBuffers as usize);
             return res;
         }
     };
@@ -126,9 +126,7 @@ fn init_painter() -> Result<&'static mut egui_glow::Painter, Error> {
     // Apply keep_screen_on here since the Activity window is guaranteed
     // to exist at this point. Calling it earlier (e.g. on_hooking_finished)
     // runs on the IL2CPP thread before the window is accessible.
-    if Hachimi::instance().config.load().android.keep_screen_on {
-        crate::android::hachimi_impl::set_keep_screen_on(true);
-    }
+    crate::android::hachimi_impl::apply_keep_screen_on_if_pending();
 
     Ok(unsafe { PAINTER.get_mut().unwrap_unchecked() })
 }

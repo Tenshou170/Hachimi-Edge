@@ -158,8 +158,7 @@ const EXCEPT_VIEW_IDS: &[i32] = &[
 
 static INIT: Once = Once::new();
 
-// --- #7 fix: replace `static mut usize` with AtomicUsize so hook callbacks
-// on audio threads can read the trampoline addresses without data races. ---
+// on audio threads can read the trampoline addresses without data races.
 // Ordering::Relaxed is sufficient: the Once in init() provides the
 // happens-before edge that makes the stored values visible to all threads
 // after init() returns, and the values are never mutated again after that.
@@ -190,10 +189,9 @@ extern "C" fn get_cue_info_by_name(acb: usize, name: *const c_char, info: *mut C
     res
 }
 
-// --- #10 fix: helper that locks a mutex and silently skips on poison instead
 // of unwrap()-panicking.  A poisoned mutex means a previous hook invocation
 // panicked while holding it; the safest recovery is to skip this call rather
-// than abort the process. ---
+// than abort the process.
 macro_rules! lock_or_return {
     ($mutex:expr) => {
         match $mutex.lock() {
@@ -218,7 +216,6 @@ macro_rules! lock_or_return {
 fn process_cue_info(acb: usize, info: *mut CueInfo) {
     // Always clear the stale entry first, regardless of whether captions are enabled,
     // so we don't fire old data if captions are toggled back on later.
-    // --- #10 fix: use lock_or_return! instead of unwrap() ---
     lock_or_return!(ACB_CAPTIONS).remove(&acb);
 
     let config = Hachimi::instance().config.load();
@@ -226,9 +223,8 @@ fn process_cue_info(acb: usize, info: *mut CueInfo) {
     let do_log = crate::core::captions::Captions::show_log_enabled();
 
     let cue_name = unsafe {
-        // --- #8 fix: CStr::from_ptr walks until \0 with no length bound.
         // Scan manually up to a safe ceiling so a non-terminated CriWare
-        // string can't cause an out-of-bounds read. ---
+        // string can't cause an out-of-bounds read.
         const MAX_CUE_NAME_LEN: usize = 512;
         let ptr = (*info).name as *const u8;
         let len = (0..MAX_CUE_NAME_LEN).find(|&i| *ptr.add(i) == 0).unwrap_or(MAX_CUE_NAME_LEN);
@@ -400,7 +396,6 @@ fn process_cue_info(acb: usize, info: *mut CueInfo) {
                     }
 
                     if show {
-                        // --- #10 fix ---
                         lock_or_return!(ACB_CAPTIONS).insert(acb, CaptionData {
                             text: clean_text,
                             cue_sheet: item_cue_sheet,
@@ -422,7 +417,6 @@ extern "C" fn set_cue_id(player: usize, acb: usize, id: i32) {
     let addr = SETCUEID_ORIG.load(Ordering::Relaxed);
     if addr == 0 { return; }
     let orig: SetCueIdFn = unsafe { std::mem::transmute(addr) };
-    // --- #10 fix ---
     if lock_or_return!(ACB_CAPTIONS, ()).contains_key(&acb) {
         lock_or_return!(PLAYER_ACB, ()).insert(player, acb);
     }
@@ -433,7 +427,6 @@ type StartFn = extern "C" fn(player: usize) -> u32;
 static START_ORIG: AtomicUsize = AtomicUsize::new(0);
 
 fn process_caption_requests() {
-    // --- #10 fix ---
     let mut requests = lock_or_return!(CAPTION_REQUESTS);
     // Re-check caption_enable at display time; the user may have toggled it off
     // between when the cue was queued and when it actually starts playing.
@@ -451,13 +444,12 @@ fn process_caption_requests() {
 
             let get_cue_length_method = symbols::get_method_cached(audio_manager_class, c"GetCueLength", 2).ok()?;
             let mut exc = std::ptr::null_mut();
-            // --- #9 fix: to_il2cpp_string() can return null (OOM / missing
             // API); passing null as a managed String param throws a managed
             // NullReferenceException that becomes an unhandled native crash
-            // on Android.  Bail out early so we fall back to the 3.0s default. ---
+            // on Android.  Bail out early so we fall back to the 3.0s default.
             let cue_sheet_il2 = caption_data.cue_sheet.to_il2cpp_string();
             if cue_sheet_il2.is_null() { return None; }
-            let mut params = [
+            let mut params = [ 
                 cue_sheet_il2 as *mut std::ffi::c_void,
                 &caption_data.cue_id as *const _ as *mut std::ffi::c_void
             ];
@@ -511,21 +503,17 @@ extern "C" fn start(player: usize) -> u32 {
     if addr == 0 { return 0; }
     let orig: StartFn = unsafe { std::mem::transmute(addr) };
 
-    // --- #10 fix ---
     let acb = lock_or_return!(PLAYER_ACB, orig(player)).get(&player).cloned();
 
     if let Some(acb) = acb {
-        // --- #10 fix ---
         let caption_data = lock_or_return!(ACB_CAPTIONS, orig(player)).get(&acb).cloned();
 
         if let Some(caption_data) = caption_data {
-            // --- #10 fix ---
             lock_or_return!(ACTIVE_PLAYERS, orig(player)).insert(player, acb);
             lock_or_return!(CAPTION_REQUESTS, orig(player)).push(caption_data);
 
-            // --- #19 fix: Thread::main_thread() calls .expect() internally;
             // guard against an empty thread list by checking attached_threads
-            // before calling the convenience method. ---
+            // before calling the convenience method.
             let threads = symbols::Thread::attached_threads();
             if let Some(main) = threads.first() {
                 main.schedule(process_caption_requests);
@@ -573,7 +561,6 @@ extern "C" fn pause(player: usize, sw: bool) {
 type ReleaseFn = extern "C" fn(acb: usize);
 static RELEASE_ORIG: AtomicUsize = AtomicUsize::new(0);
 extern "C" fn release(acb: usize) {
-    // --- #10 fix ---
     lock_or_return!(ACB_CAPTIONS).remove(&acb);
     let addr = RELEASE_ORIG.load(Ordering::Relaxed);
     if addr == 0 { return; }
@@ -582,7 +569,6 @@ extern "C" fn release(acb: usize) {
 }
 
 fn clear_active_player(player: usize) {
-    // --- #10 fix ---
     let acb = lock_or_return!(ACTIVE_PLAYERS).remove(&player);
     if let Some(acb) = acb {
         lock_or_return!(ACB_CAPTIONS).remove(&acb);
@@ -604,8 +590,7 @@ pub fn init(handle: usize) {
         let stop_without_release_time_addr  = crate::core::utils::get_proc_address(handle, c"criAtomExPlayer_StopWithoutReleaseTime");
         let pause_addr                      = crate::core::utils::get_proc_address(handle, c"criAtomExPlayer_Pause");
 
-        // --- CW-1 fix: log and skip individual hook failures instead of
-        // panicking and aborting the entire CriWare init. ---
+        // panicking and aborting the entire CriWare init.
         if get_cue_info_by_id_addr != 0 {
             match hachimi.interceptor.hook(get_cue_info_by_id_addr, get_cue_info_by_id as *const () as usize) {
                 Ok(tramp) => { GETCUEINFOBYID_ORIG.store(tramp, Ordering::Release); }

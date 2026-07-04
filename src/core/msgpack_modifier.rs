@@ -110,10 +110,9 @@ pub fn modify_response(data: &[u8]) -> Option<Vec<u8>> {
     })).unwrap_or(None)
 }
 
-// --- #16 fix: helper to lock a mutex and recover from poison rather than
 // panicking.  A poisoned mutex means a previous call panicked while holding
 // it; recovering the inner value is safe here because all mutations are
-// idempotent (we clear + rebuild the sets on every response). ---
+// idempotent (we clear + rebuild the sets on every response).
 macro_rules! lock_recover {
     ($m:expr) => {
         $m.lock().unwrap_or_else(|e| e.into_inner())
@@ -134,7 +133,6 @@ fn process_theater_save(info_map: &mut Vec<(Value, Value)>) -> bool {
         if k.as_str() == Some("member_info_array") {
             member_info_index = Some(i);
             if let Value::Array(members) = v {
-                // --- #16 fix: recover from poison instead of unwrap ---
                 let charas = lock_recover!(REAL_OWNED_CHARAS);
                 let dresses = lock_recover!(REAL_OWNED_DRESSES);
                 let default_dresses = crate::il2cpp::sql::get_default_dress_ids();
@@ -168,7 +166,6 @@ fn process_theater_save(info_map: &mut Vec<(Value, Value)>) -> bool {
 
     if let Some(idx) = member_info_index {
         if let Value::Array(members) = &mut info_map[idx].1 {
-            // --- #16 fix ---
             let charas = lock_recover!(REAL_OWNED_CHARAS);
             let dresses = lock_recover!(REAL_OWNED_DRESSES);
             let default_dresses = crate::il2cpp::sql::get_default_dress_ids();
@@ -220,7 +217,6 @@ fn process_chara_list(data_map: &mut Vec<(Value, Value)>) -> bool {
         if k.as_str() == Some("chara_list") {
             target_idx = Some(i);
             if let Value::Array(arr) = v {
-                // --- #16 fix ---
                 let mut owned = lock_recover!(REAL_OWNED_CHARAS);
                 owned.clear();
                 for item in arr {
@@ -346,7 +342,6 @@ fn process_cloth_list(data_map: &mut Vec<(Value, Value)>) -> bool {
         if k.as_str() == Some("cloth_list") {
             let mut template_item = None;
             if let Value::Array(arr) = v {
-                // --- #16 fix ---
                 let mut owned = lock_recover!(REAL_OWNED_DRESSES);
                 owned.clear();
                 for item in arr {
@@ -392,7 +387,6 @@ fn process_music_list(data_map: &mut Vec<(Value, Value)>) -> bool {
         if k.as_str() == Some("music_list") {
             let mut template_item = None;
             if let Value::Array(arr) = v {
-                // --- #16 fix ---
                 let mut owned = lock_recover!(REAL_OWNED_SONGS);
                 owned.clear();
                 for item in arr {
@@ -440,7 +434,6 @@ fn process_save_info(data_map: &mut Vec<(Value, Value)>) -> bool {
     for (k, v) in data_map.iter_mut() {
         if k.as_str() == Some("live_theater_save_info_array") {
             if let Value::Array(arr) = v {
-                // --- #16 fix ---
                 let mut save_map = lock_recover!(LIVE_SAVE_INFO_MAP);
                 save_map.clear();
                 for item in arr.iter() {
@@ -549,9 +542,8 @@ fn parse_data_map(data_map: &[(Value, Value)], config: &crate::core::hachimi::Co
         if time > now_secs {
             let epoch_diff = 11644473600_i64;
             let file_time = (time + epoch_diff) * 10_000_000;
-            // --- MM-1 fix: WinRT COM calls can fail if the notification service
             // is unavailable or the AUMID isn't registered yet. Use an inner
-            // closure with ? so any failure logs and returns instead of panicking. ---
+            // closure with ? so any failure logs and returns instead of panicking.
             let result: Result<(), windows::core::Error> = (|| {
                 let toast_xml = ToastNotificationManager::GetTemplateContent(ToastTemplateType::ToastText02)?;
                 let text_nodes = toast_xml.GetElementsByTagName(&HSTRING::from("text"))?;

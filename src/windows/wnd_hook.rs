@@ -28,12 +28,10 @@ pub fn start_menu_key_capture() {
     MENU_KEY_CAPTURE.store(true, atomic::Ordering::Relaxed);
 }
 
-// --- W-3 fix: replace static mut with atomics so reads from the WndProc
-// thread and writes from init() are race-free. ---
+// thread and writes from init() are race-free.
 static WNDPROC_ORIG: AtomicIsize = AtomicIsize::new(0);
 static WNDPROC_RECALL: AtomicUsize = AtomicUsize::new(0);
 extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    // --- W-3 fix: read via atomic load ---
     let orig_raw = WNDPROC_ORIG.load(atomic::Ordering::Relaxed);
     let Some(orig_fn) = (unsafe { std::mem::transmute::<isize, WNDPROC>(orig_raw) }) else {
         return unsafe { DefWindowProcW(hwnd, umsg, wparam, lparam) };
@@ -47,7 +45,6 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
                 let hotkey_vk = Hachimi::instance().config.load().windows.hide_ingame_ui_hotkey_bind;
 
                 if unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetKeyState(hotkey_vk as i32) < 0 } {
-                    // --- W-17 fix: recover from poison instead of unwrap ---
                     if let Some(mut gui) = Gui::instance().map(|m| m.lock().unwrap_or_else(|e| e.into_inner())) {
                         gui.set_consuming_input(false);
                     }
@@ -66,7 +63,6 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
                 let msg = t!("notification.menu_open_key_set", key = key_label);
                 std::thread::spawn(move || {
                     if let Some(gui) = Gui::instance() {
-                        // --- W-17 fix ---
                         gui.lock().unwrap_or_else(|e| e.into_inner()).show_notification(&msg);
                     }
                 });
@@ -80,7 +76,6 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
                 return LRESULT(0);
             }
             if current_key == Hachimi::instance().config.load().windows.menu_open_key {
-                // --- W-17 fix ---
                 let Some(mut gui) = Gui::instance().map(|m| m.lock().unwrap_or_else(|e| e.into_inner())) else {
                     return unsafe { orig_fn(hwnd, umsg, wparam, lparam) };
                 };
@@ -95,7 +90,6 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
 
             if (wparam.0 & 0xFFFF) != WA_INACTIVE as usize {
                 std::thread::spawn(move || {
-                    // --- W-17 fix ---
                     if let Some(gui) = Gui::instance().map(|m| m.lock().unwrap_or_else(|e| e.into_inner())) {
                         if gui.context.wants_keyboard_input() {
                             Thread::main_thread().schedule(|| {
@@ -109,9 +103,7 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
         },
         WM_CLOSE => {
             if let Some(hook) = Hachimi::instance().interceptor.unhook(wnd_proc as *const () as _) {
-                // --- W-3/W-9 fix: store via atomic, read in scheduled closure ---
                 WNDPROC_RECALL.store(hook.orig_addr, atomic::Ordering::Release);
-                // --- W-9 fix: avoid .expect() inside Thread::main_thread() ---
                 let threads = Thread::attached_threads();
                 if let Some(main) = threads.first() {
                     main.schedule(|| {
@@ -162,7 +154,6 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
     // (when moving the window, etc.)
     // I assume that SwapChain::Present and WndProc are running on the same thread
     std::thread::spawn(move || {
-        // --- W-17 fix ---
         let Some(mut gui) = Gui::instance().map(|m| m.lock().unwrap_or_else(|e| e.into_inner())) else {
             return;
         };
@@ -193,7 +184,6 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
     LRESULT(0)
 }
 
-// --- W-4 fix: replace static mut HHOOK with AtomicIsize ---
 static HCBTHOOK: AtomicIsize = AtomicIsize::new(0);
 extern "system" fn cbt_proc(ncode: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if ncode == HCBT_MINMAX as i32 &&
@@ -244,14 +234,12 @@ pub fn init() {
         info!("Hooking WndProc");
         let wnd_proc_addr = GetWindowLongPtrW(hwnd, GWLP_WNDPROC);
         match hachimi.interceptor.hook(wnd_proc_addr as _, wnd_proc as *const () as _) {
-            // --- W-3 fix: store via atomic ---
             Ok(trampoline_addr) => WNDPROC_ORIG.store(trampoline_addr as isize, atomic::Ordering::Release),
             Err(e) => error!("Failed to hook WndProc: {}", e)
         }
 
         info!("Adding CBT hook");
         if let Ok(hhook) = SetWindowsHookExW(WH_CBT, Some(cbt_proc), None, GetCurrentThreadId()) {
-            // --- W-4 fix: store via atomic ---
             HCBTHOOK.store(hhook.0 as isize, atomic::Ordering::Release);
         }
 
@@ -273,7 +261,6 @@ pub fn init() {
 }
 
 pub fn uninit() {
-    // --- W-4 fix: read via atomic, clear atomically ---
     let raw = HCBTHOOK.swap(0, atomic::Ordering::AcqRel);
     if raw != 0 {
         info!("Removing CBT hook");

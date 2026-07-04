@@ -6,8 +6,7 @@ use windows::Win32::Foundation::HMODULE;
 
 use crate::{core::Hachimi, windows::utils};
 
-// --- W-6 fix: replace static mut with AtomicUsize so reads from any thread
-// are race-free. Written once in init() with Release, read with Relaxed. ---
+// are race-free. Written once in init() with Release, read with Relaxed.
 static SteamAPI_SteamUtils_v010_addr: AtomicUsize = AtomicUsize::new(0);
 static SteamAPI_ISteamUtils_IsOverlayEnabled_addr: AtomicUsize = AtomicUsize::new(0);
 

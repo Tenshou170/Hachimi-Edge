@@ -23,6 +23,7 @@ mod ipc;
 pub mod log;
 pub mod tl_repo;
 pub mod utils;
+pub mod hook_utils;
 
 pub mod sugoi_client;
 pub use sugoi_client::SugoiClient;

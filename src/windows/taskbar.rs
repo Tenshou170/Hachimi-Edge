@@ -13,8 +13,7 @@ unsafe impl Sync for TaskbarWrapper {}
 
 static TASKBAR_LIST: Lazy<Mutex<Option<TaskbarWrapper>>> = Lazy::new(|| Mutex::new(None));
 
-// --- W-8 fix: replace static mut with atomics so set_progress_state /
-// set_progress_value called from download threads are race-free. ---
+// set_progress_value called from download threads are race-free.
 static TASKBAR_HWND: AtomicIsize = AtomicIsize::new(0);
 // TBPFLAG is i32 under the hood
 static CURRENT_STATE: AtomicI32 = AtomicI32::new(TBPF_NOPROGRESS.0);

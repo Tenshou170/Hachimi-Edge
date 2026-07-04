@@ -41,7 +41,6 @@ unsafe fn process_playback(
     );
     if !exc.is_null() || audio_ctrl.is_null() { return; }
 
-    // --- #3 fix: guard every get_field_from_name result before use ---
     let pool_field = crate::il2cpp::symbols::get_field_from_name((*audio_ctrl).klass(), c"pool");
     if pool_field.is_null() { return; }
     let pool = crate::il2cpp::symbols::get_field_object_value::<Il2CppObject>(audio_ctrl, pool_field);
@@ -80,7 +79,6 @@ unsafe fn process_playback(
 
     if cute_audio_source.is_null() { return; }
 
-    // --- #3 fix continued ---
     let source_list_field2 = crate::il2cpp::symbols::get_field_from_name((*cute_audio_source).klass(), c"sourceList");
     if source_list_field2.is_null() { return; }
     let source_list2 = crate::il2cpp::symbols::get_field_object_value::<Il2CppObject>(cute_audio_source, source_list_field2);
@@ -93,7 +91,6 @@ unsafe fn process_playback(
     let atom_source = list2.get(using_index).unwrap_or(std::ptr::null_mut());
     if atom_source.is_null() { return; }
 
-    // --- #2 fix: check addr != 0 before every transmute+call ---
     let get_player_addr = crate::il2cpp::symbols::get_method_addr_cached((*atom_source).klass(), c"get_player", 0);
     if get_player_addr == 0 { return; }
     let get_player: extern "C" fn(*mut Il2CppObject) -> *mut Il2CppObject = std::mem::transmute(get_player_addr);
@@ -159,7 +156,6 @@ pub fn move_live_playback(target_time: f32) {
         Err(_) => return,
     };
 
-    // --- #1 fix: SingletonLike::new() returns Option — handle None gracefully ---
     let director = match symbols::SingletonLike::new(dir_class) {
         Some(s) => s.instance(),
         None => {
@@ -169,7 +165,6 @@ pub fn move_live_playback(target_time: f32) {
     };
     if director.is_null() { return; }
 
-    // --- #2 fix: check addr before transmute ---
     let is_pause_live_addr = symbols::get_method_addr_cached(dir_class, c"IsPauseLive", 0);
     if is_pause_live_addr == 0 {
         warn!("move_live_playback: IsPauseLive not found");
@@ -179,13 +174,11 @@ pub fn move_live_playback(target_time: f32) {
         unsafe { std::mem::transmute(is_pause_live_addr) };
     let was_paused = is_pause_live(director);
 
-    // --- #3 fix: guard field lookup ---
     let live_current_time_field = symbols::get_field_from_name(dir_class, c"_liveCurrentTime");
     if !live_current_time_field.is_null() {
         symbols::set_field_value(director, live_current_time_field, &target_time);
     }
 
-    // --- #2 fix: check addr before transmute ---
     let get_time_controller_addr = symbols::get_method_addr_cached(dir_class, c"get_LiveTimeController", 0);
     if get_time_controller_addr == 0 {
         warn!("move_live_playback: get_LiveTimeController not found");
@@ -198,7 +191,6 @@ pub fn move_live_playback(target_time: f32) {
     if !time_controller.is_null() {
         let tc_class = unsafe { (*time_controller).klass() };
         if !was_paused {
-            // --- #2 fix ---
             let pause_live_addr = symbols::get_method_addr_cached(tc_class, c"PauseLive", 0);
             if pause_live_addr != 0 {
                 let pause_live: extern "C" fn(*mut Il2CppObject) =
@@ -207,13 +199,11 @@ pub fn move_live_playback(target_time: f32) {
             }
         }
 
-        // --- #3 fix ---
         let elapsed_time_field = symbols::get_field_from_name(tc_class, c"_elapsedTime");
         if !elapsed_time_field.is_null() {
             symbols::set_field_value(time_controller, elapsed_time_field, &target_time);
         }
 
-        // --- #2 fix ---
         let set_current_time_addr = symbols::get_method_addr_cached(tc_class, c"set_CurrentTime", 1);
         if set_current_time_addr != 0 {
             let set_current_time: extern "C" fn(*mut Il2CppObject, f32) =
@@ -222,7 +212,6 @@ pub fn move_live_playback(target_time: f32) {
         }
     }
 
-    // --- #1 fix: both unwrap() calls replaced ---
     let am_class = match symbols::get_class(image, c"Gallop", c"AudioManager") {
         Ok(c) => c,
         Err(_) => {
@@ -257,7 +246,6 @@ pub fn move_live_playback(target_time: f32) {
                 let cri_audio_manager = get_cri_audio_manager(audio_manager);
 
                 if !cri_audio_manager.is_null() {
-                    // --- #3 fix ---
                     let audio_ctrl_dict_field = symbols::get_field_from_name(
                         (*cri_audio_manager).klass(), c"audioCtrlDict"
                     );
@@ -269,18 +257,15 @@ pub fn move_live_playback(target_time: f32) {
                         );
 
                         if !audio_ctrl_dict.is_null() {
-                            // --- #3 fix ---
                             let song_playback_field = symbols::get_field_from_name(am_class, c"_songPlayback");
                             if !song_playback_field.is_null() {
                                 let mut song_playback = symbols::get_field_value::<AudioPlayback>(
                                     audio_manager, song_playback_field
                                 );
-                                // --- #6 fix: process_playback is unsafe; wrap call site ---
                                 process_playback(&mut song_playback, audio_ctrl_dict, target_time);
                                 symbols::set_field_value(audio_manager, song_playback_field, &song_playback);
                             }
 
-                            // --- #3 fix ---
                             let song_chara_playbacks_field = symbols::get_field_from_name(
                                 am_class, c"_songCharaPlaybacks"
                             );
@@ -289,7 +274,6 @@ pub fn move_live_playback(target_time: f32) {
                                     crate::il2cpp::types::Il2CppArray
                                 >(audio_manager, song_chara_playbacks_field);
 
-                                // --- #4 fix: null-check before Array::from + as_slice ---
                                 if !song_chara_playbacks.is_null() {
                                     let chara_playbacks = crate::il2cpp::symbols::Array::<AudioPlayback>::from(
                                         song_chara_playbacks
@@ -309,7 +293,6 @@ pub fn move_live_playback(target_time: f32) {
         }
     }
 
-    // --- #2 fix: check addr before transmute ---
     if !time_controller.is_null() && !was_paused {
         let tc_class = unsafe { (*time_controller).klass() };
         let resume_live_addr = symbols::get_method_addr_cached(tc_class, c"ResumeLive", 0);

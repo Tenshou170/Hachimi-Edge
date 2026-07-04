@@ -6,24 +6,20 @@ use windows::{core::{w, PCWSTR}, Win32::{Foundation::HMODULE, System::LibraryLoa
 
 use crate::{core::{Error, Hachimi}, windows::{steamworks, utils}};
 
+use crate::core::hook_utils;
+
 use super::{hachimi_impl, proxy, ffi};
 
 type LoadLibraryWFn = extern "C" fn(filename: PCWSTR) -> HMODULE;
 extern "C" fn LoadLibraryW(filename: PCWSTR) -> HMODULE {
     let hachimi = Hachimi::instance();
-    // --- W-10 fix: get_trampoline_addr returns 0 if the hook isn't installed
-    // yet.  Guard before transmute so we never call a null function pointer. ---
     let trampoline = hachimi.interceptor.get_trampoline_addr(LoadLibraryW as *const () as usize);
     if trampoline == 0 {
-        // Hook not yet active — fall back to the real LoadLibraryW via FFI
         return unsafe { crate::windows::ffi::LoadLibraryW(filename) };
     }
     let orig_fn: LoadLibraryWFn = unsafe { std::mem::transmute(trampoline) };
 
     let handle = orig_fn(filename);
-    // --- W-5 fix: to_string() can fail on invalid UTF-16 (Wine path
-    // translation artifacts, etc.).  Treat decode failure as "not our DLL"
-    // and pass through rather than panicking inside the hook. ---
     let filename_str = match unsafe { filename.to_string() } {
         Ok(s) => s,
         Err(_) => return handle,
@@ -40,14 +36,14 @@ extern "C" fn LoadLibraryW(filename: PCWSTR) -> HMODULE {
     let needs_init_steamworks = steamworks::is_overlay_conflicting(&hachimi);
     if hachimi.on_dlopen(&filename_str, handle.0 as usize) {
         if !needs_init_steamworks {
-            hachimi.interceptor.unhook(LoadLibraryW as *const () as usize);
+            hook_utils::defer_unhook(LoadLibraryW as *const () as usize);
         }
     }
     else if needs_init_steamworks &&
         Path::new(&filename_str).file_name().is_some_and(|name| name == "steam_api64.dll")
     {
         steamworks::init(handle);
-        hachimi.interceptor.unhook(LoadLibraryW as *const () as usize);
+        hook_utils::defer_unhook(LoadLibraryW as *const () as usize);
     }
     handle
 }

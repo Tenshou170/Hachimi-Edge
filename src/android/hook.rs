@@ -28,7 +28,7 @@ extern "C" fn dlopen(filename: *const c_char, flags: c_int) -> *mut c_void {
 
     let filename_str = unsafe { CStr::from_ptr(filename).to_string_lossy() };
     if hachimi.on_dlopen(&filename_str, handle as usize) {
-        hachimi.interceptor.unhook(dlopen as usize);
+        crate::core::hook_utils::defer_unhook(dlopen as usize);
     }
 
     handle
@@ -48,7 +48,7 @@ extern "C" fn do_dlopen(filename: *const c_char, flags: c_int, extinfo: *const c
 
     let filename_str = unsafe { CStr::from_ptr(filename).to_string_lossy() };
     if hachimi.on_dlopen(&filename_str, handle as usize) {
-        hachimi.interceptor.unhook(do_dlopen as usize);
+        crate::core::hook_utils::defer_unhook(do_dlopen as usize);
     }
 
     handle
@@ -69,7 +69,6 @@ extern "C" fn JNINativeInterface_RegisterNatives(env: JNIEnv, class: jclass, met
         if name == "nativeInjectEvent" {
             info!("Got nativeInjectEvent address");
             unsafe { input_hook::NATIVE_INJECT_EVENT_ADDR = method.fnPtr as usize; };
-            crate::android::hachimi_impl::set_keep_screen_on(hachimi.config.load().android.keep_screen_on);
             hachimi.interceptor.unhook(JNINativeInterface_RegisterNatives as usize);
         }
     }
@@ -92,7 +91,7 @@ fn init_internal(env: *mut jni::sys::JNIEnv) -> Result<(), Error> {
 
     const DO_DLOPEN_V24: &str = "__dl__Z9do_dlopenPKciPK17android_dlextinfoPv";  // A7, A7.1
     const DO_DLOPEN_V26: &str = "__dl__Z9do_dlopenPKciPK17android_dlextinfoPKv"; // A8 or later
-    if !force_hook_dlopen {
+    if !force_hook_dlopen && api_level > 0 {
         if api_level >= 26 {
             dlopen_orig = Interceptor::find_symbol_by_name(LINKER_MODULE, DO_DLOPEN_V26)?;
             dlopen_hook = do_dlopen as _;

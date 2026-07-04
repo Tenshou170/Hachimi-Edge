@@ -33,7 +33,7 @@ pub enum HookType {
 
 impl Interceptor {
     pub fn hook(&self, orig_addr: usize, hook_addr: usize) -> Result<usize, Error> {
-        match self.hook_map.lock().unwrap().entry(hook_addr) {
+        match self.hook_map.lock().unwrap_or_else(|e| e.into_inner()).entry(hook_addr) {
             hash_map::Entry::Occupied(e) => Ok(e.get().trampoline_addr),
             hash_map::Entry::Vacant(e) => {
                 let trampoline_addr = unsafe { interceptor_impl::hook(orig_addr, hook_addr)? };
@@ -50,7 +50,7 @@ impl Interceptor {
     }
 
     pub fn hook_vtable(&self, vtable: *mut usize, vtable_index: usize, hook_addr: usize) -> Result<usize, Error> {
-        match self.hook_map.lock().unwrap().entry(hook_addr) {
+        match self.hook_map.lock().unwrap_or_else(|e| e.into_inner()).entry(hook_addr) {
             hash_map::Entry::Occupied(e) => Ok(e.get().trampoline_addr),
             hash_map::Entry::Vacant(e) => {
                 let hook_handle = unsafe { interceptor_impl::hook_vtable(vtable, vtable_index, hook_addr)? };
@@ -62,7 +62,7 @@ impl Interceptor {
     }
 
     pub fn get_trampoline_addr(&self, hook_addr: usize) -> usize {
-        if let Some(hook) = self.hook_map.lock().unwrap().get(&hook_addr) {
+        if let Some(hook) = self.hook_map.lock().unwrap_or_else(|e| e.into_inner()).get(&hook_addr) {
             hook.trampoline_addr
         }
         else {
@@ -72,7 +72,7 @@ impl Interceptor {
     }
 
     pub fn unhook(&self, hook_addr: usize) -> Option<HookHandle> {
-        let hook = self.hook_map.lock().unwrap().remove(&hook_addr)?;
+        let hook = self.hook_map.lock().unwrap_or_else(|e| e.into_inner()).remove(&hook_addr)?;
         if let Err(e) = unsafe { hook.unhook() } {
             error!("Failed to unhook {}: {}", hook.orig_addr, e);
         }
@@ -81,7 +81,7 @@ impl Interceptor {
     }
 
     pub fn unhook_all(&self) {
-        for (_, hook) in self.hook_map.lock().unwrap().drain() {
+        for (_, hook) in self.hook_map.lock().unwrap_or_else(|e| e.into_inner()).drain() {
             if let Err(e) = unsafe { hook.unhook() } {
                 error!("Failed to unhook {}: {}", hook.orig_addr, e);
             }

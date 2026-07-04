@@ -31,7 +31,6 @@ use crate::{
 };
 
 static SMTC_INSTANCE: Lazy<Mutex<Option<SystemMediaTransportControls>>> = Lazy::new(|| Mutex::new(None));
-// --- W-7 fix: replace all static mut with atomics ---
 static CURRENT_SCENE_HANDLE: AtomicI32 = AtomicI32::new(-1);
 static CURRENT_MUSIC_ID: AtomicI32 = AtomicI32::new(-1);
 static PENDING_BUTTON: AtomicU32 = AtomicU32::new(u32::MAX);
@@ -58,7 +57,6 @@ static LAST_UPDATE: AtomicI64 = AtomicI64::new(0);
 static SMTC_INIT_ATTEMPTED: AtomicBool = AtomicBool::new(false);
 
 fn set_playback_status(smtc: &SystemMediaTransportControls, status: MediaPlaybackStatus) {
-    // --- W-7 fix: atomic compare-and-swap instead of static mut read/write ---
     if LAST_STATUS.load(Ordering::Relaxed) != status.0 {
         let _ = smtc.SetPlaybackStatus(status);
         LAST_STATUS.store(status.0, Ordering::Relaxed);
@@ -80,8 +78,7 @@ unsafe fn create_shortcut(name: &str) {
         let exe_path = crate::windows::utils::get_exec_path();
         let mut exe_path_u16: Vec<u16> = exe_path.as_os_str().encode_wide().collect();
         exe_path_u16.push(0);
-        // --- SMTC-1 fix: COM SetPath/SetWorkingDirectory failures are non-fatal;
-        // the shortcut is cosmetic — SMTC still works without it. ---
+        // the shortcut is cosmetic — SMTC still works without it.
         if let Err(e) = shell_link.SetPath(PCWSTR::from_raw(exe_path_u16.as_ptr())) {
             warn!("[smtc] create_shortcut: SetPath failed: {}", e);
         }
@@ -138,8 +135,7 @@ unsafe fn create_shortcut(name: &str) {
 
         if let Ok(persist_file) = shell_link.cast::<IPersistFile>() {
             if let Ok(pwstr) = SHGetKnownFolderPath(&FOLDERID_Programs, KF_FLAG_DEFAULT, None) {
-                // --- SMTC-2 fix: PWSTR::to_string() can only fail if the wide
-                // string contains invalid UTF-16; treat that as non-fatal. ---
+                // string contains invalid UTF-16; treat that as non-fatal.
                 let lnk_dir = match pwstr.to_string() {
                     Ok(s) => s,
                     Err(e) => {
@@ -155,8 +151,7 @@ unsafe fn create_shortcut(name: &str) {
                 }
                 let mut wide_path: Vec<u16> = lnk_path.encode_utf16().collect();
                 wide_path.push(0);
-                // --- SMTC-3 fix: Save failure is non-fatal; SMTC works without
-                // the shortcut, it just won't show the correct app name. ---
+                // the shortcut, it just won't show the correct app name.
                 if let Err(e) = persist_file.Save(PCWSTR::from_raw(wide_path.as_ptr()), true) {
                     warn!("[smtc] create_shortcut: Save failed: {}", e);
                 }
@@ -173,7 +168,6 @@ pub fn on_update() {
         unregister();
         return;
     }
-    // --- W-16 fix: recover from poison instead of unwrap ---
     let mut smtc_guard = match SMTC_INSTANCE.lock() {
         Ok(g) => g,
         Err(e) => e.into_inner(),
@@ -221,7 +215,6 @@ pub fn on_update() {
     let smtc = if let Some(s) = smtc_guard.as_ref() { s } else { return; };
 
     let scene = SceneManager::GetActiveScene();
-    // --- W-7 fix: atomic load/store ---
     let current_scene_handle = CURRENT_SCENE_HANDLE.load(Ordering::Relaxed);
 
     if scene.handle != current_scene_handle {
@@ -387,7 +380,6 @@ fn generate_thumbnail_and_update(texture: *mut Il2CppObject, smtc: &SystemMediaT
 fn update_metadata(smtc: &SystemMediaTransportControls, music_id: i32) {
     if music_id == 0 { return; }
 
-    // --- Prevent constant SQLite query spam if music ID hasn't changed ---
     if CURRENT_MUSIC_ID.load(Ordering::Relaxed) == music_id {
         return;
     }
@@ -630,7 +622,6 @@ fn get_current_hub_view_child_controller() -> *mut Il2CppObject {
 fn handle_button_pressed(args: &SystemMediaTransportControlsButtonPressedEventArgs) {
     if let Ok(button) = args.Button() {
         PENDING_BUTTON.store(button.0 as u32, Ordering::Relaxed);
-        // --- W-7/W-9 fix: avoid .expect() inside Thread::main_thread() ---
         let threads = crate::il2cpp::symbols::Thread::attached_threads();
         if let Some(main) = threads.first() {
             main.schedule(move || {

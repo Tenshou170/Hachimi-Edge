@@ -101,7 +101,6 @@ pub fn apply_seed(
 
     let mut produced_json: Option<String> = None;
 
-    // --- 1. Load the base palette into the global theme context ---
     match params.scheme_mode {
         UiColorSchemeMode::Auto => {
             // Use cached JSON when available, otherwise generate from seed
@@ -150,7 +149,6 @@ pub fn apply_seed(
         }
     }
 
-    // --- 2. Set mode and contrast, then apply per-role overrides ---
     if let Ok(mut theme) = get_global_theme().lock() {
         theme.theme_mode = egui_mode;
         theme.contrast_level = egui_contrast;
@@ -194,14 +192,12 @@ pub fn apply_seed(
         }
     }
 
-    // --- 3. Full MD3 → egui Visuals propagation ---
     let mode_clone = egui_mode;
     // Set global corner radius for MD3 widgets BEFORE apply_theme so buttons/dialogs
     // pick it up during their own rendering. None = use each widget's MD3 spec default.
     set_global_corner_radius(Some(params.window_rounding));
     apply_theme(ctx, Some(move || mode_clone));
 
-    // --- 4. Apply corner radius to native egui Visuals too (affects Window, Frame, etc.) ---
     {
         let r = params.window_rounding;
         ctx.style_mut(|style| {
@@ -215,7 +211,6 @@ pub fn apply_seed(
         });
     }
 
-    // --- 5. Update cache ---
     if let Ok(mut guard) = CURRENT_KEY.lock() {
         *guard = Some(cache_key);
     }

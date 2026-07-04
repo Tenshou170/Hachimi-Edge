@@ -1,6 +1,5 @@
 use crate::{core::Hachimi, il2cpp::{api::il2cpp_field_static_set_value, symbols::{get_field_from_name, get_method_addr}, types::*}};
 
-// --- static isNative field, resolved once in init() ---
 static mut IS_NATIVE_FIELD: *mut FieldInfo = 0 as _;
 
 type CctorFn = extern "C" fn();

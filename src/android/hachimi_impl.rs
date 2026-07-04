@@ -7,6 +7,7 @@ use super::gui_impl::keymap;
 
 static KEEP_SCREEN_ON: AtomicBool = AtomicBool::new(false);
 static KEEP_SCREEN_ON_PENDING: AtomicBool = AtomicBool::new(false);
+static KEEP_SCREEN_ON_RENDER_READY: AtomicBool = AtomicBool::new(false);
 
 pub fn is_il2cpp_lib(filename: &str) -> bool {
     filename.ends_with("libil2cpp.so")
@@ -16,11 +17,9 @@ pub fn is_criware_lib(filename: &str) -> bool {
     filename.ends_with("libcri_ware_unity.so")
 }
 
-pub fn on_hooking_finished(hachimi: &Hachimi) {
-    // When hooking finishes we may already have a config request for
-    // keep_screen_on even if the GUI is disabled. Schedule apply now and
-    // retry until the Activity window becomes available.
-    set_keep_screen_on(hachimi.config.load().android.keep_screen_on);
+pub fn on_hooking_finished(_hachimi: &Hachimi) {
+    // keep_screen_on must only be applied after the native render hook is
+    // initialized and the Android Activity window exists.
 }
 
 /// Sets or clears FLAG_KEEP_SCREEN_ON (0x80) on the game's window.
@@ -29,12 +28,37 @@ pub fn on_hooking_finished(hachimi: &Hachimi) {
 /// CalledFromWrongThreadException. We schedule through the IL2CPP main
 /// thread (which Unity runs on the Android UI thread) to guarantee this.
 pub fn set_keep_screen_on(enable: bool) {
+    info!("set_keep_screen_on called (enable={})", enable);
     KEEP_SCREEN_ON.store(enable, Ordering::Relaxed);
     KEEP_SCREEN_ON_PENDING.store(true, Ordering::Relaxed);
-    crate::il2cpp::symbols::Thread::main_thread().schedule(apply_keep_screen_on_task);
+
+    if KEEP_SCREEN_ON_RENDER_READY.load(Ordering::Relaxed) {
+        schedule_keep_screen_on_task();
+    } else {
+        info!("keep_screen_on update deferred until render hook is ready");
+    }
+}
+
+pub fn apply_keep_screen_on_if_pending() {
+    KEEP_SCREEN_ON_RENDER_READY.store(true, Ordering::Relaxed);
+    if KEEP_SCREEN_ON_PENDING.load(Ordering::Relaxed) {
+        schedule_keep_screen_on_task();
+    }
+}
+
+fn schedule_keep_screen_on_task() {
+    let res = std::panic::catch_unwind(|| {
+        crate::il2cpp::symbols::Thread::main_thread().schedule(apply_keep_screen_on_task);
+    });
+    if res.is_err() {
+        error!("Scheduling apply_keep_screen_on_task panicked");
+    } else {
+        info!("apply_keep_screen_on_task scheduled");
+    }
 }
 
 fn apply_keep_screen_on_task() {
+    info!("apply_keep_screen_on_task entered");
     if !KEEP_SCREEN_ON_PENDING.load(Ordering::Relaxed) {
         return;
     }
@@ -45,7 +69,10 @@ fn apply_keep_screen_on_task() {
             KEEP_SCREEN_ON_PENDING.store(false, Ordering::Relaxed);
         }
         Err(ApplyError::ActivityUnavailable) => {
-            crate::il2cpp::symbols::Thread::main_thread().schedule(apply_keep_screen_on_task);
+            info!("Activity unavailable, rescheduling apply_keep_screen_on_task");
+            let _ = std::panic::catch_unwind(|| {
+                crate::il2cpp::symbols::Thread::main_thread().schedule(apply_keep_screen_on_task);
+            });
         }
         Err(err) => {
             KEEP_SCREEN_ON_PENDING.store(false, Ordering::Relaxed);

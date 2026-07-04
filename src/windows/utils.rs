@@ -121,8 +121,7 @@ pub fn show_error(e: impl AsRef<str>) {
     let s = e.as_ref();
     error!("{}", s);
 
-    // --- U-1 fix: from_str only fails on embedded null bytes, which our
-    // error strings never contain. Replace with lossy conversion to be safe. ---
+    // error strings never contain. Replace with lossy conversion to be safe.
     let cstr = U16CString::from_str(s).unwrap_or_else(|_| {
         U16CString::from_str("<error message contained invalid characters>").unwrap()
     });
