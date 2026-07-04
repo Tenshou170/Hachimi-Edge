@@ -2,6 +2,7 @@ use std::{
     cmp::max,
     fs,
     io::{Cursor, Read, Write},
+    collections::HashSet,
     path::{Path, PathBuf},
     sync::{
         atomic::{self, AtomicBool, AtomicUsize},
@@ -213,6 +214,97 @@ impl DownloadJob {
 }
 
 impl Updater {
+    fn normalize_zip_path(path: &str) -> String {
+        path.trim_matches('/').replace('\\', "/")
+    }
+
+    fn resolve_zip_entry_repo_file<'a>(
+        files_to_extract: &'a FnvHashMap<String, RepoFile>,
+        zip_entry_name: &str,
+        zip_dir: &str,
+    ) -> Option<&'a RepoFile> {
+        let normalized_entry = Self::normalize_zip_path(zip_entry_name);
+        let normalized_zip_dir = Self::normalize_zip_path(zip_dir);
+
+        let entry_candidates = {
+            let entry_without_zip_dir = if normalized_zip_dir.is_empty() {
+                normalized_entry.clone()
+            } else {
+                normalized_entry
+                    .strip_prefix(&format!("{normalized_zip_dir}/"))
+                    .unwrap_or(&normalized_entry)
+                    .to_string()
+            };
+            let entry_without_localized_data = normalized_entry
+                .strip_prefix("localized_data/")
+                .unwrap_or(&normalized_entry)
+                .to_string();
+            let entry_without_megamtl = normalized_entry
+                .strip_prefix("megamtl/localized_data/")
+                .unwrap_or(&normalized_entry)
+                .to_string();
+
+            [
+                normalized_entry.clone(),
+                entry_without_zip_dir,
+                entry_without_localized_data,
+                entry_without_megamtl,
+            ]
+        };
+
+        for (expected_path, repo_file) in files_to_extract {
+            let normalized_expected = Self::normalize_zip_path(expected_path);
+            let normalized_repo_path = Self::normalize_zip_path(&repo_file.path);
+            let repo_candidates = [
+                normalized_expected.clone(),
+                normalized_repo_path.clone(),
+                format!("{normalized_zip_dir}/{normalized_repo_path}"),
+                format!("localized_data/{normalized_repo_path}"),
+                format!("megamtl/localized_data/{normalized_repo_path}"),
+            ];
+
+            if entry_candidates.iter().any(|entry| {
+                repo_candidates.iter().any(|candidate| candidate == entry)
+            }) {
+                return Some(repo_file);
+            }
+        }
+
+        None
+    }
+
+    fn populate_existing_mod_files(cache_files: &mut FnvHashMap<String, String>, files: &[RepoFile], ld_dir: &Path) {
+        for file in files {
+            let path = ld_dir.join(&file.path);
+            if path.is_file()
+                && fs::metadata(&path)
+                    .map(|m| m.len() as usize == file.size)
+                    .unwrap_or(false)
+                && file.verify_integrity(&path)
+            {
+                cache_files.insert(file.path.clone(), file.hash.clone());
+            }
+        }
+    }
+
+    fn cleanup_partial_file(path: &Path) {
+        if path.exists() {
+            if let Err(e) = fs::remove_file(path) {
+                warn!("Failed to remove partial file '{}': {}", path.display(), e);
+            }
+        }
+    }
+
+    fn log_corrupted_download(path: &Path, url: &str, expected_hash: &str, actual_hash: &str) {
+        error!(
+            "Corrupted download detected for '{}' from '{}': expected {} got {}",
+            path.display(),
+            url,
+            expected_hash,
+            actual_hash
+        );
+    }
+
     pub fn skip_update(&self, etag: Option<String>) {
         *self.skipped_etag.lock().unwrap() = etag;
     }
@@ -235,7 +327,7 @@ impl Updater {
 
     pub fn check_for_updates(self: Arc<Self>, pedantic: bool, silent: bool) {
         std::thread::spawn(move || {
-            if let Err(e) = self.check_for_updates_internal(pedantic, silent) {
+            if let Err(e) = self.check_for_updates_internal(pedantic, pedantic, silent) {
                 if let Some(mutex) = Gui::instance() {
                     if !silent {
                         mutex.lock().unwrap().show_notification(&format!("{}", e));
@@ -244,6 +336,68 @@ impl Updater {
                 info!("{}", e);
             }
         });
+    }
+
+    pub fn check_for_mod_updates_only(self: Arc<Self>, silent: bool) {
+        std::thread::spawn(move || {
+            if let Err(e) = self.check_for_mod_updates_only_internal(silent) {
+                if let Some(mutex) = Gui::instance() {
+                    if !silent {
+                        mutex.lock().unwrap().show_notification(&format!("{}", e));
+                    }
+                }
+                info!("{}", e);
+            }
+        });
+    }
+
+    fn check_for_mod_updates_only_internal(&self, silent: bool) -> Result<(), Error> {
+        let Ok(_guard) = self.update_check_mutex.try_lock() else {
+            return Ok(());
+        };
+
+        if self.has_pending_update() || self.has_pending_mod_update() {
+            return Ok(());
+        }
+
+        if self.is_downloading.load(atomic::Ordering::Relaxed) {
+            return Ok(());
+        }
+
+        let hachimi = Hachimi::instance();
+        let config = hachimi.config.load();
+        let Some(mod_index_url) = &config.translation_repo_index_mod else {
+            return Ok(());
+        };
+
+        if config.disable_mod_downloads {
+            return Ok(());
+        }
+
+        let ld_dir_path = config
+            .localized_data_dir
+            .as_ref()
+            .map(|p| hachimi.get_data_path(p));
+
+        if !silent {
+            if let Some(mutex) = Gui::instance() {
+                mutex
+                    .lock()
+                    .unwrap()
+                    .show_notification(&t!("notification.checking_for_addon_updates"));
+            }
+        }
+
+        let found = self.check_for_mod_updates(mod_index_url, true, silent, &config, &ld_dir_path)?;
+        if !found && !silent {
+            if let Some(mutex) = Gui::instance() {
+                mutex
+                    .lock()
+                    .unwrap()
+                    .show_notification(&t!("notification.no_addon_updates"));
+            }
+        }
+        Ok(())
     }
 
     fn is_github_hosted(url: &str) -> bool {
@@ -281,7 +435,7 @@ impl Updater {
         true
     }
 
-    fn check_for_updates_internal(&self, pedantic: bool, silent: bool) -> Result<(), Error> {
+    fn check_for_updates_internal(&self, pedantic_main: bool, pedantic_mod: bool, silent: bool) -> Result<(), Error> {
         // Prevent multiple update checks running at the same time
         let Ok(_guard) = self.update_check_mutex.try_lock() else {
             return Ok(());
@@ -330,14 +484,14 @@ impl Updater {
                     let etag_string = etag_str.to_string();
 
                     if let Some(skipped) = &*self.skipped_etag.lock().unwrap() {
-                        if !pedantic && skipped == &etag_string {
+                        if !pedantic_main && skipped == &etag_string {
                             debug!("Server ETag matches the skipped ETag. Ignoring update.");
                             return Ok(());
                         }
                     }
 
                     if let Some(cached_etag) = &repo_cache.index_etag {
-                        if !pedantic && cached_etag == &etag_string {
+                        if !pedantic_main && cached_etag == &etag_string {
                             debug!("Server ETag matches cached ETag. No translation updates available.");
                             if !silent {
                                 if let Some(mutex) = Gui::instance() {
@@ -387,7 +541,7 @@ impl Updater {
                 true
             } else if let Some(hash) = repo_cache.files.get(&file.path) {
                 // lazy auto update, cached hash and repo hash matches. ignored during pedantic
-                if !pedantic && config.lazy_translation_updates && hash == &file.hash {
+                if !pedantic_main && config.lazy_translation_updates && hash == &file.hash {
                     false
                 } else if let Some(path) = path {
                     // get path or force download if path is invalid
@@ -402,7 +556,7 @@ impl Updater {
                             .unwrap_or(true)
                         {
                             true // size mismatch -> redownload
-                        } else if pedantic {
+                        } else if pedantic_main {
                             // full blake3 integrity check if user requested pedantic update
                             !file.verify_integrity(&path)
                         } else {
@@ -526,13 +680,13 @@ impl Updater {
                 let _ = utils::write_json_file(&updated_cache, &cache_path);
             }
 
-            // No main TL updates — check for mod/addon updates
+            // No main TL updates — check for mod/addon updates unless this was a dedicated main pedantic run.
             let config = hachimi.config.load();
             let mut mod_updates_found = false;
-            if !config.disable_mod_downloads {
+            if !config.disable_mod_downloads && !pedantic_main {
                 if let Some(mod_index_url) = &config.translation_repo_index_mod {
                     let ld_dir_path = config.localized_data_dir.as_ref().map(|p| hachimi.get_data_path(p));
-                    match self.check_for_mod_updates(mod_index_url, pedantic, silent, &config, &ld_dir_path) {
+                    match self.check_for_mod_updates(mod_index_url, pedantic_mod, silent, &config, &ld_dir_path) {
                         Ok(found) => mod_updates_found = found,
                         Err(e) => warn!("Failed to check for mod updates: {}", e),
                     }
@@ -609,7 +763,12 @@ impl Updater {
             .localized_data
             .store(Arc::new(LocalizedData::default()));
 
-        let localized_data_dir = hachimi.get_data_path(LOCALIZED_DATA_DIR);
+        let config = hachimi.config.load();
+        let localized_data_dir = config
+            .localized_data_dir
+            .as_ref()
+            .map(|p| hachimi.get_data_path(p))
+            .unwrap_or_else(|| hachimi.get_data_path(LOCALIZED_DATA_DIR));
 
         if update_info.is_new_repo {
             Self::create_dir(&localized_data_dir, true)?;
@@ -637,7 +796,6 @@ impl Updater {
         }
 
         // Modify the config if needed
-        let config = hachimi.config.load();
         if config.localized_data_dir.is_none() {
             let mut new_config = (**config).clone();
             new_config.localized_data_dir = Some(LOCALIZED_DATA_DIR.to_owned());
@@ -683,17 +841,6 @@ impl Updater {
             }
         }
 
-        // After main TL update completes, check for addon/mod updates
-        let config = hachimi.config.load();
-        if !config.disable_mod_downloads {
-            if let Some(mod_index_url) = &config.translation_repo_index_mod {
-                let ld_dir_path = config.localized_data_dir.as_ref().map(|p| hachimi.get_data_path(p));
-                if let Err(e) = self.check_for_mod_updates(mod_index_url, false, false, &config, &ld_dir_path) {
-                    warn!("Failed to check for mod updates: {}", e);
-                }
-            }
-        }
-
         Ok(())
     }
 
@@ -706,6 +853,9 @@ impl Updater {
         ld_dir_path: &Option<PathBuf>,
     ) -> Result<bool, Error> {
         let hachimi = Hachimi::instance();
+        let ld_dir_path = ld_dir_path
+            .clone()
+            .or_else(|| Some(hachimi.get_data_path(LOCALIZED_DATA_DIR)));
 
         let mod_index: RepoIndex = match http::get_json(mod_index_url) {
             Ok(idx) => idx,
@@ -723,99 +873,190 @@ impl Updater {
             RepoCache::default()
         };
 
+        // Load main repo cache to avoid conflicts when running pedantic checks:
+        // if the main translation repo already provides a file, prefer it and skip mod replacement.
+        let main_cache_path = hachimi.get_data_path(REPO_CACHE_FILENAME);
+        let main_cache_files: FnvHashMap<String, String> = if let Ok(json) = fs::read_to_string(&main_cache_path) {
+            serde_json::from_str::<RepoCache>(&json).map(|c| c.files).unwrap_or_default()
+        } else {
+            FnvHashMap::default()
+        };
+
         if mod_cache.files.is_empty() {
-            if let Some(ld_dir_path) = ld_dir_path {
+            if let Some(ref ld_dir_path) = ld_dir_path {
                 let mut inferred_files = FnvHashMap::default();
+                debug!("Mod cache is empty, attempting to infer {} files from disk", mod_index.files.len());
                 for file in mod_index.files.iter() {
                     let full_path = ld_dir_path.join(&file.path);
-                    if full_path.is_file()
-                        && fs::metadata(&full_path)
-                            .map(|m| m.len() as usize == file.size)
-                            .unwrap_or(false)
-                        && file.verify_integrity(&full_path)
-                    {
+                    let is_file = full_path.is_file();
+                    let size_match = fs::metadata(&full_path)
+                        .map(|m| m.len() as usize == file.size)
+                        .unwrap_or(false);
+                    let hash_match = if is_file && size_match { 
+                        file.verify_integrity(&full_path) 
+                    } else { 
+                        false 
+                    };
+                    
+                    if is_file && size_match && hash_match {
                         inferred_files.insert(file.path.clone(), file.hash.clone());
+                    } else if is_file {
+                        debug!("Mod file candidate rejected: {} (is_file={}, size_match={}, hash_match={})", 
+                            file.path, is_file, size_match, hash_match);
                     }
                 }
                 if !inferred_files.is_empty() {
+                    info!("Inferred {} mod files from disk, persisting cache", inferred_files.len());
                     mod_cache.base_url = mod_index.base_url.clone();
                     mod_cache.files = inferred_files;
+                    // Persist the inferred cache so we don't need to re-verify on next startup
+                    let _ = utils::write_json_file(&mod_cache, &mod_cache_path);
+                } else {
+                    debug!("No mod files could be inferred from disk, {} files checked from index", mod_index.files.len());
                 }
+            } else {
+                warn!("Mod cache is empty and localized_data_dir is not configured");
             }
         }
 
         let is_new_mod = mod_index.base_url != mod_cache.base_url;
         let mut mod_cache_files = mod_cache.files.clone();
-        if !is_new_mod && mod_cache_files.is_empty() {
-            if let Some(ld_dir) = ld_dir_path {
-                for file in mod_index.files.iter() {
-                    let path = ld_dir.join(&file.path);
-                    if path.is_file()
-                        && fs::metadata(&path)
-                            .map(|m| m.len() as usize == file.size)
-                            .unwrap_or(false)
-                        && file.verify_integrity(&path)
-                    {
-                        mod_cache_files.insert(file.path.clone(), file.hash.clone());
-                    }
-                }
+        debug!("Mod cache state: is_new_mod={}, cached_files_count={}, index_files_count={}", 
+            is_new_mod, mod_cache_files.len(), mod_index.files.len());
+        if !is_new_mod {
+            if let Some(ref ld_dir) = ld_dir_path {
+                Self::populate_existing_mod_files(&mut mod_cache_files, &mod_index.files, ld_dir);
             }
         }
 
         let mut update_files: Vec<RepoFile> = Vec::new();
         let mut update_size: usize = 0;
         let mut total_size: usize = 0;
+        let mut update_reasons: Vec<String> = Vec::new();
 
-        for file in mod_index.files.iter() {
-            if file.path.contains("..") || Path::new(&file.path).has_root() {
-                warn!("Mod file path '{}' sanitized", file.path);
-                continue;
+        let total_files = mod_index.files.len().max(1);
+        if let Some(mutex) = Gui::instance() {
+            if let Ok(mut gui) = mutex.lock() {
+                gui.update_progress_visible = true;
             }
+        }
 
-            let updated = if is_new_mod {
-                true
-            } else if !pedantic && config.lazy_translation_updates {
-                if let Some(hash) = mod_cache_files.get(&file.path) {
-                    hash != &file.hash
-                } else {
-                    true
+        let result: Result<(), crate::core::Error> = (|| {
+            for (i, file) in mod_index.files.iter().enumerate() {
+                if i % 50 == 0 {
+                    self.mod_progress
+                        .store(Arc::new(Some(UpdateProgress::new(i, total_files))));
                 }
-            } else {
-                let path = ld_dir_path.as_ref().map(|p| p.join(&file.path));
-                let exists = path.as_ref().map(|p| p.is_file()).unwrap_or(false);
+                if file.path.contains("..") || Path::new(&file.path).has_root() {
+                    warn!("Mod file path '{}' sanitized", file.path);
+                    continue;
+                }
 
-                if let Some(hash) = mod_cache_files.get(&file.path) {
-                    if let Some(path) = path {
-                        if !exists {
+                // When running pedantic checks, skip files that the main repo already claims
+                // to avoid a situation where accepting a mod file is later overwritten
+                // by the main translation update (causing alternating sizes).
+                if pedantic && main_cache_files.contains_key(&file.path) {
+                    debug!("Pedantic mod check: skipping '{}' because main repo owns it", file.path);
+                    continue;
+                }
+
+                let mut reason = None;
+                let updated = if is_new_mod {
+                    reason = Some("new repo".to_string());
+                    true
+                } else if !pedantic && config.lazy_translation_updates {
+                    if let Some(hash) = mod_cache_files.get(&file.path) {
+                        if hash != &file.hash {
+                            reason = Some("cached hash differs from repo".to_string());
                             true
-                        } else if hash != &file.hash {
-                            true
-                        } else if fs::metadata(&path)
-                            .map(|m| m.len() as usize != file.size)
-                            .unwrap_or(true)
-                        {
-                            true
-                        } else if pedantic {
-                            !file.verify_integrity(&path)
                         } else {
                             false
                         }
                     } else {
+                        reason = Some("not in mod cache".to_string());
                         true
                     }
                 } else {
-                    true
-                }
-            };
+                    let path = ld_dir_path.as_ref().map(|p| p.join(&file.path));
+                    let exists = path.as_ref().map(|p| p.is_file()).unwrap_or(false);
 
-            if updated {
-                update_files.push(file.clone());
-                update_size += file.size;
+                    if let Some(hash) = mod_cache_files.get(&file.path) {
+                        if let Some(path) = path {
+                            if !exists {
+                                reason = Some("file missing on disk".to_string());
+                                true
+                            } else if hash != &file.hash {
+                                reason = Some("cached hash differs from repo".to_string());
+                                true
+                            } else if fs::metadata(&path)
+                                .map(|m| m.len() as usize != file.size)
+                                .unwrap_or(true)
+                            {
+                                reason = Some("file size mismatch".to_string());
+                                true
+                            } else if pedantic {
+                                if !file.verify_integrity(&path) {
+                                    reason = Some("pedantic integrity mismatch".to_string());
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            reason = Some("invalid disk path".to_string());
+                            true
+                        }
+                    } else {
+                        reason = Some("not in mod cache".to_string());
+                        true
+                    }
+                };
+
+                if updated {
+                    if let Some(reason) = reason {
+                        update_reasons.push(format!("{} => {}", file.path, reason));
+                    } else {
+                        update_reasons.push(format!("{} => reason unknown", file.path));
+                    }
+                    update_files.push(file.clone());
+                    update_size += file.size;
+                }
+                total_size += file.size;
             }
-            total_size += file.size;
+            Ok(())
+        })();
+
+        // Ensure progress flag cleanup regardless of success or error
+        self.mod_progress.store(Arc::new(None));
+        if let Some(mutex) = Gui::instance() {
+            if let Ok(mut gui) = mutex.lock() {
+                gui.update_progress_visible = false;
+            }
         }
 
+        result?;
+
+
         if !update_files.is_empty() {
+            if !update_reasons.is_empty() {
+                if update_files.len() <= 25 {
+                    info!(
+                        "Mod update reasons ({} files): {}",
+                        update_reasons.len(),
+                        update_reasons.join(", ")
+                    );
+                } else {
+                    debug!(
+                        "Mod update reasons ({} files): {}",
+                        update_reasons.len(),
+                        update_reasons.join(", ")
+                    );
+                }
+            }
+            info!("Mod updates detected: {} files need updating out of {} total", update_files.len(), mod_index.files.len());
+            info!("  Detected as new_mod: {}, lazy_updates enabled: {}", is_new_mod, !pedantic && config.lazy_translation_updates);
             let will_use_zip = Self::should_use_zip_download(
                 update_files.len(),
                 update_size,
@@ -919,7 +1160,12 @@ impl Updater {
         let hachimi = Hachimi::instance();
         hachimi.localized_data.store(Arc::new(LocalizedData::default()));
 
-        let localized_data_dir = hachimi.get_data_path(LOCALIZED_DATA_DIR);
+        let config = hachimi.config.load();
+        let localized_data_dir = config
+            .localized_data_dir
+            .as_ref()
+            .map(|p| hachimi.get_data_path(p))
+            .unwrap_or_else(|| hachimi.get_data_path(LOCALIZED_DATA_DIR));
         Self::create_dir(&localized_data_dir, false)?;
 
         let cached_files = Arc::new(Mutex::new(update_info.cached_files.clone()));
@@ -939,10 +1185,13 @@ impl Updater {
         }
 
         if error_count > 0 {
-            return Err(Error::RuntimeError(format!(
-                "{} errors occurred during mod update",
-                error_count
-            )));
+            warn!("Mod update completed with {} errors (non-fatal), cache will be saved with successfully verified files", error_count);
+        }
+
+        if config.localized_data_dir.is_none() {
+            let mut new_config = (**config).clone();
+            new_config.localized_data_dir = Some(LOCALIZED_DATA_DIR.to_owned());
+            hachimi.save_and_reload_config(new_config)?;
         }
 
         hachimi.load_localized_data();
@@ -952,8 +1201,14 @@ impl Updater {
             index_etag: None,
             files: cached_files.lock().unwrap().clone(),
         };
+        
+        let cached_count = mod_cache.files.len();
+        info!("Saving mod cache with {} files", cached_count);
+        
         let mod_cache_path = hachimi.get_data_path(REPO_CACHE_MOD_FILENAME);
         utils::write_json_file(&mod_cache, &mod_cache_path)?;
+        
+        info!("Mod cache saved successfully");
 
         if let Some(mutex) = Gui::instance() {
             let mut gui = mutex.lock().unwrap();
@@ -1026,24 +1281,31 @@ impl Updater {
 
                             let hash = job.hasher.finalize().to_hex().to_string();
                             if hash != repo_file.hash {
-                                return Err(Error::FileHashMismatch(file_path.to_str().unwrap_or("").to_string()));
+                                let path_str = file_path.to_string_lossy().to_string();
+                                Self::log_corrupted_download(&file_path, &url, &repo_file.hash, &hash);
+                                let _ = fs::remove_file(&file_path);
+                                return Err(Error::FileHashMismatch(path_str));
                             }
                             job.hasher.reset();
                             Ok(hash)
                         })();
+
+                        if execute_result.is_err() {
+                            let _ = fs::remove_file(&file_path);
+                        }
 
                         match execute_result {
                             Ok(hash) => {
                                 cached_files_clone.lock().unwrap().insert(repo_file.path.clone(), hash);
                             }
                             Err(e) => {
-                                if matches!(e, Error::OutOfDiskSpace | Error::FileHashMismatch(_)) {
-                                    error!("Fatal error during mod incremental download: {}", e);
+                                if matches!(e, Error::OutOfDiskSpace) {
+                                    error!("Fatal error during mod incremental download of '{}': {}", file_path.display(), e);
                                     *fatal_error_clone.lock().unwrap() = Some(e);
                                     stop_signal_clone.store(true, atomic::Ordering::Relaxed);
                                     return;
                                 } else {
-                                    error!("Non-fatal error during mod incremental download: {}", e);
+                                    error!("Non-fatal error during mod incremental download of '{}': {}", file_path.display(), e);
                                     non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
                                 }
                             }
@@ -1072,6 +1334,7 @@ impl Updater {
         localized_data_dir: &Path,
         cached_files: Arc<Mutex<FnvHashMap<String, String>>>,
     ) -> Result<usize, Error> {
+        info!("Starting mod ZIP download for {} files, will use ZIP archive", update_info.files.len());
         let zip_path = localized_data_dir.join(".tmp_mod.zip");
         #[allow(unused_assignments)]
         let mut error_count = 0;
@@ -1121,6 +1384,8 @@ impl Updater {
                     .map(|f| (utils::concat_unix_path(&update_info.zip_dir, &f.path), f.clone()))
                     .collect::<FnvHashMap<_, _>>(),
             );
+            info!("Prepared {} mod files for extraction, zip_dir prefix: {}", files_to_extract.len(), update_info.zip_dir);
+            let zip_url_clone = update_info.zip_url.clone();
 
             let zip_file = fs::File::open(&zip_path)?;
             let mmap = Arc::new(unsafe { memmap2::Mmap::map(&zip_file)? });
@@ -1134,18 +1399,23 @@ impl Updater {
             let (sender, receiver) = mpsc::channel::<usize>();
             let receiver = Arc::new(Mutex::new(receiver));
             let mut handles = Vec::with_capacity(*NUM_THREADS);
+            let extraction_in_progress: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
 
             for _ in 0..*NUM_THREADS {
                 let updater = self.clone();
                 let mmap_thread = Arc::clone(&mmap);
                 let files_to_extract_clone = Arc::clone(&files_to_extract);
                 let localized_data_dir_clone = localized_data_dir.to_path_buf();
+                let zip_dir_clone = update_info.zip_dir.clone();
                 let cached_files_clone = Arc::clone(&cached_files);
                 let current_bytes_clone = Arc::clone(&current_bytes);
                 let non_fatal_error_count_clone = Arc::clone(&non_fatal_error_count);
                 let fatal_error_clone = Arc::clone(&fatal_error);
                 let stop_signal_clone = Arc::clone(&stop_signal);
                 let receiver_clone = Arc::clone(&receiver);
+                let zip_url_clone = zip_url_clone.clone();
+
+                let extraction_in_progress = Arc::clone(&extraction_in_progress);
 
                 let handle = thread::Builder::new()
                     .name("mod_zip_extractor".into())
@@ -1156,7 +1426,10 @@ impl Updater {
                         }
                         let mut archive = match zip::ZipArchive::new(Cursor::new(&mmap_thread[..])) {
                             Ok(a) => a,
-                            Err(_) => return,
+                            Err(e) => {
+                                error!("Failed to create ZipArchive in mod extraction thread: {}", e);
+                                return;
+                            }
                         };
                         let mut buffer = vec![0u8; CHUNK_SIZE];
                         let mut hasher = blake3::Hasher::new();
@@ -1169,12 +1442,29 @@ impl Updater {
                                 Err(_) => { non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst); continue; }
                             };
 
-                            let repo_file = match files_to_extract_clone.get(zip_entry.name()) {
+                            let repo_file = match Self::resolve_zip_entry_repo_file(
+                                &files_to_extract_clone,
+                                zip_entry.name(),
+                                &zip_dir_clone,
+                            ) {
                                 Some(file) => file.clone(),
-                                None => continue,
+                                None => {
+                                    debug!("ZIP entry not in mod files_to_extract list: {} (searching {} entries)", zip_entry.name(), files_to_extract_clone.len());
+                                    continue;
+                                }
                             };
 
                             let path = repo_file.get_fs_path(&localized_data_dir_clone);
+                            debug!("ZIP entry '{}' -> target '{}'", zip_entry.name(), path.display());
+
+                            // Prevent multiple threads from extracting the same target path concurrently
+                            {
+                                let mut inprog = extraction_in_progress.lock().unwrap();
+                                if !inprog.insert(repo_file.path.clone()) {
+                                    debug!("Skipping duplicate extraction for {}", repo_file.path);
+                                    continue;
+                                }
+                            }
                             if let Some(parent) = path.parent() {
                                 if Self::create_dir(parent, false).is_err() {
                                     non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
@@ -1182,9 +1472,15 @@ impl Updater {
                                 }
                             }
 
-                            let mut out_file = match fs::File::create(&path) {
+                            // Write to a temporary file and atomically rename into place to avoid partial/overwritten files
+                            let tmp_path = path.with_extension("tmp_mod");
+                            let mut out_file = match fs::File::create(&tmp_path) {
                                 Ok(f) => f,
-                                Err(_) => { non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst); continue; }
+                                Err(_) => {
+                                    extraction_in_progress.lock().unwrap().remove(&repo_file.path);
+                                    non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
+                                    continue;
+                                }
                             };
 
                             loop {
@@ -1193,26 +1489,44 @@ impl Updater {
                                     Ok(n) => {
                                         let data = &buffer[..n];
                                         if out_file.write_all(data).is_err() {
-                                            *fatal_error_clone.lock().unwrap() = Some(Error::OutOfDiskSpace);
-                                            stop_signal_clone.store(true, atomic::Ordering::Relaxed);
-                                            return;
+                                                    extraction_in_progress.lock().unwrap().remove(&repo_file.path);
+                                                    *fatal_error_clone.lock().unwrap() = Some(Error::OutOfDiskSpace);
+                                                    stop_signal_clone.store(true, atomic::Ordering::Relaxed);
+                                                    return;
                                         }
                                         hasher.update(data);
                                         let prev = current_bytes_clone.fetch_add(n, atomic::Ordering::SeqCst);
                                         updater.mod_progress.store(Arc::new(Some(UpdateProgress::new(prev + n, total_size))));
                                     }
-                                    Err(_) => { non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst); break; }
+                                    Err(_) => {
+                                        let _ = fs::remove_file(&tmp_path);
+                                        non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
+                                        break;
+                                    }
                                 }
                             }
 
                             let hash = hasher.finalize().to_hex().to_string();
                             if hash != repo_file.hash {
-                                *fatal_error_clone.lock().unwrap() = Some(Error::FileHashMismatch(path.to_str().unwrap_or("").to_string()));
-                                stop_signal_clone.store(true, atomic::Ordering::Relaxed);
-                                return;
+                                Self::log_corrupted_download(&path, &zip_url_clone, &repo_file.hash, &hash);
+                                let _ = fs::remove_file(&tmp_path);
+                                warn!("Hash mismatch for mod file '{}': expected {} but got {}", repo_file.path, repo_file.hash, hash);
+                                non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
+                            } else {
+                                // Atomically replace target with tmp file
+                                if let Err(e) = fs::rename(&tmp_path, &path) {
+                                    error!("Failed to rename '{}' -> '{}': {}", tmp_path.display(), path.display(), e);
+                                    let _ = fs::remove_file(&tmp_path);
+                                    non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
+                                } else {
+                                    cached_files_clone.lock().unwrap().insert(repo_file.path.clone(), hash.clone());
+                                    info!("Extracted mod file '{}' -> {} (hash={})", repo_file.path, path.display(), hash);
+                                }
                             }
-                            cached_files_clone.lock().unwrap().insert(repo_file.path.clone(), hash);
                             hasher.reset();
+
+                            // Clear in-progress marker
+                            extraction_in_progress.lock().unwrap().remove(&repo_file.path);
                         }
                     })
                     .unwrap();
@@ -1220,13 +1534,18 @@ impl Updater {
             }
 
             let zip_len = zip::ZipArchive::new(Cursor::new(&mmap[..]))?.len();
+            debug!("Mod ZIP archive has {} entries, spawned {} extraction threads", zip_len, *NUM_THREADS);
             for i in 0..zip_len {
-                if sender.send(i).is_err() { break; }
+                if sender.send(i).is_err() { 
+                    warn!("Failed to send ZIP entry index {}, receiver may have closed", i);
+                    break; 
+                }
             }
             drop(sender);
             for handle in handles { handle.join().unwrap(); }
 
             if let Some(err) = fatal_error.lock().unwrap().take() {
+                let _ = fs::remove_file(&zip_path);
                 return Err(err);
             }
             error_count = non_fatal_error_count.load(atomic::Ordering::Relaxed);
@@ -1234,8 +1553,10 @@ impl Updater {
 
         if let Err(e) = fs::remove_file(&zip_path) {
             error!("Failed to remove temporary mod zip '{}': {}", zip_path.display(), e);
-            error_count += 1;
         }
+
+        let final_cached_count = cached_files.lock().unwrap().len();
+        info!("Mod ZIP extraction complete: {} files cached, {} errors", final_cached_count, error_count);
 
         Ok(error_count)
     }
@@ -1314,13 +1635,17 @@ impl Updater {
 
                             let hash = job.hasher.finalize().to_hex().to_string();
                             if hash != repo_file.hash {
-                                return Err(Error::FileHashMismatch(
-                                    file_path.to_str().unwrap_or("").to_string(),
-                                ));
+                                let path_str = file_path.to_string_lossy().to_string();
+                                Self::log_corrupted_download(&file_path, &url, &repo_file.hash, &hash);
+                                return Err(Error::FileHashMismatch(path_str));
                             }
                             job.hasher.reset();
                             Ok(hash)
                         })();
+
+                        if execute_result.is_err() {
+                            Self::cleanup_partial_file(&file_path);
+                        }
 
                         match execute_result {
                             Ok(hash) => {
@@ -1331,12 +1656,12 @@ impl Updater {
                             }
                             Err(e) => {
                                 if matches!(e, Error::OutOfDiskSpace | Error::FileHashMismatch(_)) {
-                                    error!("Fatal error during incremental download: {}", e);
+                                    error!("Fatal error during incremental download of '{}': {}", file_path.display(), e);
                                     *fatal_error_clone.lock().unwrap() = Some(e);
                                     stop_signal_clone.store(true, atomic::Ordering::Relaxed);
                                     return;
                                 } else {
-                                    error!("Non-fatal error during incremental download: {}", e);
+                                    error!("Non-fatal error during incremental download of '{}': {}", file_path.display(), e);
                                     non_fatal_error_count_clone
                                         .fetch_add(1, atomic::Ordering::SeqCst);
                                 }
@@ -1373,6 +1698,7 @@ impl Updater {
         cached_files: Arc<Mutex<FnvHashMap<String, String>>>,
     ) -> Result<usize, Error> {
         let zip_path = localized_data_dir.join(".tmp.zip");
+        let extraction_in_progress: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
         // idk compiler going monkey mode unless i add this
         #[allow(unused_assignments)]
         let mut error_count = 0;
@@ -1436,6 +1762,7 @@ impl Updater {
                     })
                     .collect::<FnvHashMap<_, _>>(),
             );
+            let zip_url_clone = update_info.zip_url.clone();
 
             let zip_file = fs::File::open(&zip_path)?;
             let mmap = Arc::new(unsafe { memmap2::Mmap::map(&zip_file)? });
@@ -1455,12 +1782,16 @@ impl Updater {
                 let mmap_thread = Arc::clone(&mmap);
                 let files_to_extract_clone = Arc::clone(&files_to_extract);
                 let localized_data_dir_clone = localized_data_dir.to_path_buf();
+                let zip_dir_clone = update_info.zip_dir.clone();
                 let cached_files_clone = Arc::clone(&cached_files);
                 let current_bytes_clone = Arc::clone(&current_bytes);
                 let non_fatal_error_count_clone = Arc::clone(&non_fatal_error_count);
                 let fatal_error_clone = Arc::clone(&fatal_error);
                 let stop_signal_clone = Arc::clone(&stop_signal);
                 let receiver_clone = Arc::clone(&receiver);
+                let zip_url_clone = zip_url_clone.clone();
+
+                let extraction_in_progress = Arc::clone(&extraction_in_progress);
 
                 let handle = thread::Builder::new()
                     .name("zip_extractor".into())
@@ -1493,23 +1824,41 @@ impl Updater {
                                 }
                             };
 
-                            let repo_file = match files_to_extract_clone.get(zip_entry.name()) {
+                            let repo_file = match Self::resolve_zip_entry_repo_file(
+                                &files_to_extract_clone,
+                                zip_entry.name(),
+                                &zip_dir_clone,
+                            ) {
                                 Some(file) => file.clone(),
                                 None => continue,
                             };
 
                             let path = repo_file.get_fs_path(&localized_data_dir_clone);
+                            debug!("ZIP entry '{}' -> target '{}'", zip_entry.name(), path.display());
+
+                            // Prevent multiple threads from extracting the same target path concurrently
+                            {
+                                let mut inprog = extraction_in_progress.lock().unwrap();
+                                if !inprog.insert(repo_file.path.clone()) {
+                                    debug!("Skipping duplicate extraction for {}", repo_file.path);
+                                    continue;
+                                }
+                            }
+
                             if let Some(parent) = path.parent() {
                                 if Self::create_dir(parent, false).is_err() {
+                                    extraction_in_progress.lock().unwrap().remove(&repo_file.path);
                                     non_fatal_error_count_clone
                                         .fetch_add(1, atomic::Ordering::SeqCst);
                                     continue;
                                 }
                             }
 
-                            let mut out_file = match fs::File::create(&path) {
+                            let tmp_path = path.with_extension("tmp_mod");
+                            let mut out_file = match fs::File::create(&tmp_path) {
                                 Ok(file) => file,
                                 Err(_) => {
+                                    extraction_in_progress.lock().unwrap().remove(&repo_file.path);
                                     non_fatal_error_count_clone
                                         .fetch_add(1, atomic::Ordering::SeqCst);
                                     continue;
@@ -1522,22 +1871,19 @@ impl Updater {
                                     Ok(read_bytes) => {
                                         let data_slice = &buffer[..read_bytes];
                                         if out_file.write_all(data_slice).is_err() {
-                                            *fatal_error_clone.lock().unwrap() =
-                                                Some(Error::OutOfDiskSpace);
-                                            stop_signal_clone
-                                                .store(true, atomic::Ordering::Relaxed);
+                                            let _ = fs::remove_file(&tmp_path);
+                                            extraction_in_progress.lock().unwrap().remove(&repo_file.path);
+                                            *fatal_error_clone.lock().unwrap() = Some(Error::OutOfDiskSpace);
+                                            stop_signal_clone.store(true, atomic::Ordering::Relaxed);
                                             return;
                                         }
                                         hasher.update(data_slice);
-                                        let prev_size = current_bytes_clone
-                                            .fetch_add(read_bytes, atomic::Ordering::SeqCst);
-                                        updater.progress.store(Arc::new(Some(
-                                            UpdateProgress::new(prev_size + read_bytes, total_size),
-                                        )));
+                                        let prev_size = current_bytes_clone.fetch_add(read_bytes, atomic::Ordering::SeqCst);
+                                        updater.progress.store(Arc::new(Some(UpdateProgress::new(prev_size + read_bytes, total_size))));
                                     }
                                     Err(_) => {
-                                        non_fatal_error_count_clone
-                                            .fetch_add(1, atomic::Ordering::SeqCst);
+                                        let _ = fs::remove_file(&tmp_path);
+                                        non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
                                         break;
                                     }
                                 }
@@ -1545,18 +1891,26 @@ impl Updater {
 
                             let hash = hasher.finalize().to_hex().to_string();
                             if hash != repo_file.hash {
+                                Self::log_corrupted_download(&path, &zip_url_clone, &repo_file.hash, &hash);
+                                let _ = fs::remove_file(&tmp_path);
                                 let path_str = path.to_str().unwrap_or("").to_string();
-                                *fatal_error_clone.lock().unwrap() =
-                                    Some(Error::FileHashMismatch(path_str));
+                                extraction_in_progress.lock().unwrap().remove(&repo_file.path);
+                                *fatal_error_clone.lock().unwrap() = Some(Error::FileHashMismatch(path_str));
                                 stop_signal_clone.store(true, atomic::Ordering::Relaxed);
                                 return;
                             }
 
-                            cached_files_clone
-                                .lock()
-                                .unwrap()
-                                .insert(repo_file.path.clone(), hash);
+                            if let Err(e) = fs::rename(&tmp_path, &path) {
+                                error!("Failed to rename '{}' -> '{}': {}", tmp_path.display(), path.display(), e);
+                                let _ = fs::remove_file(&tmp_path);
+                                non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
+                            } else {
+                                cached_files_clone.lock().unwrap().insert(repo_file.path.clone(), hash.clone());
+                                info!("Extracted '{}' -> {} (hash={})", repo_file.path, path.display(), hash);
+                            }
                             hasher.reset();
+
+                            extraction_in_progress.lock().unwrap().remove(&repo_file.path);
                         }
                     })
                     .unwrap();
@@ -1603,5 +1957,32 @@ impl Updater {
 
     pub fn is_downloading(&self) -> bool {
         self.is_downloading.load(atomic::Ordering::Relaxed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zip_entry_matches_repo_path_with_localized_data_prefix() {
+        let mut files = FnvHashMap::default();
+        files.insert(
+            "megamtl/localized_data/assets/story/data/04/1047/storytimeline_041047001.json".to_string(),
+            RepoFile {
+                path: "assets/story/data/04/1047/storytimeline_041047001.json".to_string(),
+                hash: "hash".to_string(),
+                size: 1,
+            },
+        );
+
+        let repo_file = super::Updater::resolve_zip_entry_repo_file(
+            &files,
+            "localized_data/assets/story/data/04/1047/storytimeline_041047001.json",
+            "megamtl/localized_data",
+        );
+
+        assert!(repo_file.is_some());
+        assert_eq!(repo_file.unwrap().path, "assets/story/data/04/1047/storytimeline_041047001.json");
     }
 }

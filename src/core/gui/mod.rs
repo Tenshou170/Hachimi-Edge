@@ -1121,6 +1121,12 @@ impl Gui {
                                     hachimi.tl_updater.skip_update(None);
                                     hachimi.tl_updater.clone().check_for_updates(true, false);
                                 }
+                                if hachimi.config.load().translation_repo_index_mod.is_some() {
+                                    if ConfigEditor::list_tile_button(ui, t!("menu.tl_check_for_addon_updates_pedantic"), t!("check")) {
+                                        hachimi.tl_updater.skip_update(None);
+                                        hachimi.tl_updater.clone().check_for_mod_updates_only(false);
+                                    }
+                                }
                                 if hachimi.config.load().translator_mode {
                                     if ConfigEditor::list_tile_button(ui, t!("menu.dump_localize_dict"), t!("dump")) {
                                         Thread::main_thread().schedule(|| {
