@@ -1,6 +1,5 @@
 use std::{
     cmp::max,
-    collections::HashSet,
     fs,
     io::{Cursor, Read, Write},
     path::{Path, PathBuf},
@@ -154,7 +153,6 @@ struct RepoCache {
     index_etag: Option<String>,
     files: FnvHashMap<String, String>, // path: hash
 }
-const REPO_EXCLUDES_FILENAME: &str = "excludes.txt";
 
 #[derive(Clone)]
 struct ModUpdateInfo {
@@ -289,7 +287,11 @@ impl Updater {
             return Ok(());
         };
 
-        if self.has_pending_update() {
+        if self.has_pending_update() || self.has_pending_mod_update() {
+            return Ok(());
+        }
+
+        if self.is_downloading.load(atomic::Ordering::Relaxed) {
             return Ok(());
         }
 
@@ -355,18 +357,6 @@ impl Updater {
 
         let index: RepoIndex = http::get_json(index_url)?;
 
-        let excludes_path = hachimi.get_data_path(REPO_EXCLUDES_FILENAME);
-        let excludes: HashSet<String> = if excludes_path.exists() {
-            fs::read_to_string(&excludes_path)
-                .unwrap_or_default()
-                .lines()
-                .map(|l| l.trim().replace("\\", "/")) // normalize to match repo format
-                .filter(|l| !l.is_empty())
-                .collect()
-        } else {
-            HashSet::new()
-        };
-
         let is_new_repo = index.base_url != repo_cache.base_url;
         let mut modifies_atlas = false;
         let mut update_files: Vec<RepoFile> = Vec::new();
@@ -395,9 +385,6 @@ impl Updater {
             let updated = if is_new_repo {
                 // redownload every single file because the directory will be deleted
                 true
-            } else if !pedantic && exists && excludes.contains(&file.path) {
-                // skip excluded file unless pedantic update or the file doesn't exist in the system
-                false
             } else if let Some(hash) = repo_cache.files.get(&file.path) {
                 // lazy auto update, cached hash and repo hash matches. ignored during pedantic
                 if !pedantic && config.lazy_translation_updates && hash == &file.hash {
@@ -545,7 +532,7 @@ impl Updater {
             if !config.disable_mod_downloads {
                 if let Some(mod_index_url) = &config.translation_repo_index_mod {
                     let ld_dir_path = config.localized_data_dir.as_ref().map(|p| hachimi.get_data_path(p));
-                    match self.check_for_mod_updates(mod_index_url, pedantic, &config, &ld_dir_path) {
+                    match self.check_for_mod_updates(mod_index_url, pedantic, silent, &config, &ld_dir_path) {
                         Ok(found) => mod_updates_found = found,
                         Err(e) => warn!("Failed to check for mod updates: {}", e),
                     }
@@ -574,8 +561,11 @@ impl Updater {
                     error!("{}", e);
                     self.progress.store(Arc::new(None));
                     self.is_downloading.store(false, atomic::Ordering::Relaxed);
+                    Hachimi::instance().load_localized_data();
                     if let Some(mutex) = Gui::instance() {
-                        mutex.lock().unwrap().show_notification(&t!(
+                        let mut gui = mutex.lock().unwrap();
+                        gui.update_progress_visible = false;
+                        gui.show_notification(&t!(
                             "notification.update_failed",
                             reason = e.to_string()
                         ));
@@ -639,6 +629,12 @@ impl Updater {
                 cached_files.clone(),
             )
         }?;
+        if error_count > 0 {
+            return Err(Error::RuntimeError(format!(
+                "{} errors occurred during update",
+                error_count
+            )));
+        }
 
         // Modify the config if needed
         let config = hachimi.config.load();
@@ -692,7 +688,7 @@ impl Updater {
         if !config.disable_mod_downloads {
             if let Some(mod_index_url) = &config.translation_repo_index_mod {
                 let ld_dir_path = config.localized_data_dir.as_ref().map(|p| hachimi.get_data_path(p));
-                if let Err(e) = self.check_for_mod_updates(mod_index_url, false, &config, &ld_dir_path) {
+                if let Err(e) = self.check_for_mod_updates(mod_index_url, false, false, &config, &ld_dir_path) {
                     warn!("Failed to check for mod updates: {}", e);
                 }
             }
@@ -705,6 +701,7 @@ impl Updater {
         &self,
         mod_index_url: &str,
         pedantic: bool,
+        silent: bool,
         config: &crate::core::hachimi::Config,
         ld_dir_path: &Option<PathBuf>,
     ) -> Result<bool, Error> {
@@ -719,26 +716,52 @@ impl Updater {
         };
 
         let mod_cache_path = hachimi.get_data_path(REPO_CACHE_MOD_FILENAME);
-        let mod_cache: RepoCache = if fs::metadata(&mod_cache_path).is_ok() {
+        let mut mod_cache: RepoCache = if fs::metadata(&mod_cache_path).is_ok() {
             let json = fs::read_to_string(&mod_cache_path)?;
-            serde_json::from_str(&json).unwrap_or_default()
+            serde_json::from_str(&json)?
         } else {
             RepoCache::default()
         };
 
-        let excludes_path = hachimi.get_data_path(REPO_EXCLUDES_FILENAME);
-        let excludes: HashSet<String> = if excludes_path.exists() {
-            fs::read_to_string(&excludes_path)
-                .unwrap_or_default()
-                .lines()
-                .map(|l| l.trim().replace("\\", "/"))
-                .filter(|l| !l.is_empty())
-                .collect()
-        } else {
-            HashSet::new()
-        };
+        if mod_cache.files.is_empty() {
+            if let Some(ld_dir_path) = ld_dir_path {
+                let mut inferred_files = FnvHashMap::default();
+                for file in mod_index.files.iter() {
+                    let full_path = ld_dir_path.join(&file.path);
+                    if full_path.is_file()
+                        && fs::metadata(&full_path)
+                            .map(|m| m.len() as usize == file.size)
+                            .unwrap_or(false)
+                        && file.verify_integrity(&full_path)
+                    {
+                        inferred_files.insert(file.path.clone(), file.hash.clone());
+                    }
+                }
+                if !inferred_files.is_empty() {
+                    mod_cache.base_url = mod_index.base_url.clone();
+                    mod_cache.files = inferred_files;
+                }
+            }
+        }
 
         let is_new_mod = mod_index.base_url != mod_cache.base_url;
+        let mut mod_cache_files = mod_cache.files.clone();
+        if !is_new_mod && mod_cache_files.is_empty() {
+            if let Some(ld_dir) = ld_dir_path {
+                for file in mod_index.files.iter() {
+                    let path = ld_dir.join(&file.path);
+                    if path.is_file()
+                        && fs::metadata(&path)
+                            .map(|m| m.len() as usize == file.size)
+                            .unwrap_or(false)
+                        && file.verify_integrity(&path)
+                    {
+                        mod_cache_files.insert(file.path.clone(), file.hash.clone());
+                    }
+                }
+            }
+        }
+
         let mut update_files: Vec<RepoFile> = Vec::new();
         let mut update_size: usize = 0;
         let mut total_size: usize = 0;
@@ -749,36 +772,40 @@ impl Updater {
                 continue;
             }
 
-            let path = ld_dir_path.as_ref().map(|p| p.join(&file.path));
-            let exists = path.as_ref().map(|p| p.is_file()).unwrap_or(false);
-
             let updated = if is_new_mod {
                 true
-            } else if !pedantic && exists && excludes.contains(&file.path) {
-                false
-            } else if let Some(hash) = mod_cache.files.get(&file.path) {
-                if !pedantic && config.lazy_translation_updates && hash == &file.hash {
-                    false
-                } else if let Some(path) = path {
-                    if !exists {
-                        true
-                    } else if hash != &file.hash {
-                        true
-                    } else if fs::metadata(&path)
-                        .map(|m| m.len() as usize != file.size)
-                        .unwrap_or(true)
-                    {
-                        true
-                    } else if pedantic {
-                        !file.verify_integrity(&path)
-                    } else {
-                        false
-                    }
+            } else if !pedantic && config.lazy_translation_updates {
+                if let Some(hash) = mod_cache_files.get(&file.path) {
+                    hash != &file.hash
                 } else {
                     true
                 }
             } else {
-                true
+                let path = ld_dir_path.as_ref().map(|p| p.join(&file.path));
+                let exists = path.as_ref().map(|p| p.is_file()).unwrap_or(false);
+
+                if let Some(hash) = mod_cache_files.get(&file.path) {
+                    if let Some(path) = path {
+                        if !exists {
+                            true
+                        } else if hash != &file.hash {
+                            true
+                        } else if fs::metadata(&path)
+                            .map(|m| m.len() as usize != file.size)
+                            .unwrap_or(true)
+                        {
+                            true
+                        } else if pedantic {
+                            !file.verify_integrity(&path)
+                        } else {
+                            false
+                        }
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                }
             };
 
             if updated {
@@ -802,14 +829,16 @@ impl Updater {
                 zip_url: mod_index.zip_url,
                 zip_dir: mod_index.zip_dir,
                 files: update_files,
-                cached_files: mod_cache.files,
+                cached_files: mod_cache_files,
                 size: actual_download_size,
                 update_size,
                 total_size,
                 will_use_zip,
             })));
 
-            if let Some(mutex) = Gui::instance() {
+            if silent || Gui::instance().is_none() {
+                Hachimi::instance().tl_updater.clone().run_mod();
+            } else if let Some(mutex) = Gui::instance() {
                 let dialog_message = t!(
                     "tl_update_dialog.content_mod",
                     size = Size::from_bytes(actual_download_size)
@@ -844,8 +873,11 @@ impl Updater {
                     error!("{}", e);
                     self.mod_progress.store(Arc::new(None));
                     self.is_downloading.store(false, atomic::Ordering::Relaxed);
+                    Hachimi::instance().load_localized_data();
                     if let Some(mutex) = Gui::instance() {
-                        mutex.lock().unwrap().show_notification(&t!(
+                        let mut gui = mutex.lock().unwrap();
+                        gui.update_progress_visible = false;
+                        gui.show_notification(&t!(
                             "notification.update_failed",
                             reason = e.to_string()
                         ));
@@ -906,6 +938,13 @@ impl Updater {
             mutex.lock().unwrap().update_progress_visible = false;
         }
 
+        if error_count > 0 {
+            return Err(Error::RuntimeError(format!(
+                "{} errors occurred during mod update",
+                error_count
+            )));
+        }
+
         hachimi.load_localized_data();
 
         let mod_cache = RepoCache {
@@ -919,12 +958,6 @@ impl Updater {
         if let Some(mutex) = Gui::instance() {
             let mut gui = mutex.lock().unwrap();
             gui.show_notification(&t!("notification.mod_update_completed"));
-            if error_count > 0 {
-                gui.show_notification(&t!(
-                    "notification.errors_during_update",
-                    count = error_count
-                ));
-            }
         }
 
         Ok(())
@@ -973,6 +1006,7 @@ impl Updater {
 
                         let file_path = repo_file.get_fs_path(&localized_data_dir_clone);
                         let url = utils::concat_unix_path(&base_url_clone, &repo_file.path);
+                        job.hasher.reset();
 
                         let execute_result = (|| -> Result<String, Error> {
                             if let Some(parent) = Path::new(&file_path).parent() {

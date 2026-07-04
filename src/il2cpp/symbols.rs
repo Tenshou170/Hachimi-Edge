@@ -491,12 +491,23 @@ impl<K, V> IDictionary<K, V> {
 #[derive(Clone)]
 pub struct Thread(*mut Il2CppThread);
 
+unsafe fn thread_slice_from_raw<T>(ptr: *const T, size: usize) -> &'static [T] {
+    if ptr.is_null() || size == 0 {
+        return &[];
+    }
+    std::slice::from_raw_parts(ptr, size)
+}
+
 impl Thread {
     pub fn from_raw(ptr: *mut Il2CppThread) -> Self {
         Self(ptr)
     }
 
     fn sync_ctx(&self) -> *mut Il2CppObject {
+        if self.0.is_null() {
+            return null_mut();
+        }
+
         let class = unsafe { (*self.0).obj.klass() };
         let get_exec_ctx_addr = get_method_addr_cached(class, c"GetMutableExecutionContext", 0);
         if get_exec_ctx_addr == 0 {
@@ -522,6 +533,11 @@ impl Thread {
     }
 
     pub fn schedule(&self, callback: fn()) {
+        if self.0.is_null() {
+            error!("thread is null, callback not scheduled");
+            return;
+        }
+
         let sync_ctx = self.sync_ctx();
         if sync_ctx.is_null() {
             error!("synchronization context is null, callback not scheduled");
@@ -557,11 +573,11 @@ impl Thread {
     pub fn attached_threads() -> &'static [Thread] {
         let mut size = 0;
         let list_ptr = il2cpp_thread_get_all_attached_threads(&mut size);
-        unsafe { std::slice::from_raw_parts(list_ptr as *const Thread, size) }
+        unsafe { thread_slice_from_raw(list_ptr as *const Thread, size) }
     }
 
     pub fn main_thread() -> Thread {
-        Self::attached_threads().get(0).expect("main thread must be present").clone()
+        Self::attached_threads().first().cloned().unwrap_or_else(|| Self::from_raw(null_mut()))
     }
 
     pub fn as_raw(&self) -> *mut Il2CppThread {
@@ -590,6 +606,17 @@ pub fn create_delegate(delegate_class: *mut Il2CppClass, args_count: i32, method
     }
 
     Some(delegate)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_thread_slice_is_safe() {
+        let slice = unsafe { thread_slice_from_raw(std::ptr::null::<Thread>(), 0) };
+        assert!(slice.is_empty());
+    }
 }
 
 // Singleton-like class wrapper

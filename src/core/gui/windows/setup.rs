@@ -81,8 +81,6 @@ impl AppWindow for FirstTimeSetupWindow {
                                     t!("config_editor.meta_index_url"),
                                     &mut self.meta_index_url,
                                 );
-                                #[cfg(target_os = "android")]
-                                handle_android_keyboard(&res, &mut self.meta_index_url);
                                 #[cfg(target_os = "windows")]
                                 if res.has_focus() {
                                     ui.memory_mut(|mem| {

@@ -521,23 +521,20 @@ pub fn slider_with_input(
 
             let dv = ui
                 .push_id(id_salt, |ui| {
-                    let (rect, _) = ui.allocate_exact_size(
-                        egui::vec2(number_w, 32.0),
-                        egui::Sense::hover(),
-                    );
-                    ui.put(
-                        rect,
-                        MaterialNumberField::filled(value)
-                            .range(range)
-                            .decimals(decimals),
+                    put_with_android_keyboard(
+                        ui.add_sized(
+                            [number_w, 32.0],
+                            MaterialNumberField::filled(value)
+                                .range(range)
+                                .decimals(decimals),
+                        ),
+                        value,
                     )
                 })
                 .inner;
             if dv.changed() {
                 changed = true;
             }
-            #[cfg(target_os = "android")]
-            handle_android_keyboard(&dv, value);
         })
         .response;
 
@@ -583,6 +580,38 @@ pub fn get_enum_options(class_name: &std::ffi::CStr) -> Vec<String> {
     options
 }
 
+#[cfg(target_os = "android")]
+pub fn add_with_android_keyboard<T: 'static>(response: egui::Response, value: &mut T) -> egui::Response {
+    handle_android_keyboard(&response, value);
+    response
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn add_with_android_keyboard<T: 'static>(response: egui::Response, _value: &mut T) -> egui::Response {
+    response
+}
+
+#[cfg(target_os = "android")]
+pub fn add_sized_with_android_keyboard<T: 'static>(response: egui::Response, value: &mut T) -> egui::Response {
+    handle_android_keyboard(&response, value);
+    response
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn add_sized_with_android_keyboard<T: 'static>(response: egui::Response, _value: &mut T) -> egui::Response {
+    response
+}
+
+#[cfg(target_os = "android")]
+pub fn put_with_android_keyboard<T: 'static>(response: egui::Response, value: &mut T) -> egui::Response {
+    handle_android_keyboard(&response, value);
+    response
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn put_with_android_keyboard<T: 'static>(response: egui::Response, _value: &mut T) -> egui::Response {
+    response
+}
 
 pub trait AppWindow {
     fn run(&mut self, ctx: &egui::Context) -> bool;
@@ -644,7 +673,35 @@ pub fn handle_android_keyboard<T: 'static>(res: &egui::Response, val: &mut T) {
         } else {
             f.to_string()
         }
+    } else if let Some(f) = val_any.downcast_ref::<f64>() {
+        PENDING_KB_TYPE.store(
+            TouchScreenKeyboardType::KeyboardType::DecimalPad as i32,
+            Ordering::Release,
+        );
+        if f.fract() == 0.0 {
+            format!("{:.1}", f)
+        } else {
+            f.to_string()
+        }
     } else if let Some(i) = val_any.downcast_ref::<i32>() {
+        PENDING_KB_TYPE.store(
+            TouchScreenKeyboardType::KeyboardType::NumberPad as i32,
+            Ordering::Release,
+        );
+        i.to_string()
+    } else if let Some(i) = val_any.downcast_ref::<i64>() {
+        PENDING_KB_TYPE.store(
+            TouchScreenKeyboardType::KeyboardType::NumberPad as i32,
+            Ordering::Release,
+        );
+        i.to_string()
+    } else if let Some(i) = val_any.downcast_ref::<u32>() {
+        PENDING_KB_TYPE.store(
+            TouchScreenKeyboardType::KeyboardType::NumberPad as i32,
+            Ordering::Release,
+        );
+        i.to_string()
+    } else if let Some(i) = val_any.downcast_ref::<u64>() {
         PENDING_KB_TYPE.store(
             TouchScreenKeyboardType::KeyboardType::NumberPad as i32,
             Ordering::Release,
@@ -728,8 +785,36 @@ pub fn handle_android_keyboard<T: 'static>(res: &egui::Response, val: &mut T) {
                             *f = parsed;
                         }
                     }
+                } else if let Some(f) = val_any_mut.downcast_mut::<f64>() {
+                    if let Ok(parsed) = kb_txt_str.parse::<f64>() {
+                        let changed = (*f - parsed).abs() > 1e-12;
+                        let drafting = kb_txt_str.ends_with('.')
+                            || (kb_txt_str.contains('.') && kb_txt_str.ends_with('0'));
+
+                        if changed && !drafting {
+                            *f = parsed;
+                        }
+                    }
                 } else if let Some(i) = val_any_mut.downcast_mut::<i32>() {
                     if let Ok(parsed) = kb_txt_str.parse::<i32>() {
+                        if *i != parsed {
+                            *i = parsed;
+                        }
+                    }
+                } else if let Some(i) = val_any_mut.downcast_mut::<i64>() {
+                    if let Ok(parsed) = kb_txt_str.parse::<i64>() {
+                        if *i != parsed {
+                            *i = parsed;
+                        }
+                    }
+                } else if let Some(i) = val_any_mut.downcast_mut::<u32>() {
+                    if let Ok(parsed) = kb_txt_str.parse::<u32>() {
+                        if *i != parsed {
+                            *i = parsed;
+                        }
+                    }
+                } else if let Some(i) = val_any_mut.downcast_mut::<u64>() {
+                    if let Ok(parsed) = kb_txt_str.parse::<u64>() {
                         if *i != parsed {
                             *i = parsed;
                         }
@@ -777,8 +862,24 @@ pub fn handle_android_keyboard<T: 'static>(res: &egui::Response, val: &mut T) {
                         if let Ok(parsed) = kb_txt_str.parse::<f32>() {
                             *f = parsed;
                         }
+                    } else if let Some(f) = val_any_mut.downcast_mut::<f64>() {
+                        if let Ok(parsed) = kb_txt_str.parse::<f64>() {
+                            *f = parsed;
+                        }
                     } else if let Some(i) = val_any_mut.downcast_mut::<i32>() {
                         if let Ok(parsed) = kb_txt_str.parse::<i32>() {
+                            *i = parsed;
+                        }
+                    } else if let Some(i) = val_any_mut.downcast_mut::<i64>() {
+                        if let Ok(parsed) = kb_txt_str.parse::<i64>() {
+                            *i = parsed;
+                        }
+                    } else if let Some(i) = val_any_mut.downcast_mut::<u32>() {
+                        if let Ok(parsed) = kb_txt_str.parse::<u32>() {
+                            *i = parsed;
+                        }
+                    } else if let Some(i) = val_any_mut.downcast_mut::<u64>() {
+                        if let Ok(parsed) = kb_txt_str.parse::<u64>() {
                             *i = parsed;
                         }
                     }

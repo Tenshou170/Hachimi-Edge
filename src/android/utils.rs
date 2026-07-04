@@ -14,8 +14,12 @@ pub static BACK_BUTTON_PRESSED: AtomicBool = AtomicBool::new(false);
 pub static IS_IME_VISIBLE: AtomicBool = AtomicBool::new(false);
 
 pub fn set_keyboard_visible(visible: bool) {
-    let vm = java_vm().expect("JavaVM not initialized");
-    let mut env = vm.attach_current_thread().expect("Failed to attach thread");
+    let Some(vm) = java_vm() else {
+        return;
+    };
+    let Ok(mut env) = vm.attach_current_thread() else {
+        return;
+    };
 
     let result = (|| -> jni::errors::Result<()> {
         let activity = get_activity(unsafe { env.unsafe_clone() })
@@ -223,11 +227,13 @@ pub fn get_activity(mut env: JNIEnv<'_>) -> Option<JObject<'_>> {
 }
 
 pub fn get_device_api_level(env: *mut jni::sys::JNIEnv) -> i32 {
-    let mut env = unsafe { JNIEnv::from_raw(env).unwrap() };
+    let Ok(mut env) = (unsafe { JNIEnv::from_raw(env) }) else {
+        return 0;
+    };
     env.get_static_field("android/os/Build$VERSION", "SDK_INT", "I")
-        .unwrap()
-        .i()
-        .unwrap()
+        .ok()
+        .and_then(|value| value.i().ok())
+        .unwrap_or(0)
 }
 
 pub fn get_screen_dimensions(mut env: JNIEnv) -> (i32, i32) {
@@ -260,8 +266,12 @@ pub fn get_screen_dimensions(mut env: JNIEnv) -> (i32, i32) {
 }
 
 pub fn set_audio_capture_policy_all() {
-    let vm = java_vm().expect("JavaVM not initialized");
-    let mut env = vm.attach_current_thread().expect("Failed to attach thread");
+    let Some(vm) = java_vm() else {
+        return;
+    };
+    let Ok(mut env) = vm.attach_current_thread() else {
+        return;
+    };
 
     let result = (|| -> jni::errors::Result<()> {
         let api_level = get_device_api_level(env.get_native_interface());

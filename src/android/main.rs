@@ -18,19 +18,28 @@ pub(crate) fn java_vm() -> Option<&'static JavaVM> {
     JAVA_VM.get()
 }
 
-#[allow(non_snake_case)]
-#[no_mangle]
-pub extern "C" fn JNI_OnLoad(vm: JavaVM, reserved: *mut c_void) -> jint {
-    let orig_fn: JniOnLoadFn = unsafe {
+fn resolve_orig_jni_onload() -> Option<JniOnLoadFn> {
+    unsafe {
         let handle = libc::dlopen(LIBRARY_NAME.as_ptr(), libc::RTLD_LAZY);
         if handle.is_null() {
-            panic!("JNI_OnLoad: failed to dlopen {}", LIBRARY_NAME.to_string_lossy());
+            warn!("JNI_OnLoad: failed to dlopen {}", LIBRARY_NAME.to_string_lossy());
+            return None;
         }
         let sym = libc::dlsym(handle, JNI_ONLOAD_NAME.as_ptr());
         if sym.is_null() {
-            panic!("JNI_OnLoad: JNI_OnLoad symbol not found in {}", LIBRARY_NAME.to_string_lossy());
+            warn!("JNI_OnLoad: JNI_OnLoad symbol not found in {}", LIBRARY_NAME.to_string_lossy());
+            return None;
         }
-        std::mem::transmute(sym)
+        Some(std::mem::transmute(sym))
+    }
+}
+
+#[allow(non_snake_case)]
+#[no_mangle]
+pub extern "C" fn JNI_OnLoad(vm: JavaVM, reserved: *mut c_void) -> jint {
+    let Some(orig_fn) = resolve_orig_jni_onload() else {
+        error!("JNI_OnLoad: falling back without the original JNI entrypoint");
+        return jni::sys::JNI_VERSION_1_6;
     };
 
     if !Hachimi::init() {

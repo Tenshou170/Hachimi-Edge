@@ -217,7 +217,10 @@ impl ConfigEditor {
         ui.vertical(|ui| {
             ui.add(egui::Label::new(label).wrap());
             ui.set_max_width(ui.available_width());
-            let r = ui.add(MaterialTextField::filled(value));
+            let r = add_with_android_keyboard(
+                ui.add(MaterialTextField::filled(value)),
+                value,
+            );
             ui.add_space(4.0);
             r
         }).inner
@@ -387,14 +390,21 @@ impl ConfigEditor {
         suffix: Option<&str>,
     ) {
         ui.add(egui::Label::new(label).wrap());
-        let mut field = MaterialNumberField::filled(value)
-            .range(range)
-            .speed(speed);
-        if Num::INTEGRAL {
-            field = field.decimals(0);
-        }
-        if let Some(s) = suffix { field = field.suffix(s); }
-        ui.add(field);
+        let _response = add_with_android_keyboard(
+            ui.add({
+                let mut field = MaterialNumberField::filled(value)
+                    .range(range)
+                    .speed(speed);
+                if Num::INTEGRAL {
+                    field = field.decimals(0);
+                }
+                if let Some(s) = suffix {
+                    field = field.suffix(s);
+                }
+                field
+            }),
+            value,
+        );
         ui.add_space(4.0);
     }
 

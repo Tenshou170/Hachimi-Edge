@@ -37,15 +37,13 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
         // Pin the content width before rendering so focus-state changes
         // (stroke width ±1px) don't shift the layout of surrounding rows.
         ui.set_max_width(ui.available_width());
-        let res = ui.add(
-            MaterialTextField::filled(&mut config.meta_index_url)
-                .lock_focus(true),
+        let res = add_with_android_keyboard(
+            ui.add(MaterialTextField::filled(&mut config.meta_index_url).lock_focus(true)),
+            &mut config.meta_index_url,
         );
         if res.lost_focus() && config.meta_index_url.trim().is_empty() {
             config.meta_index_url = hachimi::Config::default().meta_index_url;
         }
-        #[cfg(target_os = "android")]
-        handle_android_keyboard(&res, &mut config.meta_index_url);
         #[cfg(target_os = "windows")]
         if res.has_focus() {
             ui.memory_mut(|mem| mem.set_focus_lock_filter(res.id, egui::EventFilter {
@@ -246,50 +244,50 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
 
             if is_landscape {
                 let (rect, _) = ui.allocate_exact_size(egui::vec2(number_w, 32.0), egui::Sense::hover());
-                let w_field = ui.put(
-                    rect,
-                    MaterialNumberField::filled(&mut config.windows.full_screen_res.width)
-                        .range(0..=7680)
-                        .decimals(0),
+                let w_field = put_with_android_keyboard(
+                    ui.put(
+                        rect,
+                        MaterialNumberField::filled(&mut config.windows.full_screen_res.width)
+                            .range(0..=7680)
+                            .decimals(0),
+                    ),
+                    &mut config.windows.full_screen_res.width,
                 );
                 ui.label("W px");
                 let (rect2, _) = ui.allocate_exact_size(egui::vec2(number_w, 32.0), egui::Sense::hover());
-                let h_field = ui.put(
-                    rect2,
-                    MaterialNumberField::filled(&mut config.windows.full_screen_res.height)
-                        .range(0..=4320)
-                        .decimals(0),
+                let h_field = put_with_android_keyboard(
+                    ui.put(
+                        rect2,
+                        MaterialNumberField::filled(&mut config.windows.full_screen_res.height)
+                            .range(0..=4320)
+                            .decimals(0),
+                    ),
+                    &mut config.windows.full_screen_res.height,
                 );
                 ui.label("H px");
-
-                #[cfg(target_os = "android")]
-                {
-                    crate::core::gui::utils::handle_android_keyboard(&w_field, &mut config.windows.full_screen_res.width);
-                    crate::core::gui::utils::handle_android_keyboard(&h_field, &mut config.windows.full_screen_res.height);
-                }
             } else {
                 let (rect, _) = ui.allocate_exact_size(egui::vec2(number_w, 32.0), egui::Sense::hover());
-                let h_field = ui.put(
-                    rect,
-                    MaterialNumberField::filled(&mut config.windows.full_screen_res.height)
-                        .range(0..=4320)
-                        .decimals(0),
+                let h_field = put_with_android_keyboard(
+                    ui.put(
+                        rect,
+                        MaterialNumberField::filled(&mut config.windows.full_screen_res.height)
+                            .range(0..=4320)
+                            .decimals(0),
+                    ),
+                    &mut config.windows.full_screen_res.height,
                 );
                 ui.label("H px");
                 let (rect2, _) = ui.allocate_exact_size(egui::vec2(number_w, 32.0), egui::Sense::hover());
-                let w_field = ui.put(
-                    rect2,
-                    MaterialNumberField::filled(&mut config.windows.full_screen_res.width)
-                        .range(0..=7680)
-                        .decimals(0),
+                let w_field = put_with_android_keyboard(
+                    ui.put(
+                        rect2,
+                        MaterialNumberField::filled(&mut config.windows.full_screen_res.width)
+                            .range(0..=7680)
+                            .decimals(0),
+                    ),
+                    &mut config.windows.full_screen_res.width,
                 );
                 ui.label("W px");
-
-                #[cfg(target_os = "android")]
-                {
-                    crate::core::gui::utils::handle_android_keyboard(&h_field, &mut config.windows.full_screen_res.height);
-                    crate::core::gui::utils::handle_android_keyboard(&w_field, &mut config.windows.full_screen_res.width);
-                }
             }
         });
         ui.add_space(4.0);

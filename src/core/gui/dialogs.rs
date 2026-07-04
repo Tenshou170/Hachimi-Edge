@@ -53,7 +53,7 @@ impl AppWindow for SimpleYesNoDialog {
             })
             .show(ctx);
 
-        if fired {
+        if fired || !open {
             if let Some(cb) = self.callback.take() {
                 cb(result);
             }

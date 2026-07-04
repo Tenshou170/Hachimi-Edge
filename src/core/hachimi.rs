@@ -545,7 +545,10 @@ impl Hachimi {
                         continue;
                     }
 
-                    if self.tl_updater.has_pending_update() {
+                    if self.tl_updater.has_pending_update()
+                        || self.tl_updater.has_pending_mod_update()
+                        || self.tl_updater.is_downloading()
+                    {
                         elapsed = 0;
                         continue;
                     }

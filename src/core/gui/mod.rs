@@ -1460,12 +1460,13 @@ impl Gui {
 
                 ui.horizontal(|ui| {
                     egui::ScrollArea::neither().show(ui, |ui| {
-                        let _res = ui.add_sized(
-                            [ui.available_width() - 30.0 * scale, row_height],
-                            MaterialTextField::filled(search_term).hint_text(t!("search_filter")),
+                        let _res = add_sized_with_android_keyboard(
+                            ui.add_sized(
+                                [ui.available_width() - 30.0 * scale, row_height],
+                                MaterialTextField::filled(search_term).hint_text(t!("search_filter")),
+                            ),
+                            search_term,
                         );
-                        #[cfg(target_os = "android")]
-                        handle_android_keyboard(&_res, search_term);
                     });
 
                     if ui.add(MaterialButton::text("X").small()).clicked() {

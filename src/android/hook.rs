@@ -69,6 +69,7 @@ extern "C" fn JNINativeInterface_RegisterNatives(env: JNIEnv, class: jclass, met
         if name == "nativeInjectEvent" {
             info!("Got nativeInjectEvent address");
             unsafe { input_hook::NATIVE_INJECT_EVENT_ADDR = method.fnPtr as usize; };
+            crate::android::hachimi_impl::set_keep_screen_on(hachimi.config.load().android.keep_screen_on);
             hachimi.interceptor.unhook(JNINativeInterface_RegisterNatives as usize);
         }
     }
