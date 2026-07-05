@@ -893,6 +893,9 @@ pub fn get_champions_resources() -> Vec<String> {
 pub fn get_champions_live_max_year() -> i32 {
     use chrono::{Utc, Datelike};
     let mut max_year = Utc::now().year(); // safe fallback
+    if !crate::il2cpp::hook::umamusume::SceneManager::is_home_init() {
+        return max_year;
+    }
     let db_path_str = crate::core::utils::get_meta_path();
 
     let conn = Connection::new();

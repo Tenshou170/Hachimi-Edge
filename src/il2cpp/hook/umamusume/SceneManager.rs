@@ -7,9 +7,17 @@ pub fn is_splash_shown() -> bool {
     SPLASH_SHOWN.load(atomic::Ordering::Acquire)
 }
 
+static HOME_INIT: AtomicBool = AtomicBool::new(false);
+pub fn is_home_init() -> bool {
+    HOME_INIT.load(atomic::Ordering::Acquire)
+}
+
 fn ChangeViewCommon(next_view_id: i32) {
     if next_view_id == 1 { // ViewId.Splash
         SPLASH_SHOWN.store(true, atomic::Ordering::Release);
+    }
+    if next_view_id == 100 { // ViewId.Home
+        HOME_INIT.store(true, atomic::Ordering::Release);
     }
 
     // Clear stale raw pointers to destroyed Unity UI objects so they don't

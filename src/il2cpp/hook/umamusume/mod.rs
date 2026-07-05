@@ -69,7 +69,6 @@ mod GachaExecutableUnit;
 mod StoryChoiceButton;
 pub mod PartsSingleModeStoryEventTitle;
 
-#[cfg(target_os = "windows")]
 pub mod SceneManager;
 
 #[cfg(target_os = "windows")]
@@ -165,9 +164,9 @@ pub fn init() {
     StoryChoiceButton::init(image);
     PartsSingleModeStoryEventTitle::init(image);
 
+    SceneManager::init(image);
     #[cfg(target_os = "windows")]
     {
-        SceneManager::init(image);
         PaymentUtility::init(image);
     }
     LowResolutionCamera::init(image);

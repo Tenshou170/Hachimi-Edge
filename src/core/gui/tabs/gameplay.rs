@@ -71,7 +71,7 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
             "champions_live_resource_id", &mut config.champions_live_resource_id, &choices);
 
         ConfigEditor::list_tile_number(ui, t!("config_editor.champions_live_year"),
-            &mut config.champions_live_year, 2021..=2030, 1.0, None);
+            &mut config.champions_live_year, 2021..=editor.champions_live_max_year, 1.0, None);
     }
 
     ConfigEditor::list_tile_switch(ui, t!("config_editor.captions"), &mut config.caption.caption_enable, true);
