@@ -16,7 +16,7 @@ use fnv::FnvHashMap;
 use rust_i18n::t;
 use serde::{Deserialize, Serialize};
 use size::Size;
-use thread_priority::{ThreadBuilderExt, ThreadPriority};
+use thread_priority::ThreadPriority;
 
 use super::{
     gui::SimpleYesNoDialog,
@@ -306,7 +306,7 @@ impl Updater {
     }
 
     pub fn skip_update(&self, etag: Option<String>) {
-        *self.skipped_etag.lock().unwrap() = etag;
+        *self.skipped_etag.lock().unwrap_or_else(|e| e.into_inner()) = etag;
     }
 
     pub fn has_pending_update(&self) -> bool {
@@ -330,7 +330,7 @@ impl Updater {
             if let Err(e) = self.check_for_updates_internal(pedantic, pedantic, silent) {
                 if let Some(mutex) = Gui::instance() {
                     if !silent {
-                        mutex.lock().unwrap().show_notification(&format!("{}", e));
+                        mutex.lock().unwrap_or_else(|e| e.into_inner()).show_notification(&format!("{}", e));
                     }
                 }
                 info!("{}", e);
@@ -343,7 +343,7 @@ impl Updater {
             if let Err(e) = self.check_for_mod_updates_only_internal(silent) {
                 if let Some(mutex) = Gui::instance() {
                     if !silent {
-                        mutex.lock().unwrap().show_notification(&format!("{}", e));
+                        mutex.lock().unwrap_or_else(|e| e.into_inner()).show_notification(&format!("{}", e));
                     }
                 }
                 info!("{}", e);
@@ -483,7 +483,7 @@ impl Updater {
                 if let Ok(etag_str) = etag_val.to_str() {
                     let etag_string = etag_str.to_string();
 
-                    if let Some(skipped) = &*self.skipped_etag.lock().unwrap() {
+                    if let Some(skipped) = &*self.skipped_etag.lock().unwrap_or_else(|e| e.into_inner()) {
                         if !pedantic_main && skipped == &etag_string {
                             debug!("Server ETag matches the skipped ETag. Ignoring update.");
                             return Ok(());
@@ -519,7 +519,9 @@ impl Updater {
 
         let total_files = index.files.len().max(1);
         if let Some(mutex) = Gui::instance() {
-            mutex.lock().unwrap().update_progress_visible = true;
+            if let Ok(mut gui) = mutex.lock() {
+                gui.update_progress_visible = true;
+            }
         }
 
         for (i, file) in index.files.iter().enumerate() {
@@ -583,7 +585,9 @@ impl Updater {
 
         self.progress.store(Arc::new(None));
         if let Some(mutex) = Gui::instance() {
-            mutex.lock().unwrap().update_progress_visible = false;
+            if let Ok(mut gui) = mutex.lock() {
+                gui.update_progress_visible = false;
+            }
         }
 
         if !update_files.is_empty() {
@@ -717,12 +721,13 @@ impl Updater {
                     self.is_downloading.store(false, atomic::Ordering::Relaxed);
                     Hachimi::instance().load_localized_data();
                     if let Some(mutex) = Gui::instance() {
-                        let mut gui = mutex.lock().unwrap();
-                        gui.update_progress_visible = false;
-                        gui.show_notification(&t!(
-                            "notification.update_failed",
-                            reason = e.to_string()
-                        ));
+                        if let Ok(mut gui) = mutex.lock() {
+                            gui.update_progress_visible = false;
+                            gui.show_notification(&t!(
+                                "notification.update_failed",
+                                reason = e.to_string()
+                            ));
+                        }
                     }
                 }
             })
@@ -754,7 +759,9 @@ impl Updater {
             .store(Arc::new(Some(UpdateProgress::new(0, update_info.size))));
         self.is_downloading.store(true, atomic::Ordering::Relaxed);
         if let Some(mutex) = Gui::instance() {
-            mutex.lock().unwrap().update_progress_visible = true;
+            if let Ok(mut gui) = mutex.lock() {
+                gui.update_progress_visible = true;
+            }
         }
 
         // Empty the localized data so files couldnt be accessed while update is in progress
@@ -825,19 +832,20 @@ impl Updater {
         let repo_cache = RepoCache {
             base_url: update_info.base_url.clone(),
             index_etag: update_info.index_etag.clone(),
-            files: cached_files.lock().unwrap().clone(),
+            files: cached_files.lock().unwrap_or_else(|e| e.into_inner()).clone(),
         };
         let cache_path = hachimi.get_data_path(REPO_CACHE_FILENAME);
         utils::write_json_file(&repo_cache, &cache_path)?;
 
         if let Some(mutex) = Gui::instance() {
-            let mut gui = mutex.lock().unwrap();
-            gui.show_notification(&t!("notification.update_completed"));
-            if error_count > 0 {
-                gui.show_notification(&t!(
-                    "notification.errors_during_update",
-                    count = error_count
-                ));
+            if let Ok(mut gui) = mutex.lock() {
+                gui.show_notification(&t!("notification.update_completed"));
+                if error_count > 0 {
+                    gui.show_notification(&t!(
+                        "notification.errors_during_update",
+                        count = error_count
+                    ));
+                }
             }
         }
 
@@ -1116,12 +1124,13 @@ impl Updater {
                     self.is_downloading.store(false, atomic::Ordering::Relaxed);
                     Hachimi::instance().load_localized_data();
                     if let Some(mutex) = Gui::instance() {
-                        let mut gui = mutex.lock().unwrap();
-                        gui.update_progress_visible = false;
-                        gui.show_notification(&t!(
-                            "notification.update_failed",
-                            reason = e.to_string()
-                        ));
+                        if let Ok(mut gui) = mutex.lock() {
+                            gui.update_progress_visible = false;
+                            gui.show_notification(&t!(
+                                "notification.update_failed",
+                                reason = e.to_string()
+                            ));
+                        }
                     }
                 }
             })
@@ -1154,7 +1163,9 @@ impl Updater {
             .store(Arc::new(Some(UpdateProgress::new(0, update_info.size))));
         self.is_downloading.store(true, atomic::Ordering::Relaxed);
         if let Some(mutex) = Gui::instance() {
-            mutex.lock().unwrap().update_progress_visible = true;
+            if let Ok(mut gui) = mutex.lock() {
+                gui.update_progress_visible = true;
+            }
         }
 
         let hachimi = Hachimi::instance();
@@ -1181,7 +1192,9 @@ impl Updater {
         self.mod_progress.store(Arc::new(None));
         self.is_downloading.store(false, atomic::Ordering::Relaxed);
         if let Some(mutex) = Gui::instance() {
-            mutex.lock().unwrap().update_progress_visible = false;
+            if let Ok(mut gui) = mutex.lock() {
+                gui.update_progress_visible = false;
+            }
         }
 
         if error_count > 0 {
@@ -1199,7 +1212,7 @@ impl Updater {
         let mod_cache = RepoCache {
             base_url: mod_info.base_url.clone(),
             index_etag: None,
-            files: cached_files.lock().unwrap().clone(),
+            files: cached_files.lock().unwrap_or_else(|e| e.into_inner()).clone(),
         };
         
         let cached_count = mod_cache.files.len();
@@ -1211,8 +1224,9 @@ impl Updater {
         info!("Mod cache saved successfully");
 
         if let Some(mutex) = Gui::instance() {
-            let mut gui = mutex.lock().unwrap();
-            gui.show_notification(&t!("notification.mod_update_completed"));
+            if let Ok(mut gui) = mutex.lock() {
+                gui.show_notification(&t!("notification.mod_update_completed"));
+            }
         }
 
         Ok(())
@@ -1250,13 +1264,13 @@ impl Updater {
             let handle = thread::Builder::new()
                 .name("mod_incremental_downloader".into())
                 .stack_size(8 * 1024 * 1024)
-                .spawn_with_priority(ThreadPriority::Min, move |result| {
-                    if result.is_err() {
-                        warn!("Failed to set background thread priority for mod incremental downloader.");
+                .spawn(move || {
+                    if let Err(e) = thread_priority::set_current_thread_priority(ThreadPriority::Min) {
+                        warn!("Failed to set background thread priority for mod incremental downloader: {:?}", e);
                     }
                     let mut job = DownloadJob::new(thread_agent);
 
-                    while let Ok(repo_file) = receiver_clone.lock().unwrap().recv() {
+                    while let Ok(repo_file) = receiver_clone.lock().unwrap_or_else(|e| e.into_inner()).recv() {
                         if stop_signal_clone.load(atomic::Ordering::Relaxed) { break; }
 
                         let file_path = repo_file.get_fs_path(&localized_data_dir_clone);
@@ -1272,7 +1286,7 @@ impl Updater {
 
                             http::download_file_buffered(res, &mut file, &mut job.buffer, |bytes| {
                                 job.hasher.update(bytes);
-                                let prev_size = current_bytes_clone.fetch_add(bytes.len(), atomic::Ordering::SeqCst);
+                                let prev_size = current_bytes_clone.fetch_add(bytes.len(), atomic::Ordering::Relaxed);
                                 updater.mod_progress.store(Arc::new(Some(UpdateProgress::new(
                                     prev_size + bytes.len(),
                                     total_size,
@@ -1296,17 +1310,17 @@ impl Updater {
 
                         match execute_result {
                             Ok(hash) => {
-                                cached_files_clone.lock().unwrap().insert(repo_file.path.clone(), hash);
+                                cached_files_clone.lock().unwrap_or_else(|e| e.into_inner()).insert(repo_file.path.clone(), hash);
                             }
                             Err(e) => {
                                 if matches!(e, Error::OutOfDiskSpace) {
                                     error!("Fatal error during mod incremental download of '{}': {}", file_path.display(), e);
-                                    *fatal_error_clone.lock().unwrap() = Some(e);
+                                    *fatal_error_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(e);
                                     stop_signal_clone.store(true, atomic::Ordering::Relaxed);
                                     return;
                                 } else {
                                     error!("Non-fatal error during mod incremental download of '{}': {}", file_path.display(), e);
-                                    non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
+                                    non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::Relaxed);
                                 }
                             }
                         }
@@ -1320,9 +1334,11 @@ impl Updater {
             if sender.send(repo_file.clone()).is_err() { break; }
         }
         drop(sender);
-        for handle in handles { handle.join().unwrap(); }
+        for handle in handles {
+            let _ = handle.join();
+        }
 
-        if let Some(err) = fatal_error.lock().unwrap().take() {
+        if let Some(err) = fatal_error.lock().unwrap_or_else(|e| e.into_inner()).take() {
             return Err(err);
         }
         Ok(non_fatal_error_count.load(atomic::Ordering::Relaxed))
@@ -1420,9 +1436,9 @@ impl Updater {
                 let handle = thread::Builder::new()
                     .name("mod_zip_extractor".into())
                     .stack_size(8 * 1024 * 1024)
-                    .spawn_with_priority(ThreadPriority::Min, move |result| {
-                        if result.is_err() {
-                            warn!("Failed to set background thread priority for mod zip extractor.");
+                    .spawn(move || {
+                        if let Err(e) = thread_priority::set_current_thread_priority(ThreadPriority::Min) {
+                            warn!("Failed to set background thread priority for mod zip extractor: {:?}", e);
                         }
                         let mut archive = match zip::ZipArchive::new(Cursor::new(&mmap_thread[..])) {
                             Ok(a) => a,
@@ -1434,12 +1450,12 @@ impl Updater {
                         let mut buffer = vec![0u8; CHUNK_SIZE];
                         let mut hasher = blake3::Hasher::new();
 
-                        while let Ok(i) = receiver_clone.lock().unwrap().recv() {
+                        while let Ok(i) = receiver_clone.lock().unwrap_or_else(|e| e.into_inner()).recv() {
                             if stop_signal_clone.load(atomic::Ordering::Relaxed) { break; }
 
                             let mut zip_entry = match archive.by_index(i) {
                                 Ok(entry) => entry,
-                                Err(_) => { non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst); continue; }
+                                Err(_) => { non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::Relaxed); continue; }
                             };
 
                             let repo_file = match Self::resolve_zip_entry_repo_file(
@@ -1459,7 +1475,7 @@ impl Updater {
 
                             // Prevent multiple threads from extracting the same target path concurrently
                             {
-                                let mut inprog = extraction_in_progress.lock().unwrap();
+                                let mut inprog = extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner());
                                 if !inprog.insert(repo_file.path.clone()) {
                                     debug!("Skipping duplicate extraction for {}", repo_file.path);
                                     continue;
@@ -1467,7 +1483,7 @@ impl Updater {
                             }
                             if let Some(parent) = path.parent() {
                                 if Self::create_dir(parent, false).is_err() {
-                                    non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
+                                    non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::Relaxed);
                                     continue;
                                 }
                             }
@@ -1477,8 +1493,8 @@ impl Updater {
                             let mut out_file = match fs::File::create(&tmp_path) {
                                 Ok(f) => f,
                                 Err(_) => {
-                                    extraction_in_progress.lock().unwrap().remove(&repo_file.path);
-                                    non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
+                                    extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner()).remove(&repo_file.path);
+                                    non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::Relaxed);
                                     continue;
                                 }
                             };
@@ -1489,18 +1505,18 @@ impl Updater {
                                     Ok(n) => {
                                         let data = &buffer[..n];
                                         if out_file.write_all(data).is_err() {
-                                                    extraction_in_progress.lock().unwrap().remove(&repo_file.path);
-                                                    *fatal_error_clone.lock().unwrap() = Some(Error::OutOfDiskSpace);
+                                                    extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner()).remove(&repo_file.path);
+                                                    *fatal_error_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Error::OutOfDiskSpace);
                                                     stop_signal_clone.store(true, atomic::Ordering::Relaxed);
                                                     return;
                                         }
                                         hasher.update(data);
-                                        let prev = current_bytes_clone.fetch_add(n, atomic::Ordering::SeqCst);
+                                        let prev = current_bytes_clone.fetch_add(n, atomic::Ordering::Relaxed);
                                         updater.mod_progress.store(Arc::new(Some(UpdateProgress::new(prev + n, total_size))));
                                     }
                                     Err(_) => {
                                         let _ = fs::remove_file(&tmp_path);
-                                        non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
+                                        non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::Relaxed);
                                         break;
                                     }
                                 }
@@ -1511,22 +1527,22 @@ impl Updater {
                                 Self::log_corrupted_download(&path, &zip_url_clone, &repo_file.hash, &hash);
                                 let _ = fs::remove_file(&tmp_path);
                                 warn!("Hash mismatch for mod file '{}': expected {} but got {}", repo_file.path, repo_file.hash, hash);
-                                non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
+                                non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::Relaxed);
                             } else {
                                 // Atomically replace target with tmp file
                                 if let Err(e) = fs::rename(&tmp_path, &path) {
                                     error!("Failed to rename '{}' -> '{}': {}", tmp_path.display(), path.display(), e);
                                     let _ = fs::remove_file(&tmp_path);
-                                    non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
+                                    non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::Relaxed);
                                 } else {
-                                    cached_files_clone.lock().unwrap().insert(repo_file.path.clone(), hash.clone());
+                                    cached_files_clone.lock().unwrap_or_else(|e| e.into_inner()).insert(repo_file.path.clone(), hash.clone());
                                     info!("Extracted mod file '{}' -> {} (hash={})", repo_file.path, path.display(), hash);
                                 }
                             }
                             hasher.reset();
 
                             // Clear in-progress marker
-                            extraction_in_progress.lock().unwrap().remove(&repo_file.path);
+                            extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner()).remove(&repo_file.path);
                         }
                     })
                     .unwrap();
@@ -1542,9 +1558,11 @@ impl Updater {
                 }
             }
             drop(sender);
-            for handle in handles { handle.join().unwrap(); }
+            for handle in handles {
+                let _ = handle.join();
+            }
 
-            if let Some(err) = fatal_error.lock().unwrap().take() {
+            if let Some(err) = fatal_error.lock().unwrap_or_else(|e| e.into_inner()).take() {
                 let _ = fs::remove_file(&zip_path);
                 return Err(err);
             }
@@ -1555,7 +1573,7 @@ impl Updater {
             error!("Failed to remove temporary mod zip '{}': {}", zip_path.display(), e);
         }
 
-        let final_cached_count = cached_files.lock().unwrap().len();
+        let final_cached_count = cached_files.lock().unwrap_or_else(|e| e.into_inner()).len();
         info!("Mod ZIP extraction complete: {} files cached, {} errors", final_cached_count, error_count);
 
         Ok(error_count)
@@ -1595,15 +1613,13 @@ impl Updater {
             let handle = thread::Builder::new()
                 .name("incremental_downloader".into())
                 .stack_size(8 * 1024 * 1024)
-                .spawn_with_priority(ThreadPriority::Min, move |result| {
-                    if result.is_err() {
-                        warn!(
-                            "Failed to set background thread priority for incremental downloader."
-                        );
+                .spawn(move || {
+                    if let Err(e) = thread_priority::set_current_thread_priority(ThreadPriority::Min) {
+                        warn!("Failed to set background thread priority for incremental downloader: {:?}", e);
                     }
                     let mut job = DownloadJob::new(thread_agent);
 
-                    while let Ok(repo_file) = receiver_clone.lock().unwrap().recv() {
+                    while let Ok(repo_file) = receiver_clone.lock().unwrap_or_else(|e| e.into_inner()).recv() {
                         if stop_signal_clone.load(atomic::Ordering::Relaxed) {
                             break;
                         }
@@ -1625,7 +1641,7 @@ impl Updater {
                                 |bytes| {
                                     job.hasher.update(bytes);
                                     let prev_size = current_bytes_clone
-                                        .fetch_add(bytes.len(), atomic::Ordering::SeqCst);
+                                        .fetch_add(bytes.len(), atomic::Ordering::Relaxed);
                                     updater.progress.store(Arc::new(Some(UpdateProgress::new(
                                         prev_size + bytes.len(),
                                         total_size,
@@ -1651,19 +1667,19 @@ impl Updater {
                             Ok(hash) => {
                                 cached_files_clone
                                     .lock()
-                                    .unwrap()
+                                    .unwrap_or_else(|e| e.into_inner())
                                     .insert(repo_file.path.clone(), hash);
                             }
                             Err(e) => {
                                 if matches!(e, Error::OutOfDiskSpace | Error::FileHashMismatch(_)) {
                                     error!("Fatal error during incremental download of '{}': {}", file_path.display(), e);
-                                    *fatal_error_clone.lock().unwrap() = Some(e);
+                                    *fatal_error_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(e);
                                     stop_signal_clone.store(true, atomic::Ordering::Relaxed);
                                     return;
                                 } else {
                                     error!("Non-fatal error during incremental download of '{}': {}", file_path.display(), e);
                                     non_fatal_error_count_clone
-                                        .fetch_add(1, atomic::Ordering::SeqCst);
+                                        .fetch_add(1, atomic::Ordering::Relaxed);
                                 }
                             }
                         }
@@ -1681,10 +1697,10 @@ impl Updater {
         drop(sender);
 
         for handle in handles {
-            handle.join().unwrap();
+            let _ = handle.join();
         }
 
-        if let Some(err) = fatal_error.lock().unwrap().take() {
+        if let Some(err) = fatal_error.lock().unwrap_or_else(|e| e.into_inner()).take() {
             return Err(err);
         }
 
@@ -1791,14 +1807,12 @@ impl Updater {
                 let receiver_clone = Arc::clone(&receiver);
                 let zip_url_clone = zip_url_clone.clone();
 
-                let extraction_in_progress = Arc::clone(&extraction_in_progress);
-
-                let handle = thread::Builder::new()
+                let extraction_in_progress = Arc::clone(&extraction_in_progress);                let handle = thread::Builder::new()
                     .name("zip_extractor".into())
                     .stack_size(8 * 1024 * 1024)
-                    .spawn_with_priority(ThreadPriority::Min, move |result| {
-                        if result.is_err() {
-                            warn!("Failed to set background thread priority for zip extractor.");
+                    .spawn(move || {
+                        if let Err(e) = thread_priority::set_current_thread_priority(ThreadPriority::Min) {
+                            warn!("Failed to set background thread priority for zip extractor: {:?}", e);
                         }
 
                         let mut archive = match zip::ZipArchive::new(Cursor::new(&mmap_thread[..]))
@@ -1810,7 +1824,7 @@ impl Updater {
                         let mut buffer = vec![0u8; CHUNK_SIZE];
                         let mut hasher = blake3::Hasher::new();
 
-                        while let Ok(i) = receiver_clone.lock().unwrap().recv() {
+                        while let Ok(i) = receiver_clone.lock().unwrap_or_else(|e| e.into_inner()).recv() {
                             if stop_signal_clone.load(atomic::Ordering::Relaxed) {
                                 break;
                             }
@@ -1819,7 +1833,7 @@ impl Updater {
                                 Ok(entry) => entry,
                                 Err(_) => {
                                     non_fatal_error_count_clone
-                                        .fetch_add(1, atomic::Ordering::SeqCst);
+                                        .fetch_add(1, atomic::Ordering::Relaxed);
                                     continue;
                                 }
                             };
@@ -1838,7 +1852,7 @@ impl Updater {
 
                             // Prevent multiple threads from extracting the same target path concurrently
                             {
-                                let mut inprog = extraction_in_progress.lock().unwrap();
+                                let mut inprog = extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner());
                                 if !inprog.insert(repo_file.path.clone()) {
                                     debug!("Skipping duplicate extraction for {}", repo_file.path);
                                     continue;
@@ -1847,9 +1861,9 @@ impl Updater {
 
                             if let Some(parent) = path.parent() {
                                 if Self::create_dir(parent, false).is_err() {
-                                    extraction_in_progress.lock().unwrap().remove(&repo_file.path);
+                                    extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner()).remove(&repo_file.path);
                                     non_fatal_error_count_clone
-                                        .fetch_add(1, atomic::Ordering::SeqCst);
+                                        .fetch_add(1, atomic::Ordering::Relaxed);
                                     continue;
                                 }
                             }
@@ -1858,9 +1872,9 @@ impl Updater {
                             let mut out_file = match fs::File::create(&tmp_path) {
                                 Ok(file) => file,
                                 Err(_) => {
-                                    extraction_in_progress.lock().unwrap().remove(&repo_file.path);
+                                    extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner()).remove(&repo_file.path);
                                     non_fatal_error_count_clone
-                                        .fetch_add(1, atomic::Ordering::SeqCst);
+                                        .fetch_add(1, atomic::Ordering::Relaxed);
                                     continue;
                                 }
                             };
@@ -1872,18 +1886,18 @@ impl Updater {
                                         let data_slice = &buffer[..read_bytes];
                                         if out_file.write_all(data_slice).is_err() {
                                             let _ = fs::remove_file(&tmp_path);
-                                            extraction_in_progress.lock().unwrap().remove(&repo_file.path);
-                                            *fatal_error_clone.lock().unwrap() = Some(Error::OutOfDiskSpace);
+                                            extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner()).remove(&repo_file.path);
+                                            *fatal_error_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Error::OutOfDiskSpace);
                                             stop_signal_clone.store(true, atomic::Ordering::Relaxed);
                                             return;
                                         }
                                         hasher.update(data_slice);
-                                        let prev_size = current_bytes_clone.fetch_add(read_bytes, atomic::Ordering::SeqCst);
+                                        let prev_size = current_bytes_clone.fetch_add(read_bytes, atomic::Ordering::Relaxed);
                                         updater.progress.store(Arc::new(Some(UpdateProgress::new(prev_size + read_bytes, total_size))));
                                     }
                                     Err(_) => {
                                         let _ = fs::remove_file(&tmp_path);
-                                        non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
+                                        non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::Relaxed);
                                         break;
                                     }
                                 }
@@ -1894,8 +1908,8 @@ impl Updater {
                                 Self::log_corrupted_download(&path, &zip_url_clone, &repo_file.hash, &hash);
                                 let _ = fs::remove_file(&tmp_path);
                                 let path_str = path.to_str().unwrap_or("").to_string();
-                                extraction_in_progress.lock().unwrap().remove(&repo_file.path);
-                                *fatal_error_clone.lock().unwrap() = Some(Error::FileHashMismatch(path_str));
+                                extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner()).remove(&repo_file.path);
+                                *fatal_error_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Error::FileHashMismatch(path_str));
                                 stop_signal_clone.store(true, atomic::Ordering::Relaxed);
                                 return;
                             }
@@ -1903,14 +1917,14 @@ impl Updater {
                             if let Err(e) = fs::rename(&tmp_path, &path) {
                                 error!("Failed to rename '{}' -> '{}': {}", tmp_path.display(), path.display(), e);
                                 let _ = fs::remove_file(&tmp_path);
-                                non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::SeqCst);
+                                non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::Relaxed);
                             } else {
-                                cached_files_clone.lock().unwrap().insert(repo_file.path.clone(), hash.clone());
+                                cached_files_clone.lock().unwrap_or_else(|e| e.into_inner()).insert(repo_file.path.clone(), hash.clone());
                                 info!("Extracted '{}' -> {} (hash={})", repo_file.path, path.display(), hash);
                             }
                             hasher.reset();
 
-                            extraction_in_progress.lock().unwrap().remove(&repo_file.path);
+                            extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner()).remove(&repo_file.path);
                         }
                     })
                     .unwrap();
@@ -1926,10 +1940,10 @@ impl Updater {
             drop(sender);
 
             for handle in handles {
-                handle.join().unwrap();
+                let _ = handle.join();
             }
 
-            if let Some(err) = fatal_error.lock().unwrap().take() {
+            if let Some(err) = fatal_error.lock().unwrap_or_else(|e| e.into_inner()).take() {
                 return Err(err);
             }
             error_count = non_fatal_error_count.load(atomic::Ordering::Relaxed);

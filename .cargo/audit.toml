@@ -1,0 +1,27 @@
+[advisories]
+ignore = [
+    # Crate: quick-xml
+    # Vulnerability: Quadratic run time when checking a start tag for duplicate attribute names
+    # Reason: quick-xml is only pulled in transitively by wayland-scanner (proc-macro) and zbus_xml (Unix accessibility), which are not part of our Android/Windows builds or process untrusted user input.
+    "RUSTSEC-2026-0194",
+
+    # Crate: quick-xml
+    # Vulnerability: Unbounded namespace-declaration allocation in NsReader enables memory-exhaustion denial of service
+    # Reason: Same as above.
+    "RUSTSEC-2026-0195",
+
+    # Crate: async-std
+    # Warning: unmaintained (async-std has been discontinued)
+    # Reason: Transitively brought in by dark-light v2.0.0 (used in egui-material3 for desktop color scheme detection), not active on Android/Windows production targets.
+    "RUSTSEC-2025-0052",
+
+    # Crate: paste
+    # Warning: unmaintained (paste - no longer maintained)
+    # Reason: Transitively brought in by metal (Apple macOS graphics), not part of Android or Windows builds.
+    "RUSTSEC-2024-0436",
+
+    # Crate: ttf-parser
+    # Warning: unmaintained (`ttf-parser` is unmaintained)
+    # Reason: Transitively used by fontdb/ab_glyph for font parsing, no active security vulnerabilities.
+    "RUSTSEC-2026-0192",
+]

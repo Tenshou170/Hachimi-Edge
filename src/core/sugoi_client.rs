@@ -103,7 +103,7 @@ impl SugoiClient {
     }
 
     pub fn translate(&self, content: &[String]) -> Result<Vec<String>, Error> {
-        let _guard = self.request_lock.lock().unwrap();
+        let _guard = self.request_lock.lock().unwrap_or_else(|e| e.into_inner());
 
         let res = self.agent.post(&self.url)
             .header("Content-Type", "application/json")

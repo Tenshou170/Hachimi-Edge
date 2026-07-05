@@ -30,8 +30,7 @@ extern "C" fn Update(this: *mut Il2CppObject) {
     get_orig_fn!(Update, UpdateFn)(this);
 
     let mut completed = Vec::new();
-    {
-        let rx = crate::core::sugoi_client::TRANSLATION_QUEUE.1.lock().unwrap();
+    if let Ok(rx) = crate::core::sugoi_client::TRANSLATION_QUEUE.1.try_lock() {
         while let Ok(msg) = rx.try_recv() {
             completed.push(msg);
         }
@@ -46,8 +45,12 @@ extern "C" fn Update(this: *mut Il2CppObject) {
         return;
     }
 
-    {
-        let mut cache = crate::core::sugoi_client::TRANSLATION_CACHE.lock().unwrap();
+    if let Ok(mut cache) = crate::core::sugoi_client::TRANSLATION_CACHE.try_lock() {
+        for (orig, trans) in &completed {
+            cache.put(orig.clone(), trans.clone());
+        }
+    } else {
+        let mut cache = crate::core::sugoi_client::TRANSLATION_CACHE.lock().unwrap_or_else(|e| e.into_inner());
         for (orig, trans) in &completed {
             cache.put(orig.clone(), trans.clone());
         }

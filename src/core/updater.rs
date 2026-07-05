@@ -29,7 +29,7 @@ impl Updater {
         };
 
         let checking_notif_id = if let Some(mutex) = Gui::instance() {
-            Some(mutex.lock().unwrap().show_persistent_notification(&t!("notification.checking_for_updates")))
+            mutex.lock().ok().map(|mut g| g.show_persistent_notification(&t!("notification.checking_for_updates")))
         } else {
             None
         };
@@ -56,14 +56,16 @@ impl Updater {
                     self.new_update.store(Arc::new(Some(asset)));
     
                     if let Some(mutex) = Gui::instance() {
-                        mutex.lock().unwrap().show_window(Box::new(SimpleYesNoDialog::new(
-                            &t!("update_prompt_dialog.title"),
-                            &t!("update_prompt_dialog.content", version = latest.tag_name),
-                            |ok| {
-                                if !ok { return; }
-                                Hachimi::instance().updater.clone().run();
-                            }
-                        )));
+                        if let Ok(mut gui) = mutex.lock() {
+                            gui.show_window(Box::new(SimpleYesNoDialog::new(
+                                &t!("update_prompt_dialog.title"),
+                                &t!("update_prompt_dialog.content", version = latest.tag_name),
+                                |ok| {
+                                    if !ok { return; }
+                                    Hachimi::instance().updater.clone().run();
+                                }
+                            )));
+                        }
                     }
                     return Ok(true);
                 }
@@ -71,18 +73,22 @@ impl Updater {
             #[cfg(target_os = "android")]
             {
                 if let Some(mutex) = Gui::instance() {
-                    mutex.lock().unwrap().show_window(Box::new(SimpleYesNoDialog::new(
-                        &t!("update_prompt_dialog.title"),
-                        &t!("update_prompt_dialog.android_content", version = latest.tag_name),
-                        |ok| {
-                            if !ok { return; }
-                            Hachimi::instance().updater.clone().run();
-                        }
-                    )));
+                    if let Ok(mut gui) = mutex.lock() {
+                        gui.show_window(Box::new(SimpleYesNoDialog::new(
+                            &t!("update_prompt_dialog.title"),
+                            &t!("update_prompt_dialog.android_content", version = latest.tag_name),
+                            |ok| {
+                                if !ok { return; }
+                                Hachimi::instance().updater.clone().run();
+                            }
+                        )));
+                    }
                 }
             }
         } else if let Some(mutex) = Gui::instance() {
-            mutex.lock().unwrap().show_notification(&t!("notification.no_updates"));
+            if let Ok(mut gui) = mutex.lock() {
+                gui.show_notification(&t!("notification.no_updates"));
+            }
         }
 
         Ok(false)
@@ -94,14 +100,16 @@ impl Updater {
             if crate::windows::capabilities::self_update_support() == crate::windows::capabilities::FeatureSupport::WarnOnly {
                 let updater = self.clone();
                 if let Some(mutex) = Gui::instance() {
-                    mutex.lock().unwrap().show_window(Box::new(SimpleYesNoDialog::new(
-                        "Wine/Proton update warning",
-                        "The Windows installer flow may not work correctly under Wine/Proton. Continue anyway?",
-                        move |ok| {
-                            if !ok { return; }
-                            updater.run_windows_update();
-                        }
-                    )));
+                    if let Ok(mut gui) = mutex.lock() {
+                        gui.show_window(Box::new(SimpleYesNoDialog::new(
+                            "Wine/Proton update warning",
+                            "The Windows installer flow may not work correctly under Wine/Proton. Continue anyway?",
+                            move |ok| {
+                                if !ok { return; }
+                                updater.run_windows_update();
+                            }
+                        )));
+                    }
                 }
                 return;
             }
@@ -123,17 +131,21 @@ impl Updater {
             std::thread::spawn(move || {
                 let dialog_show = Arc::new(std::sync::atomic::AtomicBool::new(true));
                 if let Some(mutex) = Gui::instance() {
-                    mutex.lock().unwrap().show_window(Box::new(crate::core::gui::PersistentMessageWindow::new(
-                        &t!("updating_dialog.title"),
-                        &t!("updating_dialog.content"),
-                        dialog_show.clone()
-                    )));
+                    if let Ok(mut gui) = mutex.lock() {
+                        gui.show_window(Box::new(crate::core::gui::PersistentMessageWindow::new(
+                            &t!("updating_dialog.title"),
+                            &t!("updating_dialog.content"),
+                            dialog_show.clone()
+                        )));
+                    }
                 }
     
                 if let Err(e) = self.clone().run_internal() {
                     error!("{}", e);
                     if let Some(mutex) = Gui::instance() {
-                        mutex.lock().unwrap().show_notification(&t!("notification.update_failed", reason = e.to_string()));
+                        if let Ok(mut gui) = mutex.lock() {
+                            gui.show_notification(&t!("notification.update_failed", reason = e.to_string()));
+                        }
                     }
                 }
     

@@ -15,7 +15,7 @@ use std::{
     }
 };
 use std::thread;
-use thread_priority::{ThreadBuilderExt, ThreadPriority};
+use thread_priority::ThreadPriority;
 
 use arc_swap::ArcSwap;
 use serde::de::DeserializeOwned;
@@ -141,14 +141,16 @@ pub fn download_file_parallel(url: &str, file_path: &Path, num_threads: usize,
 
             let handle = thread::Builder::new()
                 .name("downloader_chunk".into())
-                .spawn_with_priority(ThreadPriority::Min, move |result| {
-                    if result.is_err() { warn!("Failed to set downloader thread priority."); }
+                .spawn(move || {
+                    if let Err(e) = thread_priority::set_current_thread_priority(ThreadPriority::Min) {
+                        warn!("Failed to set downloader thread priority: {:?}", e);
+                    }
                     let mut file = match fs::File::options().write(true).open(&path_clone) {
                         Ok(f) => f,
-                        Err(e) => { *fatal_error_clone.lock().unwrap() = Some(e.into()); return; }
+                        Err(e) => { *fatal_error_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(e.into()); return; }
                     };
                     let mut buffer = vec![0u8; chunk_size];
-                    while let Ok((start, end)) = receiver_clone.lock().unwrap().recv() {
+                    while let Ok((start, end)) = receiver_clone.lock().unwrap_or_else(|e| e.into_inner()).recv() {
                         if stop_signal_clone.load(atomic::Ordering::Relaxed) { break; }
 
                         let expected_bytes = end - start + 1;
@@ -183,7 +185,7 @@ pub fn download_file_parallel(url: &str, file_path: &Path, num_threads: usize,
                             Ok(())
                         })();
                         if let Err(e) = result {
-                            *fatal_error_clone.lock().unwrap() = Some(e);
+                            *fatal_error_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(e);
                             stop_signal_clone.store(true, atomic::Ordering::Relaxed);
                             break;
                         }
@@ -200,10 +202,10 @@ pub fn download_file_parallel(url: &str, file_path: &Path, num_threads: usize,
         drop(sender);
 
         for handle in handles {
-            handle.join().unwrap();
+            let _ = handle.join();
         }
 
-        if let Some(e) = fatal_error.lock().unwrap().take() { return Err(e); }
+        if let Some(e) = fatal_error.lock().unwrap_or_else(|e| e.into_inner()).take() { return Err(e); }
         let downloaded_file = fs::File::options().write(true).open(file_path)?;
         downloaded_file.sync_data()?;
     } else {
