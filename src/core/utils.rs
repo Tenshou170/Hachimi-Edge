@@ -378,7 +378,27 @@ fn wrap_text_internal(string: &str, base_line_width: i32, line_width_multiplier:
 
 pub fn wrap_text_il2cpp(string: *mut Il2CppString, base_line_width: i32) -> Option<*mut Il2CppString> {
     let config = &Hachimi::instance().localized_data.load().config;
-    if !config.use_text_wrapper { return None; }
+    if !config.use_text_wrapper {
+        if base_line_width > 0 {
+            let s = unsafe { (*string).as_utf16str().to_string() };
+            let mut out = String::with_capacity(s.len());
+            let mut run = 0usize;
+            for ch in s.chars() {
+                out.push(ch);
+                if ch.is_whitespace() {
+                    run = 0;
+                } else {
+                    run += 1;
+                    if run >= base_line_width as usize {
+                        out.push('\u{200B}');
+                        run = 0;
+                    }
+                }
+            }
+            return Some(out.to_il2cpp_string());
+        }
+        return None;
+    }
 
     Some(
         wrap_text_internal(unsafe { &(*string).as_utf16str().to_string() }, base_line_width, config.line_width_multiplier?)

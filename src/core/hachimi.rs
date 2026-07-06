@@ -435,10 +435,7 @@ impl Hachimi {
         }
 
         if hachimi_impl::is_criware_lib(filename) {
-            crate::core::criware::init(handle);
-            if !self.hooking_finished.load(atomic::Ordering::Relaxed) {
-                self.on_hooking_finished();
-            }
+            self.on_hooking_finished();
             return true;
         }
 

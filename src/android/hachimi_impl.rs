@@ -18,22 +18,16 @@ pub fn is_criware_lib(filename: &str) -> bool {
 }
 
 pub fn on_hooking_finished(_hachimi: &Hachimi) {
-    // keep_screen_on must only be applied after the native render hook is
-    // initialized and the Android Activity window exists.
 }
 
-/// Sets or clears FLAG_KEEP_SCREEN_ON (0x80) on the game's window.
-/// The flag must be applied on the Android UI/main thread — calling
-/// addFlags/clearFlags from a render or background thread raises
-/// CalledFromWrongThreadException. We schedule through the IL2CPP main
-/// thread (which Unity runs on the Android UI thread) to guarantee this.
 pub fn set_keep_screen_on(enable: bool) {
     info!("set_keep_screen_on called (enable={})", enable);
     KEEP_SCREEN_ON.store(enable, Ordering::Relaxed);
     KEEP_SCREEN_ON_PENDING.store(true, Ordering::Relaxed);
 
     if KEEP_SCREEN_ON_RENDER_READY.load(Ordering::Relaxed) {
-        schedule_keep_screen_on_task();
+        set_keep_screen_on_jni(enable);
+        KEEP_SCREEN_ON_PENDING.store(false, Ordering::Relaxed);
     } else {
         info!("keep_screen_on update deferred until render hook is ready");
     }
@@ -41,90 +35,56 @@ pub fn set_keep_screen_on(enable: bool) {
 
 pub fn apply_keep_screen_on_if_pending() {
     KEEP_SCREEN_ON_RENDER_READY.store(true, Ordering::Relaxed);
-    if KEEP_SCREEN_ON_PENDING.load(Ordering::Relaxed) {
-        schedule_keep_screen_on_task();
+    if KEEP_SCREEN_ON_PENDING.swap(false, Ordering::Relaxed) {
+        let enable = KEEP_SCREEN_ON.load(Ordering::Relaxed);
+        set_keep_screen_on_jni(enable);
     }
 }
 
-fn schedule_keep_screen_on_task() {
-    let res = std::panic::catch_unwind(|| {
-        crate::il2cpp::symbols::Thread::main_thread().schedule(apply_keep_screen_on_task);
-    });
-    if res.is_err() {
-        error!("Scheduling apply_keep_screen_on_task panicked");
-    } else {
-        info!("apply_keep_screen_on_task scheduled");
-    }
-}
-
-fn apply_keep_screen_on_task() {
-    info!("apply_keep_screen_on_task entered");
-    if !KEEP_SCREEN_ON_PENDING.load(Ordering::Relaxed) {
+fn set_keep_screen_on_jni(enable: bool) {
+    let Some(vm) = crate::android::main::java_vm() else {
         return;
-    }
-
-    let enable = KEEP_SCREEN_ON.load(Ordering::Relaxed);
-    match apply_keep_screen_on(enable) {
-        Ok(()) => {
-            KEEP_SCREEN_ON_PENDING.store(false, Ordering::Relaxed);
-        }
-        Err(ApplyError::ActivityUnavailable) => {
-            info!("Activity unavailable, rescheduling apply_keep_screen_on_task");
-            let _ = std::panic::catch_unwind(|| {
-                crate::il2cpp::symbols::Thread::main_thread().schedule(apply_keep_screen_on_task);
-            });
-        }
-        Err(err) => {
-            KEEP_SCREEN_ON_PENDING.store(false, Ordering::Relaxed);
-            warn!("set_keep_screen_on({}): {:?}", enable, err);
-        }
-    }
-}
-
-#[derive(Debug)]
-enum ApplyError {
-    ActivityUnavailable,
-    JniError,
-}
-
-impl From<jni::errors::Error> for ApplyError {
-    fn from(_: jni::errors::Error) -> Self {
-        ApplyError::JniError
-    }
-}
-
-fn apply_keep_screen_on(enable: bool) -> Result<(), ApplyError> {
-    let Some(vm) = super::main::java_vm() else { return Err(ApplyError::ActivityUnavailable); };
-    let Ok(mut env) = vm.attach_current_thread() else { return Err(ApplyError::ActivityUnavailable); };
-
-    let activity = match super::utils::get_activity(unsafe { env.unsafe_clone() }) {
-        Some(activity) => activity,
-        None => return Err(ApplyError::ActivityUnavailable),
+    };
+    let Ok(mut env) = vm.attach_current_thread() else {
+        return;
     };
 
     let result = (|| -> jni::errors::Result<()> {
+        let activity = crate::android::utils::get_activity(unsafe { env.unsafe_clone() })
+            .ok_or(jni::errors::Error::JavaException)?;
+
         let window = env.call_method(&activity, "getWindow", "()Landroid/view/Window;", &[])?.l()?;
         if window.is_null() {
             return Err(jni::errors::Error::JavaException);
         }
-        const FLAG_KEEP_SCREEN_ON: i32 = 0x00000080;
+
+        let flag_keep_screen_on: i32 = 0x00000080;
         if enable {
-            env.call_method(window, "addFlags", "(I)V", &[jni::objects::JValue::Int(FLAG_KEEP_SCREEN_ON)])?;
+            env.call_method(
+                &window,
+                "addFlags",
+                "(I)V",
+                &[jni::objects::JValue::Int(flag_keep_screen_on)]
+            )?;
+            info!("Successfully added FLAG_KEEP_SCREEN_ON to Window");
         } else {
-            env.call_method(window, "clearFlags", "(I)V", &[jni::objects::JValue::Int(FLAG_KEEP_SCREEN_ON)])?;
+            env.call_method(
+                &window,
+                "clearFlags",
+                "(I)V",
+                &[jni::objects::JValue::Int(flag_keep_screen_on)]
+            )?;
+            info!("Successfully cleared FLAG_KEEP_SCREEN_ON from Window");
         }
         Ok(())
     })();
 
-    if let Err(_e) = result {
+    if let Err(e) = result {
+        info!("JNI Keep Screen On Error: {:?}", e);
         if env.exception_check().unwrap_or(false) {
             let _ = env.exception_clear();
-            return Err(ApplyError::ActivityUnavailable);
         }
-        return Err(ApplyError::JniError);
     }
-
-    Ok(())
 }
 
 #[derive(Deserialize, Serialize, Clone)]

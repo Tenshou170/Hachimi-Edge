@@ -1,4 +1,36 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::{il2cpp::{ext::Il2CppObjectExt, symbols, types::*}};
+
+// Cached IL2CPP pointers — resolved once on first call to move_live_playback.
+static UMAMUSUME_IMAGE: AtomicUsize = AtomicUsize::new(0);
+static DIRECTOR_CLASS: AtomicUsize = AtomicUsize::new(0);
+static AUDIO_MANAGER_CLASS: AtomicUsize = AtomicUsize::new(0);
+
+fn get_umamusume_image() -> Option<*const crate::il2cpp::types::Il2CppImage> {
+    let cached = UMAMUSUME_IMAGE.load(Ordering::Relaxed);
+    if cached != 0 { return Some(cached as _); }
+    let img = symbols::get_assembly_image(c"umamusume.dll").ok()?;
+    UMAMUSUME_IMAGE.store(img as usize, Ordering::Relaxed);
+    Some(img)
+}
+
+fn get_director_class() -> Option<*mut crate::il2cpp::types::Il2CppClass> {
+    let cached = DIRECTOR_CLASS.load(Ordering::Relaxed);
+    if cached != 0 { return Some(cached as _); }
+    let img = get_umamusume_image()?;
+    let cls = symbols::get_class(img, c"Gallop.Live", c"Director").ok()?;
+    DIRECTOR_CLASS.store(cls as usize, Ordering::Relaxed);
+    Some(cls)
+}
+
+fn get_audio_manager_class() -> Option<*mut crate::il2cpp::types::Il2CppClass> {
+    let cached = AUDIO_MANAGER_CLASS.load(Ordering::Relaxed);
+    if cached != 0 { return Some(cached as _); }
+    let img = get_umamusume_image()?;
+    let cls = symbols::get_class(img, c"Gallop", c"AudioManager").ok()?;
+    AUDIO_MANAGER_CLASS.store(cls as usize, Ordering::Relaxed);
+    Some(cls)
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -146,14 +178,9 @@ unsafe fn process_playback(
 }
 
 pub fn move_live_playback(target_time: f32) {
-    let image = match symbols::get_assembly_image(c"umamusume.dll") {
-        Ok(img) => img,
-        Err(_) => return,
-    };
-
-    let dir_class = match symbols::get_class(image, c"Gallop.Live", c"Director") {
-        Ok(c) => c,
-        Err(_) => return,
+    let dir_class = match get_director_class() {
+        Some(c) => c,
+        None => return,
     };
 
     let director = match symbols::SingletonLike::new(dir_class) {
@@ -212,9 +239,9 @@ pub fn move_live_playback(target_time: f32) {
         }
     }
 
-    let am_class = match symbols::get_class(image, c"Gallop", c"AudioManager") {
-        Ok(c) => c,
-        Err(_) => {
+    let am_class = match get_audio_manager_class() {
+        Some(c) => c,
+        None => {
             warn!("move_live_playback: AudioManager class not found");
             // Still need to resume if we paused above
             if !time_controller.is_null() && !was_paused {

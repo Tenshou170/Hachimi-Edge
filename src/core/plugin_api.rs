@@ -421,14 +421,11 @@ unsafe extern "C" fn gui_ui_text_edit_singleline(
         .unwrap_or_else(|| String::from_utf8_lossy(&bytes[..end]).into_owned());
     let original_value = value.clone();
 
-    let response = gui::add_with_android_keyboard(
-        ui.add(
+    let response = ui.add(
             MaterialTextField::filled(&mut value)
                 .id(id)
                 .desired_width(80.0),
-        ),
-        &mut value,
-    );
+        );
 
     if response.gained_focus() {
         response.scroll_to_me(Some(Align::Center));
@@ -898,13 +895,10 @@ unsafe extern "C" fn gui_ui_combo_menu(
         ui.set_max_width(fixed_width);
 
         ui.horizontal(|ui| {
-            let res = gui::add_sized_with_android_keyboard(
-                ui.add_sized(
+            let res = ui.add_sized(
                     [ui.available_width() - 30.0 * scale, row_height],
                     MaterialTextField::filled(&mut search).hint_text("Search..."),
-                ),
-                &mut search,
-            );
+                );
 
             if ui.button("X").clicked() {
                 search.clear();

@@ -54,10 +54,11 @@ extern "C" fn IDXGISwapChain_Present(this: *mut c_void, sync_interval: c_uint, f
 
     // Invoke plugin present callbacks
     let hachimi = Hachimi::instance();
-    let callbacks = hachimi.present_callbacks.lock().unwrap();
-    for (callback, userdata) in callbacks.iter() {
-        let callback: unsafe extern "C" fn(*mut c_void, *mut c_void) = unsafe { std::mem::transmute(*callback) };
-        unsafe { callback(this, *userdata as *mut c_void); }
+    if let Ok(callbacks) = hachimi.present_callbacks.lock() {
+        for (callback, userdata) in callbacks.iter() {
+            let callback: unsafe extern "C" fn(*mut c_void, *mut c_void) = unsafe { std::mem::transmute(*callback) };
+            unsafe { callback(this, *userdata as *mut c_void); }
+        }
     }
 
     let hwnd = check_hwnd(this);

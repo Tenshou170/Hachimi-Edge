@@ -36,8 +36,12 @@ extern "C" fn Update(this: *mut Il2CppObject) {
         }
     }
 
-    crate::il2cpp::hook::UnityEngine_UI::Text::prune_inactive_translation_targets();
-    crate::il2cpp::hook::UnityEngine_TextRenderingModule::TextMesh::prune_inactive_translation_targets();
+    static FRAME_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let count = FRAME_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if count % 300 == 0 {
+        crate::il2cpp::hook::UnityEngine_UI::Text::prune_inactive_translation_targets();
+        crate::il2cpp::hook::UnityEngine_TextRenderingModule::TextMesh::prune_inactive_translation_targets();
+    }
 
     if completed.is_empty() {
         #[cfg(target_os = "windows")]

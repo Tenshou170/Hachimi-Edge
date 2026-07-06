@@ -33,7 +33,6 @@ pub mod plugin_api;
 pub mod updater;
 
 pub mod captions;
-pub mod criware;
 pub mod live_utils;
 pub mod msgpack_modifier;
 pub mod taskbar;

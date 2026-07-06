@@ -71,6 +71,10 @@ fn apply_gallery_button_config(button: *mut Il2CppObject, config: &UITextConfig)
                 let mut anchored_pos = RectTransform::get_anchoredPosition(rect_transform);
 
                 let mut original_pos_map = ORIGINAL_POSITIONS.lock().unwrap();
+                // Evict stale entries (dead Unity objects) to prevent unbounded growth.
+                original_pos_map.retain(|&ptr, _| {
+                    crate::il2cpp::hook::UnityEngine_CoreModule::Object::IsNativeObjectAlive(ptr as *mut _)
+                });
                 let base_pos_ref = original_pos_map.entry(rect_transform as usize).or_insert_with(|| {
                     Vector2_t { x: anchored_pos.x, y: anchored_pos.y }
                 });

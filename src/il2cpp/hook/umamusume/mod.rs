@@ -7,7 +7,7 @@ pub mod StoryTimelineBlockData;
 pub mod StoryTimelineTrackData;
 pub mod StoryTimelineTextClipData;
 pub mod GallopUtil;
-mod UIManager;
+pub mod UIManager;
 pub mod GraphicSettings;
 mod CameraController;
 pub mod SingleModeStartResultCharaViewer;
@@ -32,7 +32,7 @@ mod SingleModeUtils;
 mod MasterSingleModeTurn;
 mod TextFontManager;
 mod TextFormat;
-mod TextCommon;
+pub mod TextCommon;
 mod TextMeshProUguiCommon;
 mod StoryChoiceController;
 mod StoryViewController;
@@ -79,6 +79,7 @@ pub mod TweenAnimationTimelineData;
 pub mod TweenAnimationTimelineSheetData;
 mod PartsSingleModeChoiceRewardTextElementViewModel;
 mod PartsCommonHeaderTitle;
+pub mod PartsCharaMessageBase;
 pub mod StoryParamChangeEffect;
 pub mod DialogSupportCardDetail;
 mod Connecting;
@@ -91,6 +92,8 @@ mod Director;
 mod CySpringNative;
 mod CySpringUpdater;
 mod PartsRaceAnalyzeRaceEventListItem;
+
+pub mod AudioManager;
 
 pub fn init() {
     get_assembly_image_or_return!(image, "umamusume.dll");
@@ -176,6 +179,7 @@ pub fn init() {
     TweenAnimationTimelineSheetData::init(image);
     PartsSingleModeChoiceRewardTextElementViewModel::init(image);
     PartsCommonHeaderTitle::init(image);
+    PartsCharaMessageBase::init(image);
     StoryParamChangeEffect::init(image);
     DialogSupportCardDetail::init(image);
     Connecting::init(image);
@@ -188,4 +192,5 @@ pub fn init() {
     CySpringNative::init(image);
     CySpringUpdater::init(image);
     PartsRaceAnalyzeRaceEventListItem::init(image);
+    AudioManager::init(image);
 }

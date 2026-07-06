@@ -10,7 +10,6 @@ use crate::{core::{ext::Utf16StringExt, Hachimi}, il2cpp::{
         UnityEngine_ImageConversionModule::ImageConversion
     },
     symbols::{get_method_addr, Array},
-    ext::StringExt,
     types::*, utils
 }};
 
@@ -35,17 +34,16 @@ pub fn new(width: i32, height: i32, texture_format: i32, mip_chain: bool, linear
 pub fn from_image_file<P: AsRef<Path>>(path: P, mip_chain: bool, mark_non_readable: bool) -> Option<*mut Il2CppObject> {
     let path_ref = path.as_ref();
 
-    // check if file exists
-    let metadata = std::fs::metadata(path_ref).ok()?;
-    if !metadata.is_file() {
-        return None;
+    // Read bytes using safe Rust std::fs::read to avoid throwing C# exceptions if permission denied
+    let bytes = std::fs::read(path_ref).ok()?;
+    let path_str = path_ref.to_str()?;
+    let array = Array::<u8>::new(mscorlib::Byte::class(), bytes.len() as il2cpp_array_size_t);
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), array.data_ptr(), bytes.len());
     }
 
-    // we've done everything we can, can't catch C# exceptions, yolo :)
-    let path_str = path_ref.to_str()?;
-    let bytes = mscorlib::File::ReadAllBytes(path_str.to_il2cpp_string());
     let texture = new(2, 2, TextureFormat_RGBA32, mip_chain, false);
-    if ImageConversion::LoadImage(texture, bytes, mark_non_readable) {
+    if ImageConversion::LoadImage(texture, array.this, mark_non_readable) {
         Some(texture)
     }
     else {
@@ -55,28 +53,21 @@ pub fn from_image_file<P: AsRef<Path>>(path: P, mip_chain: bool, mark_non_readab
 }
 
 pub fn load_image_file<P: AsRef<Path>>(this: *mut Il2CppObject, path: P, mark_non_readable: bool) -> bool {
-    let path_ref = path.as_ref();
-
-    // check if file exists
-    let Ok(metadata) = std::fs::metadata(path_ref) else {
-        return false;
-    };
-    if !metadata.is_file() {
-        return false;
-    }
-
     // we've done everything we can, can't catch C# exceptions, yolo :)
     unsafe { load_image_file_unsafe(this, path, mark_non_readable) }
 }
 
 pub unsafe fn load_image_file_unsafe<P: AsRef<Path>>(this: *mut Il2CppObject, path: P, mark_non_readable: bool) -> bool {
-    if let Some(path_str) = path.as_ref().to_str() {
-        let bytes = mscorlib::File::ReadAllBytes(path_str.to_il2cpp_string());
-        if ImageConversion::LoadImage(this, bytes, mark_non_readable) {
+    if let Ok(bytes) = std::fs::read(&path) {
+        let array = Array::<u8>::new(mscorlib::Byte::class(), bytes.len() as il2cpp_array_size_t);
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), array.data_ptr(), bytes.len());
+        if ImageConversion::LoadImage(this, array.this, mark_non_readable) {
             return true;
         }
         else {
-            warn!("Failed to load texture: {}", path_str);
+            if let Some(path_str) = path.as_ref().to_str() {
+                warn!("Failed to load texture: {}", path_str);
+            }
         }
     }
 

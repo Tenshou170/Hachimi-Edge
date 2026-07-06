@@ -254,6 +254,10 @@ fn get_rect_transform(text_component: *mut Il2CppObject) -> Option<*mut Il2CppOb
 
 fn get_or_store_original_position(rect_transform: *mut Il2CppObject, current_x: f32, current_y: f32) -> (f32, f32) {
     let mut original_pos_map = ORIGINAL_POSITIONS.lock().unwrap();
+    // Evict stale entries (dead Unity objects) to prevent unbounded growth.
+    original_pos_map.retain(|&ptr, _| {
+        crate::il2cpp::hook::UnityEngine_CoreModule::Object::IsNativeObjectAlive(ptr as *mut _)
+    });
     let base_pos_ref = original_pos_map.entry(rect_transform as usize).or_insert_with(|| {
         Vector2_t { x: current_x, y: current_y }
     });

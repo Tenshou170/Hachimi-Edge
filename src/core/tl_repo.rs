@@ -121,6 +121,7 @@ struct UpdateInfo {
     zip_dir: String,
     files: Vec<RepoFile>, // only contains files needed for update
     is_new_repo: bool,
+    pedantic: bool, // whether this was a pedantic check (don't cascade to addon)
     cached_files: FnvHashMap<String, String>, // from repo cache
     size: usize,
     // New fields for better user communication, idk why it complains about these never being read
@@ -609,6 +610,7 @@ impl Updater {
             // Store update info with all relevant sizes
             self.new_update.store(Arc::new(Some(UpdateInfo {
                 is_new_repo,
+                pedantic: pedantic_main,
                 base_url: index.base_url,
                 zip_url: index.zip_url,
                 zip_dir: index.zip_dir,
@@ -845,6 +847,18 @@ impl Updater {
                         "notification.errors_during_update",
                         count = error_count
                     ));
+                }
+            }
+        }
+
+        // After main TL update completes, check for addon updates (non-pedantic, silent).
+        // Pedantic TL checks are scoped to TL only and don't cascade.
+        let config = hachimi.config.load();
+        if !update_info.pedantic && !config.disable_mod_downloads {
+            if let Some(mod_index_url) = &config.translation_repo_index_mod {
+                let ld_dir_path = config.localized_data_dir.as_ref().map(|p| hachimi.get_data_path(p));
+                if let Err(e) = self.check_for_mod_updates(mod_index_url, false, true, &config, &ld_dir_path) {
+                    warn!("Failed to check for addon updates after TL download: {}", e);
                 }
             }
         }
@@ -1150,6 +1164,7 @@ impl Updater {
             zip_dir: mod_info.zip_dir.clone(),
             files: mod_info.files.clone(),
             is_new_repo: false,
+            pedantic: false,
             cached_files: mod_info.cached_files.clone(),
             size: mod_info.size,
             update_size: mod_info.update_size,

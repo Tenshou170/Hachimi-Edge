@@ -37,10 +37,7 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
         // Pin the content width before rendering so focus-state changes
         // (stroke width ±1px) don't shift the layout of surrounding rows.
         ui.set_max_width(ui.available_width());
-        let res = add_with_android_keyboard(
-            ui.add(MaterialTextField::filled(&mut config.meta_index_url).lock_focus(true)),
-            &mut config.meta_index_url,
-        );
+        let res = ui.add(MaterialTextField::filled(&mut config.meta_index_url).lock_focus(true));
         if res.lost_focus() && config.meta_index_url.trim().is_empty() {
             config.meta_index_url = hachimi::Config::default().meta_index_url;
         }
@@ -244,49 +241,37 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
 
             if is_landscape {
                 let (rect, _) = ui.allocate_exact_size(egui::vec2(number_w, 32.0), egui::Sense::hover());
-                let w_field = put_with_android_keyboard(
-                    ui.put(
+                let w_field = ui.put(
                         rect,
                         MaterialNumberField::filled(&mut config.windows.full_screen_res.width)
                             .range(0..=7680)
                             .decimals(0),
-                    ),
-                    &mut config.windows.full_screen_res.width,
-                );
+                    );
                 ui.label("W px");
                 let (rect2, _) = ui.allocate_exact_size(egui::vec2(number_w, 32.0), egui::Sense::hover());
-                let h_field = put_with_android_keyboard(
-                    ui.put(
+                let h_field = ui.put(
                         rect2,
                         MaterialNumberField::filled(&mut config.windows.full_screen_res.height)
                             .range(0..=4320)
                             .decimals(0),
-                    ),
-                    &mut config.windows.full_screen_res.height,
-                );
+                    );
                 ui.label("H px");
             } else {
                 let (rect, _) = ui.allocate_exact_size(egui::vec2(number_w, 32.0), egui::Sense::hover());
-                let h_field = put_with_android_keyboard(
-                    ui.put(
+                let h_field = ui.put(
                         rect,
                         MaterialNumberField::filled(&mut config.windows.full_screen_res.height)
                             .range(0..=4320)
                             .decimals(0),
-                    ),
-                    &mut config.windows.full_screen_res.height,
-                );
+                    );
                 ui.label("H px");
                 let (rect2, _) = ui.allocate_exact_size(egui::vec2(number_w, 32.0), egui::Sense::hover());
-                let w_field = put_with_android_keyboard(
-                    ui.put(
+                let w_field = ui.put(
                         rect2,
                         MaterialNumberField::filled(&mut config.windows.full_screen_res.width)
                             .range(0..=7680)
                             .decimals(0),
-                    ),
-                    &mut config.windows.full_screen_res.width,
-                );
+                    );
                 ui.label("W px");
             }
         });

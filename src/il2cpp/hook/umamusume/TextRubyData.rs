@@ -27,17 +27,22 @@ static mut RUBY_TEXT_FIELD: *mut FieldInfo = 0 as _;
 static mut BLOCK_INDEX_FIELD: *mut FieldInfo = 0 as _;
 static mut RUBY_DATA_LIST_FIELD: *mut FieldInfo = 0 as _;
 
+// Cached method pointers — resolved once at init, not per injection call.
+static mut LIST_CTOR: *const MethodInfo = std::ptr::null();
+static mut LIST_ADD: *const MethodInfo = std::ptr::null();
+static mut BLOCK_CTOR: *const MethodInfo = std::ptr::null();
+static mut DATA_CTOR: *const MethodInfo = std::ptr::null();
+
 fn set_DataArray(this: *mut Il2CppObject, value: *mut Il2CppArray) {
     set_field_object_value(this, unsafe { DATAARRAY_FIELD }, value as *mut Il2CppObject);
 }
 
 unsafe fn inject_custom_ruby_blocks(this: *mut Il2CppObject, blocks: &[CustomRubyBlock]) {
     let list_class = il2cpp_class_from_type(il2cpp_field_get_type(RUBY_DATA_LIST_FIELD));
-    let list_ctor = il2cpp_class_get_method_from_name(list_class, c".ctor".as_ptr(), 0);
-    let list_add = il2cpp_class_get_method_from_name(list_class, c"Add".as_ptr(), 1);
-
-    let block_ctor = il2cpp_class_get_method_from_name(RUBYBLOCKDATA_CLASS, c".ctor".as_ptr(), 0);
-    let data_ctor = il2cpp_class_get_method_from_name(RUBYDATA_CLASS, c".ctor".as_ptr(), 0);
+    let list_ctor = LIST_CTOR;
+    let list_add = LIST_ADD;
+    let block_ctor = BLOCK_CTOR;
+    let data_ctor = DATA_CTOR;
 
     let array = il2cpp_array_new(RUBYBLOCKDATA_CLASS, blocks.len());
     let array_elements_ptr = (array as *mut u8).offset(0x20) as *mut *mut Il2CppObject;
@@ -120,5 +125,14 @@ pub fn init(umamusume: *const Il2CppImage) {
 
         BLOCK_INDEX_FIELD = get_field_from_name(RUBYBLOCKDATA_CLASS, c"BlockIndex");
         RUBY_DATA_LIST_FIELD = get_field_from_name(RUBYBLOCKDATA_CLASS, c"RubyDataList");
+
+        // Cache method pointers now that all classes/fields are resolved.
+        let list_class = il2cpp_class_from_type(il2cpp_field_get_type(RUBY_DATA_LIST_FIELD));
+        if !list_class.is_null() {
+            LIST_CTOR = il2cpp_class_get_method_from_name(list_class, c".ctor".as_ptr(), 0);
+            LIST_ADD  = il2cpp_class_get_method_from_name(list_class, c"Add".as_ptr(), 1);
+        }
+        BLOCK_CTOR = il2cpp_class_get_method_from_name(RUBYBLOCKDATA_CLASS, c".ctor".as_ptr(), 0);
+        DATA_CTOR  = il2cpp_class_get_method_from_name(RUBYDATA_CLASS,      c".ctor".as_ptr(), 0);
     }
 }

@@ -1,5 +1,5 @@
 pub mod Texture2D;
-mod Resources;
+pub mod Resources;
 pub mod Sprite;
 pub mod Object;
 pub mod Application;
@@ -22,7 +22,7 @@ pub mod RectOffset;
 
 #[cfg(target_os = "windows")]
 pub mod QualitySettings;
-#[cfg(target_os = "windows")]
+
 pub mod Screen;
 pub mod SceneManager;
 pub mod Scene;
@@ -56,6 +56,7 @@ pub fn init() {
     RectOffset::init(image);
     SceneManager::init(image);
     Scene::init(image);
+    Screen::init(image);
     #[cfg(target_os = "android")]
     {
         TouchScreenKeyboard::init(image);
@@ -65,6 +66,5 @@ pub fn init() {
     #[cfg(target_os = "windows")]
     {
         QualitySettings::init(image);
-        Screen::init(image);
     }
 }

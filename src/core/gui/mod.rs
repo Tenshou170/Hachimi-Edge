@@ -48,15 +48,8 @@ use crate::il2cpp::{
 };
 
 #[cfg(target_os = "android")]
-use crate::il2cpp::{
-    ext::Il2CppStringExt,
-    hook::{
-        umamusume::WebViewManager,
-        UnityEngine_CoreModule::{TouchScreenKeyboard, TouchScreenKeyboardType},
-    },
-    symbols::GCHandle,
-    types::{Il2CppObject, Il2CppString, RangeInt},
-};
+use crate::il2cpp::hook::umamusume::WebViewManager;
+
 
 #[cfg(target_os = "windows")]
 use crate::il2cpp::hook::UnityEngine_CoreModule::QualitySettings;
@@ -126,7 +119,7 @@ pub struct Gui {
 
     menu_visible: bool,
     menu_anim_time: Option<Instant>,
-    menu_fps_value: i32,
+    menu_fps_value: f32,
 
     #[cfg(target_os = "windows")]
     menu_vsync_value: i32,
@@ -175,19 +168,8 @@ pub fn clear_disabled_game_uis() {
 use std::sync::atomic::Ordering;
 
 #[cfg(target_os = "android")]
-use std::sync::atomic::{AtomicI32, AtomicPtr};
-#[cfg(target_os = "android")]
-static PENDING_KB_TYPE: AtomicI32 = AtomicI32::new(0);
-#[cfg(target_os = "android")]
-static PENDING_KEYBOARD_TEXT: AtomicPtr<Il2CppString> = AtomicPtr::new(std::ptr::null_mut());
-#[cfg(target_os = "android")]
-static ACTIVE_KEYBOARD: AtomicPtr<Il2CppObject> = AtomicPtr::new(std::ptr::null_mut());
-#[cfg(target_os = "android")]
-pub static KEYBOARD_GC_HANDLE: Lazy<Mutex<Option<GCHandle>>> = Lazy::new(|| Mutex::default());
-#[cfg(target_os = "android")]
-static KEYBOARD_SELECTION: Lazy<Mutex<RangeInt>> = Lazy::new(|| Mutex::new(RangeInt::new(0, 1)));
-#[cfg(target_os = "android")]
 pub static KEYBOARD_OWNER: Lazy<Mutex<Option<KeyboardOwner>>> = Lazy::new(|| Mutex::new(None));
+
 
 impl Gui {
     // Call this from the render thread!
@@ -203,6 +185,9 @@ impl Gui {
 
         let context = egui::Context::default();
         egui_extras::install_image_loaders(&context);
+
+
+
 
         context.set_fonts(Self::get_font_definitions());
 
@@ -281,7 +266,7 @@ impl Gui {
 
             menu_visible: false,
             menu_anim_time: None,
-            menu_fps_value: fps_value,
+            menu_fps_value: fps_value as f32,
 
             #[cfg(target_os = "windows")]
             menu_vsync_value: hachimi.vsync_count.load(atomic::Ordering::Relaxed),
@@ -762,19 +747,20 @@ impl Gui {
                     }
                 }
 
-                if let Some(KeyboardOwner::JNI(_)) = *owner_lock {
-                    if BACK_BUTTON_PRESSED.swap(false, Ordering::AcqRel) {
-                        *owner_lock = None;
+                if BACK_BUTTON_PRESSED.swap(false, Ordering::AcqRel) {
+                    if let Some(KeyboardOwner::JNI(_)) = *owner_lock {
                         set_keyboard_visible(false);
-                        self.context.memory_mut(|mem| mem.stop_text_input());
-                        IS_IME_VISIBLE.store(false, Ordering::Release);
-                        self.last_focused = None;
-                        self.ime_cooldown = None;
                     }
+                    *owner_lock = None;
+                    self.context.memory_mut(|mem| mem.stop_text_input());
+                    IS_IME_VISIBLE.store(false, Ordering::Release);
+                    self.last_focused = None;
+                    self.ime_cooldown = None;
                 }
             }
 
-            // zombie check
+            // Zombie check — detect when the JNI keyboard was dismissed
+            // externally (e.g. user swiped it away) so we can clean up focus.
             if self.tmp_frame_count % 20 == 0 {
                 let should_check = if let Some(until) = self.ime_cooldown {
                     Instant::now() > until
@@ -788,9 +774,7 @@ impl Gui {
                         IS_IME_VISIBLE.store(false, Ordering::Release);
 
                         if let Ok(mut lock) = KEYBOARD_OWNER.try_lock() {
-                            if let Some(KeyboardOwner::JNI(_)) = *lock {
-                                *lock = None;
-                            }
+                            *lock = None;
                         }
                         self.last_focused = None;
                         self.ime_cooldown = None;
@@ -1016,13 +1000,16 @@ impl Gui {
 
                                 // 3. Graphics Section
                                 render_heading(ui, &t!("menu.graphics_heading"));
-                                let mut fps_f = self.menu_fps_value as f32;
-                                if ConfigEditor::list_tile_slider(ui, t!("menu.fps_label"), &mut fps_f, 30.0..=240.0, 1.0, 0).changed() {
-                                    self.menu_fps_value = (fps_f as i32).clamp(30, 240);
-                                    hachimi.target_fps.store(self.menu_fps_value, atomic::Ordering::Relaxed);
+                                let slider_res = ConfigEditor::list_tile_slider(ui, t!("menu.fps_label"), &mut self.menu_fps_value, 30.0..=240.0, 1.0, 0);
+                                if slider_res.changed() {
+                                    let clamped = (self.menu_fps_value as i32).clamp(30, 240);
+                                    hachimi.target_fps.store(clamped, atomic::Ordering::Relaxed);
                                     Thread::main_thread().schedule(|| {
                                         Application::set_targetFrameRate(30);
                                     });
+                                }
+                                if slider_res.lost_focus() {
+                                    self.menu_fps_value = self.menu_fps_value.clamp(30.0, 240.0);
                                 }
 
                                 #[cfg(target_os = "windows")]
@@ -1456,22 +1443,38 @@ impl Gui {
             ui.painter().galley(text_pos, galley, visuals.text_color());
         }
 
+        let close_behavior = {
+            #[cfg(target_os = "android")]
+            {
+                if let Ok(owner) = crate::core::gui::KEYBOARD_OWNER.try_lock() {
+                    if owner.is_some() {
+                        egui::PopupCloseBehavior::IgnoreClicks
+                    } else {
+                        egui::PopupCloseBehavior::CloseOnClickOutside
+                    }
+                } else {
+                    egui::PopupCloseBehavior::CloseOnClickOutside
+                }
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                egui::PopupCloseBehavior::CloseOnClickOutside
+            }
+        };
+
         egui::Popup::menu(&button_res)
             .id(popup_id)
-            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+            .close_behavior(close_behavior)
             .show(|ui| {
                 ui.set_width(popup_width);
                 ui.set_max_width(popup_width);
 
                 ui.horizontal(|ui| {
                     egui::ScrollArea::neither().show(ui, |ui| {
-                        let _res = add_sized_with_android_keyboard(
-                            ui.add_sized(
+                        let _res = ui.add_sized(
                                 [ui.available_width() - 30.0 * scale, row_height],
                                 MaterialTextField::filled(search_term).hint_text(t!("search_filter")),
-                            ),
-                            search_term,
-                        );
+                            );
                     });
 
                     if ui.add(MaterialButton::text("X").small()).clicked() {
