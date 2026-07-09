@@ -16,9 +16,10 @@ use windows::{
         },
         System::LibraryLoader::GetModuleHandleW,
         UI::WindowsAndMessaging::{
-            CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, IsIconic,
-            RegisterClassExW, UnregisterClassW, WINDOW_EX_STYLE, WNDCLASSEXW, WS_DISABLED
-        }
+            CreateWindowExW, DefWindowProcW, DestroyWindow, GetAncestor, GetClientRect, IsIconic,
+            RegisterClassExW, UnregisterClassW, WINDOW_EX_STYLE, WNDCLASSEXW, WS_DISABLED,
+            GA_ROOT,
+        },
     }
 };
 
@@ -37,12 +38,29 @@ fn check_hwnd(this: *mut c_void) -> HWND {
     };
 
     let target = wnd_hook::get_target_hwnd();
+    if target.0.is_null() {
+        debug!("[render_hook] target HWND is null, skipping swap chain checks");
+        return HWND(std::ptr::null_mut());
+    }
+
     if desc.OutputWindow == target {
-        target
+        debug!("[render_hook] swap chain output window directly matches target HWND: {:?}", target);
+        return target;
     }
-    else {
-        HWND(std::ptr::null_mut())
+
+    if !desc.OutputWindow.0.is_null() {
+        let root = unsafe { GetAncestor(desc.OutputWindow, GA_ROOT) };
+        if root == target {
+            debug!("[render_hook] swap chain output window {:?} root is target HWND {:?}", desc.OutputWindow, target);
+            return target;
+        }
+
+        debug!("[render_hook] swap chain output window {:?} does not match target {:?} or its root {:?}", desc.OutputWindow, target, root);
+        return HWND(std::ptr::null_mut());
     }
+
+    debug!("[render_hook] swap chain output window is null, skipping");
+    HWND(std::ptr::null_mut())
 }
 
 static IME_COMPOSITION_POS: Mutex<(f32, f32)> = Mutex::new((0.0, 0.0));
@@ -73,7 +91,7 @@ extern "C" fn IDXGISwapChain_Present(this: *mut c_void, sync_interval: c_uint, f
         Ok(v) => v,
         Err(e) => {
             error!("{}", e);
-            info!("Unhooking IDXGISwapChain hooks (deferred)");
+            debug!("Unhooking IDXGISwapChain hooks (deferred)");
 
             let res = orig_fn(this, sync_interval, flags);
             crate::core::hook_utils::defer_unhook(IDXGISwapChain_Present as *const () as usize);
@@ -174,7 +192,7 @@ extern "C" fn IDXGISwapChain_ResizeBuffers(
         Ok(v) => v,
         Err(e) => {
             error!("{}", e);
-            info!("Unhooking IDXGISwapChain hooks (deferred)");
+            debug!("Unhooking IDXGISwapChain hooks (deferred)");
 
             crate::core::hook_utils::defer_unhook(IDXGISwapChain_Present as *const () as usize);
             crate::core::hook_utils::defer_unhook(IDXGISwapChain_ResizeBuffers as *const () as usize);
@@ -254,8 +272,12 @@ fn get_swap_chain_vtable() -> Result<*mut usize, Error> {
     wc.lpfnWndProc = Some(dummy_wnd_proc);
     wc.lpszClassName = w!("Hachimi");
 
-    if unsafe { RegisterClassExW(&wc) } == 0 {
-        return Err(Error::RuntimeError("Failed to register dummy window class".to_owned()));
+    let reg_result = unsafe { RegisterClassExW(&wc) };
+    if reg_result == 0 {
+        let err = unsafe { windows::Win32::Foundation::GetLastError() };
+        if err != windows::Win32::Foundation::ERROR_CLASS_ALREADY_EXISTS {
+            return Err(Error::RuntimeError("Failed to register dummy window class".to_owned()));
+        }
     }
 
     let hwnd = unsafe {
@@ -314,10 +336,10 @@ fn init_internal() -> Result<(), Error> {
     let interceptor = &Hachimi::instance().interceptor;
 
     unsafe {
-        info!("Hooking IDXGISwapChain::Present");
+        debug!("[render_hook] hooking IDXGISwapChain::Present");
         PRESENT_ADDR = interceptor.hook_vtable(swap_chain_vtable, 8, IDXGISwapChain_Present as *const () as usize)?;
 
-        info!("Hooking IDXGISwapChain::ResizeBuffers");
+        debug!("[render_hook] hooking IDXGISwapChain::ResizeBuffers");
         RESIZEBUFFERS_ADDR = interceptor.hook_vtable(swap_chain_vtable, 13, IDXGISwapChain_ResizeBuffers as *const () as usize)?;
     }
 

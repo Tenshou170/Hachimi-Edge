@@ -1,12 +1,12 @@
 use std::{os::raw::c_uint, sync::{atomic::{self, AtomicIsize, AtomicUsize}, Arc}};
 
-use windows::{core::w, Win32::{
+use windows::{core::{w, BOOL}, Win32::{
     Foundation::{HWND, LPARAM, LRESULT, WPARAM},
-    System::Threading::GetCurrentThreadId,
+    System::Threading::{GetCurrentProcessId, GetCurrentThreadId},
     UI::{
         Input::Ime::ISC_SHOWUICOMPOSITIONWINDOW,
         WindowsAndMessaging::{
-            CallNextHookEx, DefWindowProcW, FindWindowW, GetWindowLongPtrW, SetWindowsHookExW, UnhookWindowsHookEx,
+            CallNextHookEx, DefWindowProcW, EnumWindows, FindWindowW, GetClassNameW, GetWindowLongPtrW, GetWindowThreadProcessId, SetWindowsHookExW, UnhookWindowsHookEx,
             GWLP_WNDPROC, HCBT_MINMAX, HHOOK, SW_RESTORE, WH_CBT, WM_CLOSE, WM_KEYDOWN, WM_SYSKEYDOWN, WNDPROC,
             WM_IME_SETCONTEXT, WM_IME_NOTIFY, WM_ACTIVATE, WA_INACTIVE
         },
@@ -21,6 +21,57 @@ use super::{gui_impl::input, discord, smtc, taskbar};
 static TARGET_HWND: AtomicIsize = AtomicIsize::new(0);
 pub fn get_target_hwnd() -> HWND {
     HWND(TARGET_HWND.load(atomic::Ordering::Relaxed) as *mut _)
+}
+
+pub fn set_target_hwnd(hwnd: HWND) {
+    TARGET_HWND.store(hwnd.0 as isize, atomic::Ordering::Relaxed);
+}
+
+fn find_window_by_class_in_current_process() -> HWND {
+    struct WindowSearchState {
+        process_id: u32,
+        hwnd: HWND,
+    }
+
+    unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let state = &mut *(lparam.0 as *mut WindowSearchState);
+        let mut pid = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if pid != state.process_id {
+            return BOOL(1);
+        }
+
+        let mut class_name = [0u16; 32];
+        let len = GetClassNameW(hwnd, &mut class_name);
+        if len <= 0 {
+            return BOOL(1);
+        }
+
+        let class = String::from_utf16_lossy(&class_name[..len as usize]);
+        if class == "UnityWndClass" {
+            state.hwnd = hwnd;
+            return BOOL(0);
+        }
+
+        BOOL(1)
+    }
+
+    let mut state = WindowSearchState {
+        process_id: unsafe { GetCurrentProcessId() },
+        hwnd: HWND(std::ptr::null_mut()),
+    };
+
+    unsafe {
+        let _ = EnumWindows(Some(enum_windows_proc), LPARAM(&mut state as *mut _ as isize));
+    }
+
+    if !state.hwnd.0.is_null() {
+        info!("find_window_by_class_in_current_process: found UnityWndClass hwnd={:?}", state.hwnd);
+    } else {
+        info!("find_window_by_class_in_current_process: no UnityWndClass window found in current process");
+    }
+
+    state.hwnd
 }
 
 static MENU_KEY_CAPTURE: atomic::AtomicBool = atomic::AtomicBool::new(false);
@@ -213,12 +264,30 @@ pub fn init() {
             // is case insensitive so it works. why am i surprised
             w!("umamusume")
         };
-        let hwnd = FindWindowW(w!("UnityWndClass"), window_name).unwrap_or_default();
+        let mut hwnd = FindWindowW(w!("UnityWndClass"), window_name).unwrap_or_default();
+        if !hwnd.0.is_null() {
+            info!("Game window found by title: {:?}", hwnd);
+        } else {
+            // Fallback to any Unity window if the title isn't available yet or has changed.
+            hwnd = FindWindowW(w!("UnityWndClass"), None).unwrap_or_default();
+            if !hwnd.0.is_null() {
+                info!("Game window found by class fallback without title: {:?}", hwnd);
+            }
+        }
+
+        if hwnd.0.is_null() {
+            hwnd = find_window_by_class_in_current_process();
+            if !hwnd.0.is_null() {
+                info!("Game window found by process-owned class enumeration: {:?}", hwnd);
+            }
+        }
+
         if hwnd.0.is_null() {
             error!("Failed to find game window");
             return;
         }
-        TARGET_HWND.store(hwnd.0 as isize, atomic::Ordering::Relaxed);
+
+        set_target_hwnd(hwnd);
 
         let title = hachimi.config.load().custom_title_name.clone();
         if let Some(t) = title {

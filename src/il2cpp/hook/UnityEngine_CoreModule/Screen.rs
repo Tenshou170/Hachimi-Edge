@@ -3,8 +3,31 @@ use crate::il2cpp::{api::il2cpp_resolve_icall, types::*};
 #[cfg(target_os = "windows")]
 use crate::{
     core::Hachimi,
-    il2cpp::symbols::get_method_addr,
+    il2cpp::symbols::{get_method, get_method_addr},
 };
+#[cfg(target_os = "windows")]
+use std::ffi::CStr;
+
+#[cfg(target_os = "windows")]
+fn resolve_screen_method(class: *mut Il2CppClass, primary: &CStr, fallback: &CStr) -> usize {
+    if let Ok(method) = get_method(class, primary, 0) {
+        unsafe { (*method).methodPointer }
+    } else if let Ok(method) = get_method(class, fallback, 0) {
+        info!(
+            "Using fallback method name UnityEngine.Screen::{} for {}",
+            fallback.to_str().unwrap_or("<invalid>"),
+            primary.to_str().unwrap_or("<invalid>")
+        );
+        unsafe { (*method).methodPointer }
+    } else {
+        warn!(
+            "UnityEngine.Screen method not found: {} or {}",
+            primary.to_str().unwrap_or("<invalid>"),
+            fallback.to_str().unwrap_or("<invalid>")
+        );
+        0
+    }
+}
 
 #[cfg(target_os = "windows")]
 use crate::core::utils::scale_to_aspect_ratio;
@@ -152,8 +175,8 @@ pub fn init(UnityEngine_CoreModule: *const Il2CppImage) {
 
         new_hook!(SetResolution_Injected_addr, SetResolution_Injected);
 
-        let get_Width_addr = get_method_addr(Screen, c"get_Width", 0);
-        let get_Height_addr = get_method_addr(Screen, c"get_Height", 0);
+        let get_Width_addr = resolve_screen_method(Screen, c"get_Width", c"get_width");
+        let get_Height_addr = resolve_screen_method(Screen, c"get_Height", c"get_height");
 
         new_hook!(get_Width_addr, get_Width);
         new_hook!(get_Height_addr, get_Height);

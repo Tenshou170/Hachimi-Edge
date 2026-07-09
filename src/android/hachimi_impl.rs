@@ -35,8 +35,8 @@ pub fn set_keep_screen_on(enable: bool) {
 
 pub fn apply_keep_screen_on_if_pending() {
     KEEP_SCREEN_ON_RENDER_READY.store(true, Ordering::Relaxed);
-    if KEEP_SCREEN_ON_PENDING.swap(false, Ordering::Relaxed) {
-        let enable = KEEP_SCREEN_ON.load(Ordering::Relaxed);
+    let enable = KEEP_SCREEN_ON.load(Ordering::Relaxed);
+    if KEEP_SCREEN_ON_PENDING.swap(false, Ordering::Relaxed) || enable {
         set_keep_screen_on_jni(enable);
     }
 }
