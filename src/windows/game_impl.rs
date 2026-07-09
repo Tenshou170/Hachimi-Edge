@@ -36,10 +36,14 @@ pub fn get_data_dir(package_name: &str) -> PathBuf {
 
 pub fn is_steam_release(package_name: &str) -> bool {
     let exec_path = Path::new(package_name);
-    let is_jp_steam = exec_path
+    exec_path
         .file_stem()
         .and_then(|s| s.to_str())
-        .map(|s| s.eq_ignore_ascii_case("umamusumeprettyderby_jpn"))
-        .unwrap_or(false);
-    is_jp_steam
+        .map(|s| {
+            matches!(
+                s.to_ascii_lowercase().as_str(),
+                "umamusumeprettyderby_jpn" | "umamusumeprettyderby"
+            )
+        })
+        .unwrap_or(false)
 }

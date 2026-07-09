@@ -4,7 +4,8 @@ use std::{
 };
 use once_cell::sync::Lazy;
 use discord_rich_presence::{activity::{Activity, ActivityType, Assets, Timestamps}, DiscordIpc, DiscordIpcClient};
-use crate::core::Error;
+use crate::core::{Error, Hachimi};
+use crate::core::game::Region;
 
 static DISCORD_CLIENT: Lazy<Mutex<Option<DiscordIpcClient>>> = Lazy::new(|| {
     Mutex::new(None)
@@ -16,7 +17,20 @@ pub fn start_rpc() -> Result<(), Error> {
         return Ok(());
     }
 
-    let mut client = DiscordIpcClient::new("1440812697925980294");
+    // Choose appropriate Discord App ID based on detected release.
+    let h = Hachimi::instance();
+    let client_id = if h.game.is_steam_release {
+        match h.game.region {
+            Region::Global => "1387281194043048067", // Global Steam app ID
+            Region::Japan => "1387432222147219607",  // JP Steam app ID
+            _ => "1440812697925980294", // fallback (current app id)
+        }
+    } else {
+        // Non-Steam releases keep using the configured/default app id
+        "1440812697925980294"
+    };
+
+    let mut client = DiscordIpcClient::new(client_id);
     client.connect().map_err(|e| Error::DiscordRpcError(e.to_string()))?;
 
     let now = SystemTime::now()

@@ -255,20 +255,27 @@ pub fn init() {
         let hachimi = Hachimi::instance();
         let game = &hachimi.game;
 
-        let window_name = if game.region == Region::Japan && game.is_steam_release {
-            // lmao
-            w!("UmamusumePrettyDerby_Jpn")
-        }
-        else {
-            // global technically has "Umamusume" as its title but this api
-            // is case insensitive so it works. why am i surprised
-            w!("umamusume")
-        };
-        let mut hwnd = FindWindowW(w!("UnityWndClass"), window_name).unwrap_or_default();
-        if !hwnd.0.is_null() {
-            info!("Game window found by title: {:?}", hwnd);
+        let mut hwnd = HWND(std::ptr::null_mut());
+
+        if game.is_steam_release {
+            let window_name = if game.region == Region::Japan {
+                // JP Steam client uses the legacy "UmamusumePrettyDerby_Jpn" title.
+                w!("UmamusumePrettyDerby_Jpn")
+            } else {
+                // Global Steam client uses the main "Umamusume" title.
+                w!("Umamusume")
+            };
+            hwnd = FindWindowW(w!("UnityWndClass"), window_name).unwrap_or_default();
+            if !hwnd.0.is_null() {
+                info!("Game window found by title: {:?}", hwnd);
+            }
         } else {
-            // Fallback to any Unity window if the title isn't available yet or has changed.
+            info!("Skipping title-based window search for non-Steam release to avoid case-insensitive DMM/Steam title ambiguity");
+        }
+
+        if hwnd.0.is_null() {
+            // Fallback to any Unity window if the title isn't available yet or has changed,
+            // or for non-Steam releases where title-match is ambiguous.
             hwnd = FindWindowW(w!("UnityWndClass"), None).unwrap_or_default();
             if !hwnd.0.is_null() {
                 info!("Game window found by class fallback without title: {:?}", hwnd);

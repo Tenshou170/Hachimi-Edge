@@ -454,7 +454,11 @@ impl Hachimi {
     }
 
     pub fn on_hooking_finished(&self) {
-        self.hooking_finished.store(true, atomic::Ordering::Relaxed);
+        // Ensure only one thread performs the one-time initialization. If another
+        // thread already set the flag, return early.
+        if self.hooking_finished.compare_exchange(false, true, atomic::Ordering::AcqRel, atomic::Ordering::Relaxed).is_err() {
+            return;
+        }
 
         info!("GameAssembly finished loading");
         il2cpp::symbols::init();
