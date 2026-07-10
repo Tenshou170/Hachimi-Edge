@@ -542,9 +542,12 @@ impl Updater {
             let updated = if is_new_repo {
                 // redownload every single file because the directory will be deleted
                 true
+            } else if pedantic_main {
+                // force download every file during pedantic checks
+                true
             } else if let Some(hash) = repo_cache.files.get(&file.path) {
                 // lazy auto update, cached hash and repo hash matches. ignored during pedantic
-                if !pedantic_main && config.lazy_translation_updates && hash == &file.hash {
+                if config.lazy_translation_updates && hash == &file.hash {
                     false
                 } else if let Some(path) = path {
                     // get path or force download if path is invalid
@@ -559,9 +562,6 @@ impl Updater {
                             .unwrap_or(true)
                         {
                             true // size mismatch -> redownload
-                        } else if pedantic_main {
-                            // full blake3 integrity check if user requested pedantic update
-                            !file.verify_integrity(&path)
                         } else {
                             false // everything matches -> skip
                         }
@@ -895,15 +895,6 @@ impl Updater {
             RepoCache::default()
         };
 
-        // Load main repo cache to avoid conflicts when running pedantic checks:
-        // if the main translation repo already provides a file, prefer it and skip mod replacement.
-        let main_cache_path = hachimi.get_data_path(REPO_CACHE_FILENAME);
-        let main_cache_files: FnvHashMap<String, String> = if let Ok(json) = fs::read_to_string(&main_cache_path) {
-            serde_json::from_str::<RepoCache>(&json).map(|c| c.files).unwrap_or_default()
-        } else {
-            FnvHashMap::default()
-        };
-
         if mod_cache.files.is_empty() {
             if let Some(ref ld_dir_path) = ld_dir_path {
                 let mut inferred_files = FnvHashMap::default();
@@ -974,19 +965,14 @@ impl Updater {
                     continue;
                 }
 
-                // When running pedantic checks, skip files that the main repo already claims
-                // to avoid a situation where accepting a mod file is later overwritten
-                // by the main translation update (causing alternating sizes).
-                if pedantic && main_cache_files.contains_key(&file.path) {
-                    debug!("Pedantic mod check: skipping '{}' because main repo owns it", file.path);
-                    continue;
-                }
-
                 let mut reason = None;
                 let updated = if is_new_mod {
                     reason = Some("new repo".to_string());
                     true
-                } else if !pedantic && config.lazy_translation_updates {
+                } else if pedantic {
+                    // Force download every mod file during pedantic addon checks.
+                    true
+                } else if config.lazy_translation_updates {
                     if let Some(hash) = mod_cache_files.get(&file.path) {
                         if hash != &file.hash {
                             reason = Some("cached hash differs from repo".to_string());
@@ -1016,13 +1002,9 @@ impl Updater {
                             {
                                 reason = Some("file size mismatch".to_string());
                                 true
-                            } else if pedantic {
-                                if !file.verify_integrity(&path) {
-                                    reason = Some("pedantic integrity mismatch".to_string());
-                                    true
-                                } else {
-                                    false
-                                }
+                            } else if !file.verify_integrity(&path) {
+                                reason = Some("integrity mismatch".to_string());
+                                true
                             } else {
                                 false
                             }
