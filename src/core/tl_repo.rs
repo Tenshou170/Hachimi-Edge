@@ -148,6 +148,7 @@ impl UpdateProgress {
 
 const REPO_CACHE_FILENAME: &str = ".tl_repo_cache";
 const REPO_CACHE_MOD_FILENAME: &str = ".tl_repo_cache_mod";
+const REPO_EXCLUDES_FILENAME: &str = ".tl_repo_excludes";
 #[derive(Serialize, Deserialize, Default)]
 struct RepoCache {
     base_url: String,
@@ -339,9 +340,9 @@ impl Updater {
         });
     }
 
-    pub fn check_for_mod_updates_only(self: Arc<Self>, silent: bool) {
+    pub fn check_for_mod_updates_only(self: Arc<Self>, pedantic: bool, silent: bool) {
         std::thread::spawn(move || {
-            if let Err(e) = self.check_for_mod_updates_only_internal(silent) {
+            if let Err(e) = self.check_for_mod_updates_only_internal(pedantic, silent) {
                 if let Some(mutex) = Gui::instance() {
                     if !silent {
                         mutex.lock().unwrap_or_else(|e| e.into_inner()).show_notification(&format!("{}", e));
@@ -352,7 +353,7 @@ impl Updater {
         });
     }
 
-    fn check_for_mod_updates_only_internal(&self, silent: bool) -> Result<(), Error> {
+    fn check_for_mod_updates_only_internal(&self, pedantic: bool, silent: bool) -> Result<(), Error> {
         let Ok(_guard) = self.update_check_mutex.try_lock() else {
             return Ok(());
         };
@@ -389,7 +390,7 @@ impl Updater {
             }
         }
 
-        let found = self.check_for_mod_updates(mod_index_url, true, silent, &config, &ld_dir_path)?;
+        let found = self.check_for_mod_updates(mod_index_url, pedantic, silent, &config, &ld_dir_path)?;
         if !found && !silent {
             if let Some(mutex) = Gui::instance() {
                 mutex
@@ -478,6 +479,31 @@ impl Updater {
             RepoCache::default()
         };
 
+        let excludes_path = hachimi.get_data_path(REPO_EXCLUDES_FILENAME);
+        let excludes: HashSet<String> = if excludes_path.exists() {
+            fs::read_to_string(&excludes_path)
+                .unwrap_or_default()
+                .lines()
+                .map(|l| l.trim().replace("\\", "/"))
+                .filter(|l| !l.is_empty())
+                .collect()
+        } else {
+            HashSet::new()
+        };
+
+        let mod_managed_paths: HashSet<String> = if !config.disable_mod_downloads && config.translation_repo_index_mod.is_some() {
+            let mod_cache_path = hachimi.get_data_path(REPO_CACHE_MOD_FILENAME);
+            if fs::metadata(&mod_cache_path).is_ok() {
+                let json = fs::read_to_string(&mod_cache_path).unwrap_or_default();
+                let mod_cache: RepoCache = serde_json::from_str(&json).unwrap_or_default();
+                mod_cache.files.keys().cloned().collect()
+            } else {
+                HashSet::new()
+            }
+        } else {
+            HashSet::new()
+        };
+
         let mut new_etag: Option<String> = None;
         if let Ok(head_res) = ureq::agent().head(index_url).call() {
             if let Some(etag_val) = head_res.headers().get("ETag") {
@@ -493,16 +519,7 @@ impl Updater {
 
                     if let Some(cached_etag) = &repo_cache.index_etag {
                         if !pedantic_main && cached_etag == &etag_string {
-                            debug!("Server ETag matches cached ETag. No translation updates available.");
-                            if !silent {
-                                if let Some(mutex) = Gui::instance() {
-                                    mutex
-                                        .lock()
-                                        .unwrap()
-                                        .show_notification(&t!("notification.no_tl_updates"));
-                                }
-                            }
-                            return Ok(());
+                            debug!("Server ETag matches cached ETag. Continuing scan for addon-only updates.");
                         }
                     }
                     new_etag = Some(etag_string);
@@ -536,21 +553,28 @@ impl Updater {
                 continue;
             }
 
+            // Keep addon-managed files owned by the addon repo from being reprocessed by the main updater.
+            if mod_managed_paths.contains(&file.path) {
+                total_size += file.size;
+                continue;
+            }
+
             let path = ld_dir_path.as_ref().map(|p| p.join(&file.path));
             let exists = path.as_ref().map(|p| p.is_file()).unwrap_or(false);
 
             let updated = if is_new_repo {
                 // redownload every single file because the directory will be deleted
                 true
-            } else if pedantic_main {
-                // force download every file during pedantic checks
-                true
+            } else if !pedantic_main && config.lazy_translation_updates {
+                if let Some(hash) = repo_cache.files.get(&file.path) {
+                    hash != &file.hash
+                } else {
+                    true
+                }
             } else if let Some(hash) = repo_cache.files.get(&file.path) {
-                // lazy auto update, cached hash and repo hash matches. ignored during pedantic
-                if config.lazy_translation_updates && hash == &file.hash {
+                if !pedantic_main && exists && excludes.contains(&file.path) {
                     false
                 } else if let Some(path) = path {
-                    // get path or force download if path is invalid
                     // file doesn't exist -> download
                     if !exists {
                         true
@@ -562,6 +586,8 @@ impl Updater {
                             .unwrap_or(true)
                         {
                             true // size mismatch -> redownload
+                        } else if pedantic_main {
+                            !file.verify_integrity(&path)
                         } else {
                             false // everything matches -> skip
                         }
@@ -932,14 +958,15 @@ impl Updater {
             }
         }
 
-        let is_new_mod = mod_index.base_url != mod_cache.base_url;
+        // An empty addon cache is not a new repo; it simply means the cache has to be rebuilt
+        // from the currently installed addon files on disk. That lets pedantic checks verify
+        // integrity instead of forcing a full repo download loop.
+        let is_new_mod = !mod_cache.files.is_empty() && mod_index.base_url != mod_cache.base_url;
         let mut mod_cache_files = mod_cache.files.clone();
         debug!("Mod cache state: is_new_mod={}, cached_files_count={}, index_files_count={}", 
             is_new_mod, mod_cache_files.len(), mod_index.files.len());
-        if !is_new_mod {
-            if let Some(ref ld_dir) = ld_dir_path {
-                Self::populate_existing_mod_files(&mut mod_cache_files, &mod_index.files, ld_dir);
-            }
+        if let Some(ref ld_dir) = ld_dir_path {
+            Self::populate_existing_mod_files(&mut mod_cache_files, &mod_index.files, ld_dir);
         }
 
         let mut update_files: Vec<RepoFile> = Vec::new();
@@ -969,10 +996,7 @@ impl Updater {
                 let updated = if is_new_mod {
                     reason = Some("new repo".to_string());
                     true
-                } else if pedantic {
-                    // Force download every mod file during pedantic addon checks.
-                    true
-                } else if config.lazy_translation_updates {
+                } else if !pedantic && config.lazy_translation_updates {
                     if let Some(hash) = mod_cache_files.get(&file.path) {
                         if hash != &file.hash {
                             reason = Some("cached hash differs from repo".to_string());
@@ -1002,9 +1026,9 @@ impl Updater {
                             {
                                 reason = Some("file size mismatch".to_string());
                                 true
-                            } else if !file.verify_integrity(&path) {
-                                reason = Some("integrity mismatch".to_string());
-                                true
+                            } else if pedantic {
+                                reason = Some("pedantic integrity mismatch".to_string());
+                                !file.verify_integrity(&path)
                             } else {
                                 false
                             }
