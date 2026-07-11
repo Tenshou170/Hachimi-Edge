@@ -1,10 +1,7 @@
 use crate::il2cpp::{api::il2cpp_resolve_icall, types::*};
 
 #[cfg(target_os = "windows")]
-use crate::{
-    core::Hachimi,
-    il2cpp::symbols::{get_method, get_method_addr},
-};
+use crate::{core::Hachimi, il2cpp::symbols::{get_method, get_method_addr}};
 #[cfg(target_os = "windows")]
 use std::ffi::CStr;
 
@@ -115,7 +112,16 @@ fn re_apply_topmost() {
 }
 
 static mut SET_SLEEPTIMEOUT_ADDR: usize = 0;
-impl_addr_wrapper_fn!(set_sleepTimeout, SET_SLEEPTIMEOUT_ADDR, (), value: i32);
+
+#[cfg(target_os = "android")]
+type SetSleepTimeoutFn = extern "C" fn(value: i32);
+
+#[cfg(target_os = "android")]
+extern "C" fn set_sleepTimeout_hook(value: i32) {
+    let keep_screen_on = crate::android::hachimi_impl::is_keep_screen_on();
+    let value = if keep_screen_on { -1 } else { value };
+    get_orig_fn!(set_sleepTimeout_hook, SetSleepTimeoutFn)(value);
+}
 
 pub fn set_screen_timeout_disabled(disabled: bool) {
     let value = if disabled { -1 } else { -2 };
@@ -194,6 +200,11 @@ pub fn init(UnityEngine_CoreModule: *const Il2CppImage) {
         SET_SLEEPTIMEOUT_ADDR = il2cpp_resolve_icall(c"UnityEngine.Screen::set_sleepTimeout(System.Int32)".as_ptr());
         if SET_SLEEPTIMEOUT_ADDR == 0 {
             SET_SLEEPTIMEOUT_ADDR = il2cpp_resolve_icall(c"UnityEngine.Screen::set_sleepTimeout".as_ptr());
+        }
+
+        #[cfg(target_os = "android")]
+        if SET_SLEEPTIMEOUT_ADDR != 0 {
+            new_hook!(SET_SLEEPTIMEOUT_ADDR, set_sleepTimeout_hook);
         }
     }
 }

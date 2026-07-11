@@ -193,6 +193,16 @@ pub fn open_app_or_fallback(package_name: &str, activity_class: &str, fallback_u
 }
 
 pub fn get_activity(mut env: JNIEnv<'_>) -> Option<JObject<'_>> {
+    let unity_player_class = env.find_class("com/unity3d/player/UnityPlayer").ok()?;
+    let current_activity = env
+        .get_static_field(unity_player_class, "currentActivity", "Landroid/app/Activity;")
+        .ok()?
+        .l()
+        .ok()?;
+    if !current_activity.is_null() {
+        return Some(current_activity);
+    }
+
     let activity_thread_class = env.find_class("android/app/ActivityThread").ok()?;
     let activity_thread = env
         .call_static_method(
@@ -210,20 +220,21 @@ pub fn get_activity(mut env: JNIEnv<'_>) -> Option<JObject<'_>> {
         .l()
         .ok()?;
     let activities_map = JMap::from_env(&mut env, &activities).ok()?;
+    let mut iter = activities_map.iter(&mut env).ok()?;
 
-    // Get the first activity in the map
-    let (_, activity_record) = activities_map
-        .iter(&mut env)
-        .ok()?
-        .next(&mut env)
-        .ok()??
-        ;
-    let activity = env
-        .get_field(activity_record, "activity", "Landroid/app/Activity;")
-        .ok()?
-        .l()
-        .ok()?;
-    Some(activity)
+    while let Some((_, activity_record)) = iter.next(&mut env).ok()? {
+        let activity = env
+            .get_field(activity_record, "activity", "Landroid/app/Activity;")
+            .ok()?
+            .l()
+            .ok()?;
+
+        if !activity.is_null() {
+            return Some(activity);
+        }
+    }
+
+    None
 }
 
 pub fn get_device_api_level(env: *mut jni::sys::JNIEnv) -> i32 {

@@ -51,6 +51,7 @@ extern "C" fn eglSwapBuffers(display: EGLDisplay, surface: EGLSurface) -> EGLBoo
             return res;
         }
     };
+
     // Skip if its empty, or it's still too early
     if gui.is_empty() || gui.start_time.elapsed().as_secs_f32() < 1.0 {
         return orig_fn(display, surface);
@@ -122,11 +123,6 @@ fn init_painter() -> Result<&'static mut egui_glow::Painter, Error> {
     }
 
     info!("Painter initialized");
-
-    // Apply keep_screen_on here since the Activity window is guaranteed
-    // to exist at this point. Calling it earlier (e.g. on_hooking_finished)
-    // runs on the IL2CPP thread before the window is accessible.
-    crate::android::hachimi_impl::apply_keep_screen_on_if_pending();
 
     Ok(unsafe { PAINTER.get_mut().unwrap_unchecked() })
 }
