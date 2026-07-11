@@ -172,6 +172,14 @@ pub static KEYBOARD_OWNER: Lazy<Mutex<Option<KeyboardOwner>>> = Lazy::new(|| Mut
 
 
 impl Gui {
+    fn apply_target_fps() {
+        let fps = Hachimi::instance()
+            .target_fps
+            .load(atomic::Ordering::Relaxed)
+            .clamp(30, 240);
+        Application::set_targetFrameRate(fps);
+    }
+
     // Call this from the render thread!
     pub fn instance_or_init(
         #[cfg_attr(target_os = "windows", allow(unused))] open_key_id: &str,
@@ -1000,13 +1008,19 @@ impl Gui {
 
                                 // 3. Graphics Section
                                 render_heading(ui, &t!("menu.graphics_heading"));
+                                let mut current_target_fps = hachimi.target_fps.load(atomic::Ordering::Relaxed);
+                                if current_target_fps <= 0 {
+                                    current_target_fps = 30;
+                                }
+                                self.menu_fps_value = current_target_fps as f32;
+
                                 let slider_res = ConfigEditor::list_tile_slider(ui, t!("menu.fps_label"), &mut self.menu_fps_value, 30.0..=240.0, 1.0, 0);
                                 if slider_res.changed() {
                                     let clamped = (self.menu_fps_value as i32).clamp(30, 240);
+                                    self.menu_fps_value = clamped as f32;
+
                                     hachimi.target_fps.store(clamped, atomic::Ordering::Relaxed);
-                                    Thread::main_thread().schedule(|| {
-                                        Application::set_targetFrameRate(30);
-                                    });
+                                    Thread::main_thread().schedule(Self::apply_target_fps);
                                 }
                                 if slider_res.lost_focus() {
                                     self.menu_fps_value = self.menu_fps_value.clamp(30.0, 240.0);
@@ -1014,6 +1028,7 @@ impl Gui {
 
                                 #[cfg(target_os = "windows")]
                                 {
+                                    self.menu_vsync_value = hachimi.vsync_count.load(atomic::Ordering::Relaxed);
                                     let prev_value = self.menu_vsync_value;
                                     let t_default = t!("default");
                                     let t_off = t!("off");
@@ -1028,15 +1043,23 @@ impl Gui {
                                     ];
                                     ConfigEditor::list_tile_combo(ui, t!("menu.vsync_label"), "menu_vsync", &mut self.menu_vsync_value, choices);
                                     if prev_value != self.menu_vsync_value {
-                                        hachimi.vsync_count.store(self.menu_vsync_value, atomic::Ordering::Relaxed);
+                                        let mut new_config = (**hachimi.config.load()).clone();
+                                        new_config.windows.vsync_count = self.menu_vsync_value;
+                                        if let Err(e) = hachimi.save_and_reload_config(new_config) {
+                                            error!("{}", e);
+                                        }
                                         Thread::main_thread().schedule(|| {
                                             QualitySettings::set_vSyncCount(1);
                                         });
                                     }
 
-                                    let mut topmost = hachimi.window_always_on_top.load(atomic::Ordering::Relaxed);
+                                    let mut topmost = hachimi.config.load().windows.window_always_on_top;
                                     if ConfigEditor::list_tile_switch(ui, t!("menu.stay_on_top"), &mut topmost, true).changed() {
-                                        hachimi.window_always_on_top.store(topmost, atomic::Ordering::Relaxed);
+                                        let mut new_config = (**hachimi.config.load()).clone();
+                                        new_config.windows.window_always_on_top = topmost;
+                                        if let Err(e) = hachimi.save_and_reload_config(new_config) {
+                                            error!("{}", e);
+                                        }
                                         Thread::main_thread().schedule(|| {
                                             let topmost = Hachimi::instance().window_always_on_top.load(atomic::Ordering::Relaxed);
                                             unsafe {
@@ -1048,9 +1071,13 @@ impl Gui {
                                         });
                                     }
 
-                                    let mut discord_rpc = hachimi.discord_rpc.load(atomic::Ordering::Relaxed);
+                                    let mut discord_rpc = hachimi.config.load().windows.discord_rpc;
                                     if ConfigEditor::list_tile_switch(ui, t!("menu.discord_rpc"), &mut discord_rpc, true).changed() {
-                                        hachimi.discord_rpc.store(discord_rpc, atomic::Ordering::Relaxed);
+                                        let mut new_config = (**hachimi.config.load()).clone();
+                                        new_config.windows.discord_rpc = discord_rpc;
+                                        if let Err(e) = hachimi.save_and_reload_config(new_config) {
+                                            error!("{}", e);
+                                        }
                                         if let Err(e) = if discord_rpc {
                                             crate::windows::discord::start_rpc()
                                         } else {
@@ -1070,7 +1097,9 @@ impl Gui {
                                     if ConfigEditor::list_tile_switch(ui, label, &mut enable_smtc, supports_smtc).changed() {
                                         let mut new_config = (**hachimi.config.load()).clone();
                                         new_config.windows.enable_smtc = enable_smtc;
-                                        hachimi.config.store(std::sync::Arc::new(new_config));
+                                        if let Err(e) = hachimi.save_and_reload_config(new_config) {
+                                            error!("{}", e);
+                                        }
                                         if enable_smtc {
                                             crate::windows::smtc::init(crate::windows::wnd_hook::get_target_hwnd());
                                         } else {
@@ -1081,13 +1110,13 @@ impl Gui {
 
                                 #[cfg(target_os = "android")]
                                 {
-                                    let config = hachimi.config.load();
-                                    let mut keep_screen_on = config.android.keep_screen_on;
+                                    let mut keep_screen_on = hachimi.config.load().android.keep_screen_on;
                                     if ConfigEditor::list_tile_switch(ui, t!("menu.keep_screen_on"), &mut keep_screen_on, true).changed() {
-                                        let mut new_config = config.as_ref().clone();
+                                        let mut new_config = (**hachimi.config.load()).clone();
                                         new_config.android.keep_screen_on = keep_screen_on;
-                                        hachimi.config.store(std::sync::Arc::new(new_config));
-                                        crate::android::hachimi_impl::set_keep_screen_on(keep_screen_on);
+                                        if let Err(e) = hachimi.save_and_reload_config(new_config) {
+                                            error!("{}", e);
+                                        }
                                     }
                                 }
                                 ui.add_space(4.0 * scale);

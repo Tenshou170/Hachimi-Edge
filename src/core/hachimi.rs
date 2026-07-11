@@ -331,6 +331,10 @@ impl Hachimi {
         // Keep atomic mirror fields in sync with the freshly loaded config.
         #[cfg(target_os = "windows")]
         {
+            self.target_fps.store(
+                new_config.target_fps.map(|v| v.clamp(30, 240)).unwrap_or(-1),
+                std::sync::atomic::Ordering::Relaxed,
+            );
             self.window_always_on_top.store(
                 new_config.windows.window_always_on_top,
                 std::sync::atomic::Ordering::Relaxed,
@@ -370,6 +374,10 @@ impl Hachimi {
         // latest values without needing to lock the ArcSwap<Config>.
         #[cfg(target_os = "windows")]
         {
+            self.target_fps.store(
+                config.target_fps.map(|v| v.clamp(30, 240)).unwrap_or(-1),
+                std::sync::atomic::Ordering::Relaxed,
+            );
             self.window_always_on_top.store(
                 config.windows.window_always_on_top,
                 std::sync::atomic::Ordering::Relaxed,
