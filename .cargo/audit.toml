@@ -24,4 +24,9 @@ ignore = [
     # Warning: unmaintained (`ttf-parser` is unmaintained)
     # Reason: Transitively used by fontdb/ab_glyph for font parsing, no active security vulnerabilities.
     "RUSTSEC-2026-0192",
+
+    # Crate: rustybuzz
+    # Warning: unmaintained (`rustybuzz` is unmaintained)
+    # Reason: Transitively brought in by `resvg` via the `egui-material3` desktop path for host-side rendering, not part of the Android/Windows production runtime.
+    "RUSTSEC-2026-0206",
 ]
