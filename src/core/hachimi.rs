@@ -47,6 +47,7 @@ fn default_config_field_order() -> Vec<String> {
     obj.keys().cloned().collect()
 }
 
+#[cfg(test)]
 fn caption_config_fields() -> Vec<String> {
     let value = serde_json::to_value(&CaptionConfig::default())
         .expect("default CaptionConfig must serialize to JSON");
@@ -54,6 +55,10 @@ fn caption_config_fields() -> Vec<String> {
         .as_object()
         .expect("default CaptionConfig JSON must be an object");
     obj.keys().cloned().collect()
+}
+
+fn config_legacy_alias_map() -> FnvHashMap<&'static str, &'static str> {
+    FnvHashMap::from_iter([("caption_log_enable", "caption_show_log_enable")])
 }
 
 pub struct Hachimi {
@@ -201,7 +206,6 @@ impl Hachimi {
                 }
                 Err(e) => {
                     error!("Failed to parse config: {}", e);
-                    CONFIG_LOAD_ERROR.store(true, std::sync::atomic::Ordering::Release);
 
                     let original_text = json.clone();
                     if Self::sanitize_config_raw(&original_text, &config_path).is_ok() {
@@ -212,21 +216,29 @@ impl Hachimi {
                         }
                     }
 
-                    // Preserve the corrupted file to avoid retrying it on every startup.
-                    let backup_path = {
-                        use std::time::{SystemTime, UNIX_EPOCH};
-                        let now = SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .map(|d| d.as_secs())
-                            .unwrap_or(0);
-                        config_path.with_extension(format!("corrupt.{}.json", now))
-                    };
-                    if let Err(e2) = fs::write(&backup_path, &original_text) {
-                        error!("Failed to write corrupted config to {:?}: {}", backup_path, e2);
-                    } else {
-                        info!("Moved corrupted config to {:?}", backup_path);
+                    // Preserve only genuinely malformed input as a corrupt backup.
+                    // If the file is syntactically valid JSON, we should prefer repairing it
+                    // in-place rather than masking it as corruption.
+                    let is_syntactically_valid = serde_json::from_str::<serde_json::Value>(&original_text).is_ok();
+                    if !is_syntactically_valid {
+                        CONFIG_LOAD_ERROR.store(true, std::sync::atomic::Ordering::Release);
+
+                        let backup_path = {
+                            use std::time::{SystemTime, UNIX_EPOCH};
+                            let now = SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .map(|d| d.as_secs())
+                                .unwrap_or(0);
+                            config_path.with_extension(format!("corrupt.{}.json", now))
+                        };
+                        if let Err(e2) = fs::write(&backup_path, &original_text) {
+                            error!("Failed to write corrupted config to {:?}: {}", backup_path, e2);
+                        } else {
+                            info!("Moved corrupted config to {:?}", backup_path);
+                        }
+                        let _ = fs::remove_file(&config_path);
                     }
-                    let _ = fs::remove_file(&config_path);
+
                     Ok(Config::default())
                 }
             }
@@ -243,51 +255,45 @@ impl Hachimi {
         };
 
         let canonical_fields = default_config_field_order();
-        let canonical_set: std::collections::HashSet<&str> =
-            canonical_fields.iter().map(String::as_str).collect();
-
-        debug_assert!(
-            caption_config_fields()
-                .iter()
-                .all(|field| canonical_set.contains(field.as_str())),
-            "Caption config fields must be preserved in the canonical field order",
-        );
+        let canonical_set: FnvHashSet<&str> = canonical_fields.iter().map(String::as_str).collect();
 
         let mut new_obj = serde_json::Map::new();
+
+        #[cfg(target_os = "windows")]
+        let platform_obj = obj.get("windows").and_then(serde_json::Value::as_object);
+        #[cfg(target_os = "android")]
+        let platform_obj = obj.get("android").and_then(serde_json::Value::as_object);
+
         for key in canonical_fields.iter() {
             if key == "ui_theme_json" {
                 continue;
             }
-            if let Some(val) = obj.get(key) {
-                new_obj.insert(key.clone(), val.clone());
+
+            let value = if key == "config_schema_version" {
+                Some(serde_json::Value::Number(2.into()))
+            } else {
+                obj.get(key).cloned().or_else(|| {
+                    platform_obj.and_then(|nested| nested.get(key).cloned())
+                })
+            };
+
+            if let Some(value) = value {
+                new_obj.insert(key.clone(), value);
             }
         }
 
-        new_obj.insert(
-            "config_schema_version".to_string(),
-            serde_json::Value::Number(2.into()),
-        );
-
-        #[cfg(target_os = "windows")]
-        {
-            if let Some(win_cfg) = obj.get("windows") {
-                new_obj.insert("windows".to_string(), win_cfg.clone());
+        let legacy_aliases = config_legacy_alias_map();
+        for (legacy_key, canonical_key) in legacy_aliases {
+            if new_obj.contains_key(canonical_key) || !canonical_set.contains(canonical_key) {
+                continue;
             }
-        }
-        #[cfg(target_os = "android")]
-        {
-            if let Some(and_cfg) = obj.get("android") {
-                new_obj.insert("android".to_string(), and_cfg.clone());
-            }
-        }
 
-        for (key, val) in obj.iter() {
-            if !canonical_set.contains(key.as_str())
-                && key != "ui_theme_json"
-                && key != "windows"
-                && key != "android"
-            {
-                new_obj.insert(key.clone(), val.clone());
+            let value = obj.get(legacy_key).cloned().or_else(|| {
+                platform_obj.and_then(|nested| nested.get(legacy_key).cloned())
+            });
+
+            if let Some(value) = value {
+                new_obj.insert(canonical_key.to_string(), value);
             }
         }
 
@@ -295,8 +301,9 @@ impl Hachimi {
         utils::write_json_file(&new_value, config_path)
     }
 
-    /// Remove legacy theme keys, reorganize config to canonical field order, and update schema version.
-    /// This ensures consistency for users migrating from different forks or updating versions.
+    /// Retain only the current canonical config schema, transform known legacy aliases,
+    /// flatten supported platform-specific sections into the top-level config, and drop deprecated
+    /// or fork-specific keys that do not belong to the shared config shape.
     fn sanitize_config(config_path: &Path) {
         // 1. File must exist
         if !config_path.exists() {
@@ -713,6 +720,10 @@ impl CaptionConfig {
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Config {
+    // Schema
+    #[serde(default = "Config::default_config_schema_version")]
+    pub config_schema_version: u32,
+
     // General
     #[serde(default)]
     pub language: Language,
@@ -722,6 +733,14 @@ pub struct Config {
     pub disable_gui_once: bool,
     #[serde(default = "Config::default_gui_scale")]
     pub gui_scale: f32,
+    #[serde(default)]
+    pub custom_title_name: Option<String>,
+    pub localized_data_dir: Option<String>,
+    pub translation_repo_index: Option<String>,
+    #[serde(default)]
+    pub translation_repo_index_mod: Option<String>,
+    #[serde(default)]
+    pub disable_mod_downloads: bool,
 
     // Theme settings
     #[serde(default = "Config::default_ui_theme_seed")]
@@ -743,15 +762,15 @@ pub struct Config {
     pub ui_window_rounding: f32,
     #[serde(default)]
     pub ui_translucent_windows: bool,
+    #[serde(default = "Config::default_ui_scale")]
+    pub ui_scale: f32,
+    #[serde(default = "Config::default_ui_animation_scale")]
+    pub ui_animation_scale: f32,
 
     // Graphics
     pub target_fps: Option<i32>,
     #[serde(default = "Config::default_virtual_res_mult")]
     pub virtual_res_mult: f32,
-    #[serde(default = "Config::default_ui_scale")]
-    pub ui_scale: f32,
-    #[serde(default = "Config::default_ui_animation_scale")]
-    pub ui_animation_scale: f32,
     #[serde(default = "Config::default_render_scale")]
     pub render_scale: f32,
     #[serde(default)]
@@ -800,13 +819,11 @@ pub struct Config {
     #[serde(default)]
     pub hide_now_loading: bool,
     #[serde(default)]
-    pub custom_title_name: Option<String>,
-    #[serde(default)]
     pub disabled_hooks: FnvHashSet<String>,
     #[serde(flatten)]
     pub caption: CaptionConfig,
 
-    // Advanced
+    // Advanced / networking / debug
     #[serde(default)]
     pub enable_file_logging: bool,
     #[serde(default)]
@@ -817,7 +834,6 @@ pub struct Config {
     pub ipv4_only: bool,
     #[serde(default = "Config::default_meta_index_url")]
     pub meta_index_url: String,
-    pub localized_data_dir: Option<String>,
     #[serde(default)]
     pub translator_mode: bool,
     #[serde(default)]
@@ -884,13 +900,6 @@ pub struct Config {
     pub text_path_debug: bool,
     #[serde(default = "Config::default_open_browser_url")]
     pub open_browser_url: String,
-    pub translation_repo_index: Option<String>,
-    #[serde(default)]
-    pub translation_repo_index_mod: Option<String>,
-    #[serde(default)]
-    pub disable_mod_downloads: bool,
-    #[serde(default = "Config::default_config_schema_version")]
-    pub config_schema_version: u32,
 
     #[cfg(target_os = "windows")]
     #[serde(flatten)]
@@ -1675,11 +1684,12 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_config_preserves_unknown_keys() {
+    fn sanitize_config_discards_unknown_and_deprecated_keys() {
         let mut data = serde_json::Map::new();
         data.insert("language".to_string(), serde_json::Value::String("en".to_string()));
         data.insert("config_schema_version".to_string(), serde_json::Value::Number(1.into()));
         data.insert("ui_theme_json".to_string(), serde_json::Value::String("{}".to_string()));
+        data.insert("caption_log_enable".to_string(), serde_json::Value::Bool(true));
         data.insert("some_custom_key".to_string(), serde_json::Value::String("custom".to_string()));
 
         let json = serde_json::Value::Object(data);
@@ -1693,9 +1703,68 @@ mod tests {
         let reloaded: serde_json::Value = serde_json::from_str(&fs::read_to_string(&config_path).expect("read sanitized config")).expect("parse sanitized config");
         let obj = reloaded.as_object().expect("sanitized config object");
 
-        assert_eq!(obj.get("some_custom_key").and_then(|v| v.as_str()), Some("custom"));
         assert_eq!(obj.get("config_schema_version").and_then(|v| v.as_u64()), Some(2));
         assert!(!obj.contains_key("ui_theme_json"));
+        assert_eq!(obj.get("caption_show_log_enable").and_then(|v| v.as_bool()), Some(true));
+        assert!(!obj.contains_key("caption_log_enable"));
+        assert!(!obj.contains_key("some_custom_key"));
+    }
+
+    #[test]
+    fn sanitize_config_preserves_common_schema_from_legacy_aliases() {
+        let mut data = serde_json::Map::new();
+        data.insert("language".to_string(), serde_json::Value::String("en".to_string()));
+        data.insert("target_fps".to_string(), serde_json::Value::Number(60.into()));
+        data.insert("caption_log_enable".to_string(), serde_json::Value::Bool(true));
+        data.insert("config_schema_version".to_string(), serde_json::Value::Number(1.into()));
+
+        let json = serde_json::Value::Object(data);
+        let temp_dir = std::env::temp_dir().join(format!("hachimi_alias_sanitize_test_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let config_path = temp_dir.join("config.json");
+        fs::write(&config_path, serde_json::to_string(&json).expect("serialize test config")).expect("write temp config");
+
+        Hachimi::sanitize_config(&config_path);
+
+        let reloaded: serde_json::Value = serde_json::from_str(&fs::read_to_string(&config_path).expect("read sanitized config")).expect("parse sanitized config");
+        let obj = reloaded.as_object().expect("sanitized config object");
+
+        assert_eq!(obj.get("target_fps").and_then(|v| v.as_i64()), Some(60));
+        assert_eq!(obj.get("caption_show_log_enable").and_then(|v| v.as_bool()), Some(true));
+        assert!(!obj.contains_key("caption_log_enable"));
+    }
+
+    #[test]
+    fn sanitize_config_writes_canonical_field_order() {
+        let test_json = r#"
+        {
+          "some_custom_key": "custom",
+          "caption_log_enable": true,
+          "language": "en",
+          "config_schema_version": 1
+        }
+        "#;
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "hachimi_canonical_order_test_{}",
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let config_path = temp_dir.join("config.json");
+        fs::write(&config_path, test_json).expect("write config for canonical-order test");
+
+        Hachimi::sanitize_config(&config_path);
+
+        let sanitized = fs::read_to_string(&config_path).expect("read sanitized config");
+        let expected_order = default_config_field_order();
+
+        let mut last_index = 0usize;
+        for key in expected_order {
+            let key_pattern = format!("\"{}\"", key);
+            let index = sanitized.find(&key_pattern).expect("canonical field must appear in sanitized output");
+            assert!(index >= last_index, "field '{}' appears out of canonical order", key);
+            last_index = index + key_pattern.len();
+        }
     }
 
     #[test]
