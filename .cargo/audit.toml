@@ -2,7 +2,7 @@
 ignore = [
     # Crate: quick-xml
     # Vulnerability: Quadratic run time when checking a start tag for duplicate attribute names
-    # Reason: quick-xml is only pulled in transitively by wayland-scanner (proc-macro) and zbus_xml (Unix accessibility), which are not part of our Android/Windows builds or process untrusted user input.
+    # Reason: quick-xml is only pulled in transitively by wayland-scanner (proc-macro) and zbus_xml (Unix accessibility), which are not part of our Android/Windows builds or process untrusted user input. (Note: quick-xml 0.31.0 via calamine was removed in the egui-material3 v0.0.11 update).
     "RUSTSEC-2026-0194",
 
     # Crate: quick-xml
