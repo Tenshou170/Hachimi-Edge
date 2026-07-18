@@ -127,7 +127,7 @@ fn load_class_from_dex(env: &mut JNIEnv, dex_bytes: &[u8], class_name: &str) -> 
 
 fn with_env<F: FnOnce(&mut JNIEnv) -> bool>(f: F) -> bool {
     let Some(vm) = java_vm() else { return false; };
-    let Ok(mut env) = vm.attach_current_thread() else { return false; };
+    let Ok(mut env) = vm.attach_current_thread_as_daemon() else { return false; };
     f(&mut env)
 }
 

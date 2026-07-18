@@ -15,7 +15,7 @@ pub fn get_package_name() -> String {
                 error!("FATAL: Failed to read /proc/self/cmdline");
                 process::exit(1);
             });
-            cmdline.get(0).unwrap_or_else(|| {
+            cmdline.first().unwrap_or_else(|| {
                 error!("FATAL: Invalid cmdline");
                 process::exit(1);
             }).to_owned()

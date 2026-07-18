@@ -214,14 +214,14 @@ pub fn keycode_display_label(keycode: i32) -> String {
     }
 
     match keycode {
-        k if k >= KEYCODE_0 && k <= KEYCODE_0 + 9 => {
+        k if (KEYCODE_0..=KEYCODE_0 + 9).contains(&k) => {
             format!("{}", k - KEYCODE_0)
         }
-        k if k >= KEYCODE_A && k <= KEYCODE_A + 25 => {
+        k if (KEYCODE_A..=KEYCODE_A + 25).contains(&k) => {
             let c = (b'A' + (k - KEYCODE_A) as u8) as char;
             c.to_string()
         }
-        k if k >= KEYCODE_F1 && k <= KEYCODE_F12 => {
+        k if (KEYCODE_F1..=KEYCODE_F12).contains(&k) => {
             format!("F{}", k - KEYCODE_F1 + 1)
         }
         other => t!("key_names.unknown", code = other).into_owned(),

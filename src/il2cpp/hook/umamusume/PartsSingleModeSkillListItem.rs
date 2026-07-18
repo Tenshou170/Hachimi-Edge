@@ -62,11 +62,6 @@ fn UpdateItemCommon(this: *mut Il2CppObject, skill_info: *mut Il2CppObject, orig
         else if get_IsDrawNeedSkillPoint(skill_info) {
             name_len = mul_int(name_len, skill_cfg.name_sp_mult);
         }
-        // todo: When lvl display!?
-        // if get_IsDrawUniqSkillInfo(skill_info) || get_Level(skill_info) > 1 {
-        //     name_len = mul_int(name_len, skill_cfg.name_lvl_mult);
-        // }
-
         txt_cfg.name = Some(sql::TextFormatting {
             line_len: name_len,
             line_count: name_lines,
@@ -76,10 +71,6 @@ fn UpdateItemCommon(this: *mut Il2CppObject, skill_info: *mut Il2CppObject, orig
 
     if get_IsDrawDesc(skill_info) && !desc.is_null() {
         let desc_len = skill_cfg.desc_length;
-        // todo: When conditions button!?
-        // if get_IsDisplayUpgradeSkill(skill_info) {
-        //     desc_len = mul_int(desc_len, skill_cfg.desc_btn_mult);
-        // }
 
         txt_cfg.desc = Some(sql::TextFormatting {
             line_len: desc_len,

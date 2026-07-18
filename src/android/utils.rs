@@ -17,7 +17,7 @@ pub fn set_keyboard_visible(visible: bool) {
     let Some(vm) = java_vm() else {
         return;
     };
-    let Ok(mut env) = vm.attach_current_thread() else {
+    let Ok(mut env) = vm.attach_current_thread_as_daemon() else {
         return;
     };
 
@@ -28,6 +28,9 @@ pub fn set_keyboard_visible(visible: bool) {
         // get InputMethodManager: context.getSystemService(Context.INPUT_METHOD_SERVICE)
         let context_class = env.find_class("android/content/Context")?;
         let imm_service_name = env.get_static_field(context_class, "INPUT_METHOD_SERVICE", "Ljava/lang/String;")?.l()?;
+        if imm_service_name.is_null() {
+            return Err(jni::errors::Error::JavaException);
+        }
 
         let imm = env.call_method(
             &activity, 
@@ -35,19 +38,30 @@ pub fn set_keyboard_visible(visible: bool) {
             "(Ljava/lang/String;)Ljava/lang/Object;", 
             &[JValue::from(&imm_service_name)]
         )?.l()?;
+        if imm.is_null() {
+            return Err(jni::errors::Error::JavaException);
+        }
 
         let window = env.call_method(&activity, "getWindow", "()Landroid/view/Window;", &[])?.l()?;
-        let decor_view = env.call_method(window, "getDecorView", "()Landroid/view/View;", &[])?.l()?;
-        let window_token = env.call_method(&decor_view, "getWindowToken", "()Landroid/os/IBinder;", &[])?.l()?;
+        if window.is_null() {
+            return Err(jni::errors::Error::JavaException);
+        }
+        let decor_view = env.call_method(&window, "getDecorView", "()Landroid/view/View;", &[])?.l()?;
+        if decor_view.is_null() {
+            return Err(jni::errors::Error::JavaException);
+        }
 
         if visible {
+            let focus_view = env.call_method(&window, "getCurrentFocus", "()Landroid/view/View;", &[])?.l()?;
+            let target_view = if !focus_view.is_null() { &focus_view } else { &decor_view };
+
             // show: imm.showSoftInput(view, flags)
             // SHOW_IMPLICIT (1) or SHOW_FORCED (2)
             let shown = env.call_method(
                 &imm, 
                 "showSoftInput", 
                 "(Landroid/view/View;I)Z", 
-                &[JValue::from(&decor_view), JValue::Int(2)]
+                &[JValue::from(target_view), JValue::Int(2)]
             )?.z()?;
 
             if !shown {
@@ -60,13 +74,16 @@ pub fn set_keyboard_visible(visible: bool) {
             }
             IS_IME_VISIBLE.store(true, Ordering::Release);
         } else {
-            // hide: imm.hideSoftInputFromWindow(token, flags)
-            env.call_method(
-                &imm, 
-                "hideSoftInputFromWindow", 
-                "(Landroid/os/IBinder;I)Z", 
-                &[JValue::from(&window_token), JValue::Int(0)]
-            )?;
+            let window_token = env.call_method(&decor_view, "getWindowToken", "()Landroid/os/IBinder;", &[])?.l()?;
+            if !window_token.is_null() {
+                // hide: imm.hideSoftInputFromWindow(token, flags)
+                env.call_method(
+                    &imm, 
+                    "hideSoftInputFromWindow", 
+                    "(Landroid/os/IBinder;I)Z", 
+                    &[JValue::from(&window_token), JValue::Int(0)]
+                )?;
+            }
             IS_IME_VISIBLE.store(false, Ordering::Release);
         }
         Ok(())
@@ -74,6 +91,9 @@ pub fn set_keyboard_visible(visible: bool) {
 
     if let Err(e) = result {
         info!("JNI Keyboard Error: {:?}", e);
+        if env.exception_check().unwrap_or(false) {
+            let _ = env.exception_clear();
+        }
     }
 }
 
@@ -82,7 +102,7 @@ pub fn check_keyboard_status() -> bool {
         Some(v) => v,
         None => return false,
     };
-    let mut env = match vm.attach_current_thread() {
+    let mut env = match vm.attach_current_thread_as_daemon() {
         Ok(e) => e,
         Err(_) => return false,
     };
@@ -138,7 +158,7 @@ pub fn open_app_or_fallback(package_name: &str, activity_class: &str, fallback_u
         None => return,
     };
 
-    let mut env = match vm.attach_current_thread() {
+    let mut env = match vm.attach_current_thread_as_daemon() {
         Ok(e) => e,
         Err(_) => return,
     };
@@ -193,47 +213,70 @@ pub fn open_app_or_fallback(package_name: &str, activity_class: &str, fallback_u
 }
 
 pub fn get_activity(mut env: JNIEnv<'_>) -> Option<JObject<'_>> {
-    let unity_player_class = env.find_class("com/unity3d/player/UnityPlayer").ok()?;
-    let current_activity = env
-        .get_static_field(unity_player_class, "currentActivity", "Landroid/app/Activity;")
-        .ok()?
-        .l()
-        .ok()?;
-    if !current_activity.is_null() {
-        return Some(current_activity);
+    // 1. Try to get current activity from UnityPlayer
+    let mut unity_activity = None;
+    if let Ok(unity_player_class) = env.find_class("com/unity3d/player/UnityPlayer") {
+        if let Ok(current_activity_val) = env.get_static_field(unity_player_class, "currentActivity", "Landroid/app/Activity;") {
+            if let Ok(current_activity) = current_activity_val.l() {
+                if !current_activity.is_null() {
+                    unity_activity = Some(current_activity);
+                }
+            }
+        }
     }
 
-    let activity_thread_class = env.find_class("android/app/ActivityThread").ok()?;
-    let activity_thread = env
-        .call_static_method(
+    if let Some(activity) = unity_activity {
+        return Some(activity);
+    }
+    
+    // Clear any potential ClassNotFoundException or other exception from the UnityPlayer lookup
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_clear();
+    }
+
+    // 2. Try to get current activity from ActivityThread
+    let mut activity_thread_activity = None;
+    if let Ok(activity_thread_class) = env.find_class("android/app/ActivityThread") {
+        if let Ok(activity_thread_val) = env.call_static_method(
             activity_thread_class,
             "currentActivityThread",
             "()Landroid/app/ActivityThread;",
             &[],
-        )
-        .ok()?
-        .l()
-        .ok()?;
-    let activities = env
-        .get_field(activity_thread, "mActivities", "Landroid/util/ArrayMap;")
-        .ok()?
-        .l()
-        .ok()?;
-    let activities_map = JMap::from_env(&mut env, &activities).ok()?;
-    let mut iter = activities_map.iter(&mut env).ok()?;
-
-    while let Some((_, activity_record)) = iter.next(&mut env).ok()? {
-        let activity = env
-            .get_field(activity_record, "activity", "Landroid/app/Activity;")
-            .ok()?
-            .l()
-            .ok()?;
-
-        if !activity.is_null() {
-            return Some(activity);
+        ) {
+            if let Ok(activity_thread) = activity_thread_val.l() {
+                if !activity_thread.is_null() {
+                    if let Ok(activities_val) = env.get_field(activity_thread, "mActivities", "Landroid/util/ArrayMap;") {
+                        if let Ok(activities) = activities_val.l() {
+                            if !activities.is_null() {
+                                if let Ok(activities_map) = JMap::from_env(&mut env, &activities) {
+                                    if let Ok(mut iter) = activities_map.iter(&mut env) {
+                                        while let Ok(Some((_, activity_record))) = iter.next(&mut env) {
+                                            if let Ok(activity_val) = env.get_field(activity_record, "activity", "Landroid/app/Activity;") {
+                                                if let Ok(activity) = activity_val.l() {
+                                                    if !activity.is_null() {
+                                                        activity_thread_activity = Some(activity);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
+    if let Some(activity) = activity_thread_activity {
+        return Some(activity);
+    }
+
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_clear();
+    }
     None
 }
 

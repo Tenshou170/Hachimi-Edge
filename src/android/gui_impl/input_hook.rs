@@ -1,8 +1,9 @@
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicUsize, Ordering};
+use once_cell::sync::OnceCell;
 
 use egui::Vec2;
 use jni::{
-    objects::JObject,
+    objects::{JObject, GlobalRef},
     sys::{jboolean, jint, JNI_TRUE},
     JNIEnv,
 };
@@ -12,6 +13,9 @@ use crate::{
     core::{Error, Gui, Hachimi},
     il2cpp::symbols::Thread
 };
+
+static KEY_EVENT_CLASS: OnceCell<GlobalRef> = OnceCell::new();
+static MOTION_EVENT_CLASS: OnceCell<GlobalRef> = OnceCell::new();
 
 use super::keymap;
 
@@ -103,8 +107,11 @@ extern "C" fn nativeInjectEvent(mut env: JNIEnv, obj: JObject, input_event: JObj
             return Ok(None); // forward
         }
 
-        let key_event_class = env.find_class("android/view/KeyEvent")?;
-        if env.is_instance_of(&input_event, &key_event_class)? {
+        let key_event_class = KEY_EVENT_CLASS.get_or_try_init(|| {
+            let local_class = env.find_class("android/view/KeyEvent")?;
+            env.new_global_ref(local_class)
+        })?;
+        if env.is_instance_of(&input_event, key_event_class)? {
             let key_code = env.call_method(&input_event, "getKeyCode", "()I", &[])?.i()?;
             let repeat_count = env.call_method(&input_event, "getRepeatCount", "()I", &[])?.i()?;
 
@@ -114,13 +121,11 @@ extern "C" fn nativeInjectEvent(mut env: JNIEnv, obj: JObject, input_event: JObj
                 keymap::KEYCODE_VOLUME_UP => {
                     VOLUME_UP_PRESSED.store(pressed, Ordering::Relaxed);
 
-                    if pressed && repeat_count == 0 {
-                        if VOLUME_UP_STATE.register_tap(VOLUME_TAP_LIMIT, TAP_WINDOW_MS) {
-                            if Hachimi::instance().config.load().hide_ingame_ui_hotkey {
-                                Thread::main_thread().schedule(Gui::toggle_game_ui);
-                                return Ok(Some(JNI_TRUE));
-                            }
-                        }
+                    if pressed && repeat_count == 0
+                        && VOLUME_UP_STATE.register_tap(VOLUME_TAP_LIMIT, TAP_WINDOW_MS)
+                        && Hachimi::instance().config.load().hide_ingame_ui_hotkey {
+                        Thread::main_thread().schedule(Gui::toggle_game_ui);
+                        return Ok(Some(JNI_TRUE));
                     }
 
                     if pressed && VOLUME_DOWN_PRESSED.load(Ordering::Relaxed) {
@@ -211,8 +216,11 @@ extern "C" fn nativeInjectEvent(mut env: JNIEnv, obj: JObject, input_event: JObj
             return Ok(None); // forward
         }
 
-        let motion_event_class = env.find_class("android/view/MotionEvent")?;
-        if env.is_instance_of(&input_event, &motion_event_class)? {
+        let motion_event_class = MOTION_EVENT_CLASS.get_or_try_init(|| {
+            let local_class = env.find_class("android/view/MotionEvent")?;
+            env.new_global_ref(local_class)
+        })?;
+        if env.is_instance_of(&input_event, motion_event_class)? {
             let pointer_index = (action & ACTION_POINTER_INDEX_MASK) >> ACTION_POINTER_INDEX_SHIFT;
 
             let real_x = env.call_method(&input_event, "getX", "()F", &[])?.f()?;
@@ -245,26 +253,22 @@ extern "C" fn nativeInjectEvent(mut env: JNIEnv, obj: JObject, input_event: JObj
                 }
 
                 // top left (toggle gui)
-                if !Hachimi::instance().config.load().disable_gui {
-                    if real_x < corner_zone_size && real_y < corner_zone_size {
-                        if CORNER_TAP_STATE.register_tap(CORNER_TAP_LIMIT, TAP_WINDOW_MS) {
-                            let Some(mut gui) = Gui::instance().map(|m| m.lock().unwrap()) else {
-                                return Ok(None); // forward
-                            };
-                            gui.toggle_menu();
-                            return Ok(Some(JNI_TRUE));
-                        }
-                    }
+                if !Hachimi::instance().config.load().disable_gui
+                    && real_x < corner_zone_size && real_y < corner_zone_size
+                    && CORNER_TAP_STATE.register_tap(CORNER_TAP_LIMIT, TAP_WINDOW_MS) {
+                    let Some(mut gui) = Gui::instance().map(|m| m.lock().unwrap()) else {
+                        return Ok(None); // forward
+                    };
+                    gui.toggle_menu();
+                    return Ok(Some(JNI_TRUE));
                 }
 
                 // top right (toggle in-game ui)
-                if Hachimi::instance().config.load().hide_ingame_ui_hotkey {
-                    if real_x > (current_w as f32 - corner_zone_size) && real_y < corner_zone_size {
-                        if TOGGLE_GAME_UI_TAP_STATE.register_tap(CORNER_TAP_LIMIT, TAP_WINDOW_MS) {
-                            Thread::main_thread().schedule(Gui::toggle_game_ui);
-                            return Ok(Some(JNI_TRUE));
-                        }
-                    }
+                if Hachimi::instance().config.load().hide_ingame_ui_hotkey
+                    && real_x > (current_w as f32 - corner_zone_size) && real_y < corner_zone_size
+                    && TOGGLE_GAME_UI_TAP_STATE.register_tap(CORNER_TAP_LIMIT, TAP_WINDOW_MS) {
+                    Thread::main_thread().schedule(Gui::toggle_game_ui);
+                    return Ok(Some(JNI_TRUE));
                 }
             }
 

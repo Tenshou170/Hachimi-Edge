@@ -48,7 +48,7 @@ fn set_keep_screen_on_jni(enable: bool) {
         info!("JNI Keep Screen On skipped: Java VM unavailable");
         return;
     };
-    let Ok(mut env) = vm.attach_current_thread() else {
+    let Ok(mut env) = vm.attach_current_thread_as_daemon() else {
         info!("JNI Keep Screen On skipped: failed to attach thread");
         return;
     };
