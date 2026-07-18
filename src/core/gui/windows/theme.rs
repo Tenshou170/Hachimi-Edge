@@ -349,7 +349,7 @@ impl AppWindow for ThemeEditorWindow {
             let mut cfg = self.build_preview_config();
             let data_dir = Hachimi::instance().game.data_dir.clone();
             let manual = cfg.ui_manual_colors.clone();
-            let save_params = md3_theme::ThemeParams {
+            let save_params = crate::core::theme::ThemeParams {
                 seed: cfg.ui_theme_seed,
                 cached_json: None,
                 theme_mode: cfg.ui_theme_mode,
@@ -359,7 +359,7 @@ impl AppWindow for ThemeEditorWindow {
                 surface_alpha: cfg.ui_surface_alpha,
                 window_rounding: cfg.ui_window_rounding,
             };
-            if let Some(json) = md3_theme::apply_seed(ctx, save_params, &data_dir) {
+            if let Some(json) = crate::core::theme::apply_seed(ctx, save_params, &data_dir) {
                 cfg.ui_theme_json = serde_json::from_str(&json).ok();
             }
             save_and_reload_config(cfg);

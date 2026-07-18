@@ -37,4 +37,4 @@ pub mod live_utils;
 pub mod msgpack_modifier;
 pub mod taskbar;
 
-pub mod md3_theme;
+pub mod theme;

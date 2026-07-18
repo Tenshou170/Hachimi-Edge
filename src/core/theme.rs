@@ -115,14 +115,14 @@ pub fn apply_seed(
                     produced_json = Some(json);
                 }
                 Err(e) => {
-                    error!("md3_theme: load failed ({}), regenerating", e);
+                    error!("theme: load failed ({}), regenerating", e);
                     let fresh = generate_theme_json(params.seed);
                     match load_theme_from_json_str(&fresh) {
                         Ok(()) => {
                             produced_json = Some(fresh);
                         }
                         Err(e2) => {
-                            error!("md3_theme: regeneration also failed: {}", e2);
+                            error!("theme: regeneration also failed: {}", e2);
                         }
                     }
                 }
@@ -143,7 +143,7 @@ pub fn apply_seed(
                     produced_json = Some(json);
                 }
                 Err(e) => {
-                    error!("md3_theme: manual base load failed: {}", e);
+                    error!("theme: manual base load failed: {}", e);
                 }
             }
         }

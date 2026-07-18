@@ -57,7 +57,6 @@ use crate::il2cpp::hook::UnityEngine_CoreModule::QualitySettings;
 use super::{
     hachimi::{self, Language, REPO_PATH, WEBSITE_URL},
     http::AsyncRequest,
-    md3_theme,
     tl_repo::RepoInfo,
     utils::SendPtr,
     Hachimi,
@@ -199,7 +198,7 @@ impl Gui {
 
         context.set_fonts(Self::get_font_definitions());
 
-        // Apply spacing/interaction style before md3_theme so that theme visuals
+        // Apply spacing/interaction style before theme so that theme visuals
         // can still be applied without resetting the full Material3 style.
         context.style_mut(|style| {
             style.spacing.button_padding = egui::Vec2::new(8.0, 5.0);
@@ -210,7 +209,7 @@ impl Gui {
         // generate it now and persist it back to config so subsequent launches
         // skip the HCT computation entirely.
         let cached_json_str = config.ui_theme_json.as_ref().and_then(|v| serde_json::to_string(v).ok());
-        let params = md3_theme::ThemeParams {
+        let params = crate::core::theme::ThemeParams {
             seed: config.ui_theme_seed,
             cached_json: cached_json_str.as_deref(),
             theme_mode: config.ui_theme_mode,
@@ -220,7 +219,7 @@ impl Gui {
             surface_alpha: config.ui_surface_alpha,
             window_rounding: config.ui_window_rounding,
         };
-        if let Some(json) = md3_theme::apply_seed(&context, params, &hachimi.game.data_dir) {
+        if let Some(json) = crate::core::theme::apply_seed(&context, params, &hachimi.game.data_dir) {
             let mut updated_config = config.clone();
             updated_config.ui_theme_json = serde_json::from_str(&json).ok();
             let _ = hachimi.save_config(&updated_config);
@@ -617,7 +616,7 @@ impl Gui {
             if let Some(config) = lock.take() {
                 // Preview: no cached JSON — regenerate from new seed.
                 // Result is discarded since this is not a committed save.
-                let preview_params = md3_theme::ThemeParams {
+                let preview_params = crate::core::theme::ThemeParams {
                     seed: config.ui_theme_seed,
                     cached_json: None,
                     theme_mode: config.ui_theme_mode,
@@ -627,7 +626,7 @@ impl Gui {
                     surface_alpha: config.ui_surface_alpha,
                     window_rounding: config.ui_window_rounding,
                 };
-                md3_theme::apply_seed(
+                crate::core::theme::apply_seed(
                     &self.context,
                     preview_params,
                     &Hachimi::instance().game.data_dir,
