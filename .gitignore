@@ -48,6 +48,6 @@ CLAUDE.md
 Thumbs.db
 
 # Logs and text artifacts
-*.log
-*.txt
-*.bak
+/*.log
+/*.txt
+/*.bak

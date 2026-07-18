@@ -125,12 +125,6 @@ about:
 license: 
   title: "Licença"
   gpl_v3_only_notice: "Texto da licença GPL-3.0-only"
-  ofl_fonts_header: "Este software inclui as seguintes fontes sob a licença SIL Open Font License 1.1:"
-  font_inter: "Inter: Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)"
-  font_font_awesome: "Font Awesome Version 4.7.0: Copyright Dave Gandy (https://fontawesome.com) 2016. Todos os direitos reservados."
-  ofl_notice: "Texto da licença SIL OFL 1.1"
-  font_alibaba_header: "Alibaba PuHuiTi 3.0"
-  font_alibaba_body: "Copyright (c) 2020-2023 Alibaba (China) Co., Ltd. Todos os direitos reservados."
 
 tl_updater: 
   title: "Atualizando..."

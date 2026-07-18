@@ -1,0 +1,22 @@
+HarmonyOS Sans Fonts License Agreement
+
+This HarmonyOS Sans Fonts License Agreement (hereinafter referred to as the "Agreement") is a legal agreement between you (either an individual or a single legal entity) and Huawei Device Co., Ltd. (hereinafter referred to as "Huawei" or "Licensor") regarding the HarmonyOS Sans fonts (hereinafter referred to as the "Font Software").
+
+1. Grant of License
+Subject to the terms and conditions of this Agreement, Huawei hereby grants you a non-transferable, non-exclusive, royalty-free, revocable, worldwide copyright license to:
+- Use, copy, merge, embed, bundle, and redistribute unmodified copies of the Font Software.
+- Sell unmodified copies of the Font Software bundled as part of any software package (excluding stand-alone font software packages).
+
+2. Restrictions
+- No Modification: You shall not modify, adapt, translate, or create derivative works based on the Font Software.
+- No Stand-alone Sale: You shall not sell, lease, sublicense, or distribute the Font Software as a stand-alone product or package.
+- Attribution Notice: You must retain the copyright notice and this License Agreement in all copies of the Font Software you distribute or embed.
+
+3. Intellectual Property
+Huawei and/or its partners retain all rights, titles, and interests (including but not limited to copyrights) in and to the Font Software.
+
+4. Disclaimer of Warranty
+The Font Software is provided on an "AS IS" basis, without warranties or conditions of any kind, either express or implied, including, without limitation, any warranties or conditions of title, non-infringement, merchantability, or fitness for a particular purpose.
+
+5. Termination
+This Agreement will terminate automatically if you fail to comply with any of its terms and conditions. Upon termination, you must cease all use of the Font Software and destroy all copies in your possession.

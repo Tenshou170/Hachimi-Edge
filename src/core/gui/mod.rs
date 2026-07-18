@@ -306,7 +306,7 @@ impl Gui {
         
         add_font!(fonts, proportional_fonts, "GoogleSansFlex.ttf");
         add_font!(fonts, proportional_fonts, "MaterialSymbolsOutlined.ttf");
-        add_font!(fonts, proportional_fonts, "AlibabaPuHuiTi-3-45-Light.otf");
+        add_font!(fonts, proportional_fonts, "HarmonyOSSansRegularMerged.ttf");
 
         fonts
     }
