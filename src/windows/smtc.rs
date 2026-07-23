@@ -1,7 +1,6 @@
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicIsize, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicU32, Ordering};
 use std::os::windows::ffi::OsStrExt;
-use std::time::SystemTime;
 use once_cell::sync::Lazy;
 use windows::{
     core::{factory, Interface, HSTRING, PCWSTR},
@@ -18,16 +17,13 @@ use windows::{
     }
 };
 
-use crate::{
-    core::Hachimi,
-    il2cpp::{
-        ext::{Il2CppStringExt, StringExt, Il2CppObjectExt},
-        hook::{
-            UnityEngine_CoreModule::{Texture2D, RenderTexture, Graphics, Texture, SceneManager, Scene},
-            UnityEngine_ImageConversionModule::ImageConversion
-        },
-        types::*
-    }
+use crate::il2cpp::{
+    ext::{Il2CppStringExt, StringExt, Il2CppObjectExt},
+    hook::{
+        UnityEngine_CoreModule::{Texture2D, RenderTexture, Graphics, Texture, SceneManager, Scene},
+        UnityEngine_ImageConversionModule::ImageConversion
+    },
+    types::*
 };
 
 static SMTC_INSTANCE: Lazy<Mutex<Option<SystemMediaTransportControls>>> = Lazy::new(|| Mutex::new(None));
@@ -47,14 +43,9 @@ static TASKBAR_HWND: AtomicIsize = AtomicIsize::new(0);
 /// synchronous LoadAsset_Internal call on the main thread every frame
 /// and tanked FPS after returning to the home screen from gacha.
 static THUMBNAIL_PENDING: AtomicBool = AtomicBool::new(false);
-static LAST_UPDATE: AtomicI64 = AtomicI64::new(0);
-/// Set to true after the first SMTC initialization attempt, regardless of
-/// whether it succeeded. Under Proton/Wine, GetForWindow always fails and
-/// SMTC_INSTANCE stays None, so without this flag on_update would retry
-/// the full COM initialization path (CoInitializeEx, SHGetKnownFolderPath,
-/// factory::<...>()) every single frame — all of which are slow Wine stubs
-/// that caused per-frame overhead and FPS drops on Linux.
-static SMTC_INIT_ATTEMPTED: AtomicBool = AtomicBool::new(false);
+// Monotonic throttle for per-second metadata/playback updates.
+// None = never ticked yet — the init path runs on the first update tick.
+static LAST_UPDATE: Lazy<Mutex<Option<std::time::Instant>>> = Lazy::new(|| Mutex::new(None));
 
 fn set_playback_status(smtc: &SystemMediaTransportControls, status: MediaPlaybackStatus) {
     if LAST_STATUS.load(Ordering::Relaxed) != status.0 {
@@ -67,9 +58,9 @@ pub fn init(hwnd: HWND) {
     if !crate::windows::capabilities::supports_smtc() {
         return;
     }
-    if !Hachimi::instance().config.load().windows.enable_smtc {
-        return;
-    }
+    // Always store the HWND regardless of enable_smtc so that re-enabling
+    // from the sidebar works without a game restart. on_update() gates on
+    // enable_smtc before doing any real work.
     TASKBAR_HWND.store(hwnd.0 as isize, Ordering::Release);
 }
 
@@ -168,16 +159,28 @@ pub fn on_update() {
         unregister();
         return;
     }
+
+    // Throttle to ~1 Hz using a monotonic Instant. None = first tick.
+    let now = std::time::Instant::now();
+    let should_update = {
+        let mut last = LAST_UPDATE.lock().unwrap_or_else(|e| e.into_inner());
+        let elapsed = last.map_or(true, |t| now.duration_since(t).as_millis() >= 1000);
+        if elapsed {
+            *last = Some(now);
+        }
+        elapsed
+    };
+
     let mut smtc_guard = match SMTC_INSTANCE.lock() {
         Ok(g) => g,
         Err(e) => e.into_inner(),
     };
     if smtc_guard.is_none() {
-        // Only attempt initialization once. Under Proton/Wine the COM calls
-        // always fail and SMTC_INSTANCE stays None, so retrying every frame
-        // wastes time on slow Wine stubs (CoInitializeEx, SHGetKnownFolderPath,
-        // factory::<...>()).
-        if SMTC_INIT_ATTEMPTED.swap(true, Ordering::Relaxed) {
+        // Only attempt init when the throttle ticks to avoid hammering slow
+        // Wine COM stubs (CoInitializeEx, SHGetKnownFolderPath, factory::<...>())
+        // every frame. Under Proton/Wine GetForWindow always fails, so retrying
+        // once per second is fast enough without the per-frame overhead.
+        if !should_update {
             return;
         }
         unsafe {
@@ -223,8 +226,14 @@ pub fn on_update() {
         let name_ptr = Scene::GetNameInternal(scene.handle);
         let name = if name_ptr.is_null() { String::new() } else { unsafe { (*name_ptr).as_utf16str().to_string() } };
 
-        IS_LIVE_SCENE.store(name == "Live", Ordering::Relaxed);
+        IS_LIVE_SCENE.store(name == "Live", Ordering::Release);
         IS_HOME_SCENE.store(name == "Home", Ordering::Relaxed);
+
+        // Reset cached music ID on any non-Live scene so metadata refreshes
+        // correctly when the next Live scene loads.
+        if name != "Live" {
+            CURRENT_MUSIC_ID.store(-1, Ordering::Relaxed);
+        }
 
         if name == "Live" {
             let _ = smtc.SetIsEnabled(true);
@@ -245,16 +254,14 @@ pub fn on_update() {
         }
     }
 
-    let now = SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64;
-    let should_update = now - LAST_UPDATE.load(Ordering::Relaxed) >= 1000;
-    if should_update {
-        LAST_UPDATE.store(now, Ordering::Relaxed);
-    }
-
-    if IS_LIVE_SCENE.load(Ordering::Relaxed) && should_update {
+    if IS_LIVE_SCENE.load(Ordering::Acquire) && should_update {
+        // Detect mid-live song changes (e.g. medley) and refresh metadata.
+        let current_music_id = CURRENT_MUSIC_ID.load(Ordering::Relaxed);
+        if let Some(live_music_id) = get_live_music_id() {
+            if live_music_id != current_music_id {
+                update_metadata(smtc, live_music_id);
+            }
+        }
         update_live_playback(smtc);
     } else if IS_HOME_SCENE.load(Ordering::Relaxed) && should_update {
         update_metadata_home(smtc);
@@ -770,9 +777,12 @@ pub fn unregister() {
         CURRENT_SCENE_HANDLE.store(-1, Ordering::Relaxed);
         LAST_STATUS.store(MediaPlaybackStatus::Closed.0, Ordering::Relaxed);
         LAST_HOME_MUSIC_ID.store(0, Ordering::Relaxed);
-        IS_LIVE_SCENE.store(false, Ordering::Relaxed);
+        IS_LIVE_SCENE.store(false, Ordering::Release);
         IS_HOME_SCENE.store(false, Ordering::Relaxed);
-        SMTC_INIT_ATTEMPTED.store(false, Ordering::Relaxed);
+        THUMBNAIL_PENDING.store(false, Ordering::Relaxed);
+        // Reset the throttle so the next re-enable fires immediately
+        // rather than waiting up to 1 second for the next tick.
+        *LAST_UPDATE.lock().unwrap_or_else(|e| e.into_inner()) = None;
         info!("SMTC unregistered");
     }
 }

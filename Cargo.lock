@@ -1227,7 +1227,7 @@ dependencies = [
 [[package]]
 name = "egui-material3"
 version = "0.0.11"
-source = "git+https://github.com/Tenshou170/egui-material3.git?rev=54aa974cb2b27b735e18b434751e9c9c91210560#54aa974cb2b27b735e18b434751e9c9c91210560"
+source = "git+https://github.com/Tenshou170/egui-material3.git?rev=d76ab19d0bdaa3b25c702ad44fe540080818e42b#d76ab19d0bdaa3b25c702ad44fe540080818e42b"
 dependencies = [
  "base64",
  "dark-light",
