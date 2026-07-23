@@ -269,8 +269,20 @@ pub fn on_update() {
 }
 
 fn get_live_music_id() -> Option<i32> {
-    let image = crate::il2cpp::symbols::get_assembly_image(c"umamusume.dll").ok()?;
-    let klass = crate::il2cpp::symbols::get_class(image, c"Gallop.Live", c"Director").ok()?;
+    // Cache the Director class pointer — get_assembly_image + get_class walk
+    // IL2CPP tables and are called every 1 Hz tick during live scenes.
+    static DIRECTOR_CLASS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let klass = {
+        let cached = DIRECTOR_CLASS.load(Ordering::Relaxed);
+        if cached != 0 {
+            cached as *mut crate::il2cpp::types::Il2CppClass
+        } else {
+            let image = crate::il2cpp::symbols::get_assembly_image(c"umamusume.dll").ok()?;
+            let k = crate::il2cpp::symbols::get_class(image, c"Gallop.Live", c"Director").ok()?;
+            DIRECTOR_CLASS.store(k as usize, Ordering::Relaxed);
+            k
+        }
+    };
 
     let get_load_settings_addr = crate::il2cpp::symbols::get_method_addr_cached(klass, c"get_LoadSettings", 0);
     if get_load_settings_addr == 0 { return None; }

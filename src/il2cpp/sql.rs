@@ -1,5 +1,7 @@
 use std::{ptr, sync::{atomic::{self, AtomicPtr, AtomicBool, Ordering}, Mutex, RwLock}};
+use std::num::NonZeroUsize;
 use fnv::{FnvHashMap, FnvHashSet};
+use lru::LruCache;
 use sqlparser::ast;
 use once_cell::sync::Lazy;
 use crate::{
@@ -803,25 +805,44 @@ pub fn get_all_cards() -> Vec<(i32, i32)> {
 }
 
 pub fn get_master_text(category: i32, index: i32) -> Option<String> {
-    let db_path = crate::core::utils::get_masterdb_path();
-    let conn = Connection::new();
-    if Connection::Open(conn, db_path.to_il2cpp_string(), std::ptr::null_mut(), std::ptr::null_mut(), 0) {
-        let sql = format!("SELECT text FROM text_data WHERE \"category\" = {} AND \"index\" = {}", category, index);
-        let query = Connection::Query(conn, sql.to_il2cpp_string());
-        if !query.is_null() {
-            if Query::Step(query) {
-                let text_ptr = Query::GetText(query, 0);
-                if let Some(text) = unsafe { text_ptr.as_ref() }.map(|s| s.as_utf16str().to_string()) {
-                    Query::Dispose(query);
-                    Connection::CloseDB(conn);
-                    return Some(text);
-                }
-            }
-            Query::Dispose(query);
+    // Cache up to 512 unique (category, index) pairs — master data is stable
+    // within a session and this function is called on every SMTC metadata
+    // update and every msgpack notification, so even a few repeated lookups
+    // add up to many DB open+query+close cycles per second without caching.
+    static CACHE: Lazy<Mutex<LruCache<(i32, i32), Option<String>>>> =
+        Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(512).unwrap())));
+
+    {
+        let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(cached) = cache.get(&(category, index)) {
+            return cached.clone();
         }
-        Connection::CloseDB(conn);
     }
-    None
+
+    let result = (|| {
+        let db_path = crate::core::utils::get_masterdb_path();
+        let conn = Connection::new();
+        if Connection::Open(conn, db_path.to_il2cpp_string(), std::ptr::null_mut(), std::ptr::null_mut(), 0) {
+            let sql = format!("SELECT text FROM text_data WHERE \"category\" = {} AND \"index\" = {}", category, index);
+            let query = Connection::Query(conn, sql.to_il2cpp_string());
+            if !query.is_null() {
+                if Query::Step(query) {
+                    let text_ptr = Query::GetText(query, 0);
+                    if let Some(text) = unsafe { text_ptr.as_ref() }.map(|s| s.as_utf16str().to_string()) {
+                        Query::Dispose(query);
+                        Connection::CloseDB(conn);
+                        return Some(text);
+                    }
+                }
+                Query::Dispose(query);
+            }
+            Connection::CloseDB(conn);
+        }
+        None
+    })();
+
+    CACHE.lock().unwrap_or_else(|e| e.into_inner()).put((category, index), result.clone());
+    result
 }
 
 pub fn get_jobs_info(reward_id: i32) -> Option<(i32, i32)> {

@@ -31,6 +31,13 @@ pub fn set__songPlayback(this: *mut Il2CppObject, value: crate::core::live_utils
     crate::il2cpp::symbols::set_field_value(this, unsafe { _SONGPLAYBACK_FIELD }, &value)
 }
 
+// Cached FieldInfo pointers for MasterCharacterSystemText items.
+// All items in the list share the same class, so we resolve once on first use.
+static mut CST_CUEID_FIELD: *mut FieldInfo = 0 as _;
+static mut CST_CUESHEET_FIELD: *mut FieldInfo = 0 as _;
+static mut CST_TEXT_FIELD: *mut FieldInfo = 0 as _;
+static mut CST_VOICEID_FIELD: *mut FieldInfo = 0 as _;
+
 static mut _SONGCHARAPLAYBACKS_FIELD: *mut FieldInfo = 0 as _;
 pub fn get__songCharaPlaybacks(this: *mut Il2CppObject) -> *mut Il2CppArray {
     crate::il2cpp::symbols::get_field_object_value(this, unsafe { _SONGCHARAPLAYBACKS_FIELD })
@@ -156,8 +163,21 @@ fn lookup_cst_entry(chara_id: i32, cue_id: i32, cue_name: &str) -> Option<CstEnt
         for item in ilist.iter() {
             if item.is_null() { continue; }
             let item_klass = unsafe { (*item).klass() };
-            let cue_id_field = symbols::get_field_from_name(item_klass, c"CueId");
-            let cue_sheet_field = symbols::get_field_from_name(item_klass, c"CueSheet");
+
+            // Resolve and cache FieldInfo pointers on first item.
+            unsafe {
+                if CST_CUEID_FIELD.is_null() {
+                    CST_CUEID_FIELD    = symbols::get_field_from_name(item_klass, c"CueId");
+                    CST_CUESHEET_FIELD = symbols::get_field_from_name(item_klass, c"CueSheet");
+                    CST_TEXT_FIELD     = symbols::get_field_from_name(item_klass, c"Text");
+                    CST_VOICEID_FIELD  = symbols::get_field_from_name(item_klass, c"VoiceId");
+                }
+            }
+            let cue_id_field   = unsafe { CST_CUEID_FIELD };
+            let cue_sheet_field = unsafe { CST_CUESHEET_FIELD };
+            let text_field     = unsafe { CST_TEXT_FIELD };
+            let voice_id_field = unsafe { CST_VOICEID_FIELD };
+
             if cue_id_field.is_null() || cue_sheet_field.is_null() { continue; }
 
             let item_cue_id = symbols::get_field_value::<i32>(item, cue_id_field);
@@ -167,8 +187,6 @@ fn lookup_cst_entry(chara_id: i32, cue_id: i32, cue_name: &str) -> Option<CstEnt
             let item_cue_sheet = unsafe { (*item_cue_sheet_ptr).as_utf16str().to_string() };
             if !cue_name.starts_with(&item_cue_sheet) { continue; }
 
-            let text_field = symbols::get_field_from_name(item_klass, c"Text");
-            let voice_id_field = symbols::get_field_from_name(item_klass, c"VoiceId");
             if text_field.is_null() || voice_id_field.is_null() { break; }
 
             let text_ptr = symbols::get_field_object_value::<Il2CppString>(item, text_field);

@@ -9,6 +9,12 @@ use super::{ButtonCommon, DialogCommon, DialogManager, MasterDataUtil};
 
 static SKILL_TEXT_CACHE: Lazy<Mutex<FnvHashMap<i32, (String, String)>>> = Lazy::new(|| Mutex::default());
 
+/// Invalidate the skill text cache. Called when localized data is reloaded
+/// so the next skill interaction picks up fresh translations.
+pub fn clear_skill_text_cache() {
+    SKILL_TEXT_CACHE.lock().unwrap().clear();
+}
+
 // SkillListItem
 static mut NAMETEXT_FIELD: *mut FieldInfo = 0 as _;
 pub fn get__nameText(this: *mut Il2CppObject) -> *mut Il2CppObject {
@@ -113,6 +119,14 @@ extern "C" fn UpdateItemOther(this: *mut Il2CppObject, skill_info: *mut Il2CppOb
 }
 
 fn get_skill_text(skill_id: i32) -> (String, String) {
+    // Fast path: return cached text without any IL2CPP or SQL calls.
+    {
+        let cache = SKILL_TEXT_CACHE.lock().unwrap();
+        if let Some(cached) = cache.get(&skill_id) {
+            return cached.clone();
+        }
+    }
+
     let to_s = |opt_ptr: Option<*mut Il2CppString>| unsafe {
         opt_ptr.and_then(|p| p.as_ref()).map(|s| s.as_utf16str().to_string())
     };
@@ -122,15 +136,7 @@ fn get_skill_text(skill_id: i32) -> (String, String) {
         Some(Hachimi::instance().skill_info.load().get_desc(skill_id).to_il2cpp_string())
     ).unwrap());
 
-    let mut cache = SKILL_TEXT_CACHE.lock().unwrap();
-
-    if let Some((cached_name, cached_desc)) = cache.get(&skill_id) {
-        if cached_name == &current_name && cached_desc == &current_desc {
-            return (cached_name.clone(), cached_desc.clone());
-        }
-    }
-
-    cache.insert(skill_id, (current_name.clone(), current_desc.clone()));
+    SKILL_TEXT_CACHE.lock().unwrap().insert(skill_id, (current_name.clone(), current_desc.clone()));
     (current_name, current_desc)
 }
 
