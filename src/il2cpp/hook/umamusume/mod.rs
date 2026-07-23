@@ -82,6 +82,8 @@ mod PartsCommonHeaderTitle;
 pub mod PartsCharaMessageBase;
 pub mod StoryParamChangeEffect;
 pub mod DialogSupportCardDetail;
+pub mod StoryTimelineLiveStreamingClipData;
+pub mod LiveStreamingCommentScriptableObject;
 mod Connecting;
 mod DownloadManager;
 mod DownloadView;
@@ -136,6 +138,7 @@ pub fn init() {
     StoryChoiceController::init(image);
     StoryViewController::init(image);
     StoryTimelineClipData::init(image);
+    StoryTimelineLiveStreamingClipData::init(image);
     StoryTimelineCharaTrackData::init(image);
     CharacterNoteTopView::init(image);
     CharacterNoteTopViewController::init(image);
@@ -193,4 +196,5 @@ pub fn init() {
     CySpringUpdater::init(image);
     PartsRaceAnalyzeRaceEventListItem::init(image);
     AudioManager::init(image);
+    LiveStreamingCommentScriptableObject::init(image);
 }
