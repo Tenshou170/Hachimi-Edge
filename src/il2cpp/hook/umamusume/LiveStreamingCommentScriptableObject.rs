@@ -76,7 +76,7 @@ pub fn on_LoadAsset(bundle: *mut Il2CppObject, this: *mut Il2CppObject, name: &U
     patch_asset(this, data.as_ref());
 }
 
-fn patch_asset(this: *mut Il2CppObject, data_opt: Option<&LiveStreamingCommentScriptableObjectData>) {
+pub fn patch_asset(this: *mut Il2CppObject, data_opt: Option<&LiveStreamingCommentScriptableObjectData>) {
     let Some(data) = data_opt else {
         return;
     };
