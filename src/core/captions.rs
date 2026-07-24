@@ -2,6 +2,7 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_void;
 use std::ptr::null_mut;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use once_cell::sync::Lazy;
 
@@ -9,6 +10,22 @@ use crate::il2cpp::api::*;
 use crate::il2cpp::ext::Il2CppObjectExt;
 use crate::il2cpp::symbols;
 use crate::il2cpp::types::*;
+
+// Cached main thread pointer — resolved once on first caption show and reused
+// for all subsequent fade-tick schedules, avoiding per-tick attached_threads()
+// calls (which call il2cpp_thread_get_all_attached_threads) during the 60 Hz
+// fade loop.
+static MAIN_THREAD_PTR: AtomicUsize = AtomicUsize::new(0);
+
+fn get_main_thread() -> Option<symbols::Thread> {
+    let cached = MAIN_THREAD_PTR.load(Ordering::Relaxed);
+    if cached != 0 {
+        return Some(symbols::Thread::from_raw(cached as *mut Il2CppThread));
+    }
+    let thread = symbols::Thread::attached_threads().first().cloned()?;
+    MAIN_THREAD_PTR.store(thread.as_raw() as usize, Ordering::Relaxed);
+    Some(thread)
+}
 
 struct CaptionState {
     handle: Option<symbols::GCHandle>,
@@ -343,8 +360,7 @@ fn show_impl(text: &str, line_char_count: i32) {
     }
 
     // Schedule fade tick on the attached main thread if available.
-    let threads = symbols::Thread::attached_threads();
-    if let Some(main) = threads.first() {
+    if let Some(main) = get_main_thread() {
         main.schedule(fade_tick_global);
     } else {
         warn!("[captions] no attached threads, fade tick not scheduled");
@@ -413,8 +429,7 @@ fn fade_tick_global() {
 
     if !done {
         // Schedule the next fade tick on the main thread.
-        let threads = symbols::Thread::attached_threads();
-        if let Some(main) = threads.first() {
+        if let Some(main) = get_main_thread() {
             main.schedule(fade_tick_global);
         }
     }
@@ -775,8 +790,7 @@ impl Captions {
     }
 
     pub fn reposition_scheduled() {
-        let threads = symbols::Thread::attached_threads();
-        if let Some(main) = threads.first() {
+        if let Some(main) = get_main_thread() {
             main.schedule(Self::reposition_callback);
         } else {
             warn!("[captions] no attached threads for reposition scheduling");
