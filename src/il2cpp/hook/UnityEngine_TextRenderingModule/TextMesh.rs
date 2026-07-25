@@ -14,7 +14,7 @@ static ACTIVE_TEXT_MESH_COMPONENTS: Lazy<Mutex<FnvHashMap<usize, ActiveTextMeshC
 });
 
 type SetTextFn = extern "C" fn(this: *mut Il2CppObject, value: *mut Il2CppString);
-pub extern "C" fn set_text_hook(this: *mut Il2CppObject, value: *mut Il2CppString) {
+pub unsafe extern "C" fn set_text_hook(this: *mut Il2CppObject, value: *mut Il2CppString) {
     if value.is_null() {
         return get_orig_fn!(set_text_hook, SetTextFn)(this, value);
     }

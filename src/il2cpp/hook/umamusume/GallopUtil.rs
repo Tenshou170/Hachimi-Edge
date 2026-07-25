@@ -8,12 +8,12 @@ type LineHeadWrapCommonFn = extern "C" fn(
 extern "C" fn LineHeadWrapCommon(
     s: *mut Il2CppString, line_char_count: i32, handling_type: i32, is_match_delegate: *mut Il2CppDelegate
 ) -> *mut Il2CppString {
-    if TDQ_IS_SKILL_LEARNING_QUERY.load(Ordering::Relaxed) || IS_SYSTEM_TEXT_QUERY.load(Ordering::Relaxed) || utils::game_str_has_newline(s) {
+    if TDQ_IS_SKILL_LEARNING_QUERY.load(Ordering::Relaxed) || IS_SYSTEM_TEXT_QUERY.load(Ordering::Relaxed) || unsafe { utils::game_str_has_newline(s) } {
         // assume prewrapped or expansion requested, let the game handle it (or do nothing)
         return s;
     }
 
-    if let Some(wrapped) = utils::wrap_text_il2cpp(s, line_char_count) {
+    if let Some(wrapped) = unsafe { utils::wrap_text_il2cpp(s, line_char_count) } {
         return wrapped;
     }
     get_orig_fn!(LineHeadWrapCommon, LineHeadWrapCommonFn)(s, line_char_count, handling_type, is_match_delegate)
@@ -30,7 +30,7 @@ extern "C" fn LineHeadWrapCommonWithColorTag(
     {
         return str;
     }
-    if let Some(wrapped) = utils::wrap_text_il2cpp(str, line_char_count) {
+    if let Some(wrapped) = unsafe { utils::wrap_text_il2cpp(str, line_char_count) } {
         return wrapped;
     }
     get_orig_fn!(LineHeadWrapCommonWithColorTag, LineHeadWrapCommonWithColorTagFn)(

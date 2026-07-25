@@ -49,7 +49,7 @@ impl Interceptor {
         }
     }
 
-    pub fn hook_vtable(&self, vtable: *mut usize, vtable_index: usize, hook_addr: usize) -> Result<usize, Error> {
+    pub unsafe fn hook_vtable(&self, vtable: *mut usize, vtable_index: usize, hook_addr: usize) -> Result<usize, Error> {
         match self.hook_map.lock().unwrap_or_else(|e| e.into_inner()).entry(hook_addr) {
             hash_map::Entry::Occupied(e) => Ok(e.get().trampoline_addr),
             hash_map::Entry::Vacant(e) => {

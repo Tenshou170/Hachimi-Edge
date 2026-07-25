@@ -302,10 +302,10 @@ pub fn move_live_playback(target_time: f32) {
                                 >(audio_manager, song_chara_playbacks_field);
 
                                 if !song_chara_playbacks.is_null() {
-                                    let chara_playbacks = crate::il2cpp::symbols::Array::<AudioPlayback>::from(
+                                    let mut chara_playbacks = crate::il2cpp::symbols::Array::<AudioPlayback>::from(
                                         song_chara_playbacks
                                     );
-                                    let slice = chara_playbacks.as_slice();
+                                    let slice = chara_playbacks.as_mut_slice();
                                     for i in 0..slice.len() {
                                         process_playback(&mut slice[i], audio_ctrl_dict, target_time);
                                     }

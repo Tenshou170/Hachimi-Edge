@@ -43,7 +43,7 @@ pub fn apply_ui_scale() {
     for scaler in unsafe { canvas_scaler_list.as_slice().iter() } {
         #[cfg(target_os = "android")]
         {
-            let res = CanvasScaler::get_m_ReferenceResolution(*scaler);
+            let res = unsafe { CanvasScaler::get_m_ReferenceResolution(*scaler) };
             unsafe {
                 (*res).x /= scale;
                 (*res).y /= scale;

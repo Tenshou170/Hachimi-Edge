@@ -142,8 +142,8 @@ pub fn replace_texture_with_diff_ex<P1: AsRef<Path>, P2: AsRef<Path>>(
     }
 
     // And finally load image to texture
-    let png_array = Array::<u8>::new(mscorlib::Byte::class(), png_buffer.len());
-    unsafe { png_array.as_slice().copy_from_slice(&png_buffer); }
+    let mut png_array = Array::<u8>::new(mscorlib::Byte::class(), png_buffer.len());
+    unsafe { png_array.as_mut_slice().copy_from_slice(&png_buffer); }
     ImageConversion::LoadImage(texture, png_array.this, mark_non_readable);
 
     true

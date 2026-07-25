@@ -376,7 +376,7 @@ fn wrap_text_internal(string: &str, base_line_width: i32, line_width_multiplier:
     return textwrap::wrap(string, &options);
 }
 
-pub fn wrap_text_il2cpp(string: *mut Il2CppString, base_line_width: i32) -> Option<*mut Il2CppString> {
+pub unsafe fn wrap_text_il2cpp(string: *mut Il2CppString, base_line_width: i32) -> Option<*mut Il2CppString> {
     let config = &Hachimi::instance().localized_data.load().config;
     if !config.use_text_wrapper {
         if base_line_width > 0 {
@@ -437,7 +437,7 @@ fn fit_text_internal(
     }
 }
 
-pub fn fit_text_il2cpp(string: *mut Il2CppString, base_line_width: i32, base_font_size: i32) -> Option<*mut Il2CppString> {
+pub unsafe fn fit_text_il2cpp(string: *mut Il2CppString, base_line_width: i32, base_font_size: i32) -> Option<*mut Il2CppString> {
     let mult = Hachimi::instance().localized_data.load().config.line_width_multiplier?;
     if let Some(result) = fit_text_internal(unsafe { &(*string).as_utf16str().to_string() },
         base_line_width, base_font_size, mult
@@ -486,7 +486,7 @@ pub fn wrap_fit_text(string: &str, base_line_width: i32, mut max_line_count: i32
     }
 }
 
-pub fn wrap_fit_text_il2cpp(string: *mut Il2CppString, base_line_width: i32, max_line_count: i32, base_font_size: i32) -> Option<*mut Il2CppString> {
+pub unsafe fn wrap_fit_text_il2cpp(string: *mut Il2CppString, base_line_width: i32, max_line_count: i32, base_font_size: i32) -> Option<*mut Il2CppString> {
     if Hachimi::instance().localized_data.load().config.use_text_wrapper {
         if let Some(result) = wrap_fit_text(unsafe { &(*string).as_utf16str().to_string() },
             base_line_width, max_line_count, base_font_size
@@ -570,7 +570,7 @@ pub fn truncate_chars(chars: impl Iterator<Item = char>, width: usize, ellipsis:
     truncate_chars_internal(chars, width, ellipsis, line_width_multiplier)
 }
 
-pub fn truncate_text_il2cpp(string: *mut Il2CppString, width: usize, ellipsis: bool) -> Option<*mut Il2CppString> {
+pub unsafe fn truncate_text_il2cpp(string: *mut Il2CppString, width: usize, ellipsis: bool) -> Option<*mut Il2CppString> {
     let line_width_multiplier = Hachimi::instance().localized_data.load().config.line_width_multiplier?;
     truncate_chars_internal(unsafe { (*string).as_utf16str().chars() }, width, ellipsis, line_width_multiplier).map(|chars|
         chars.iter()
@@ -601,7 +601,7 @@ pub fn write_json_file<T: Serialize, P: AsRef<Path>>(data: &T, path: P) -> Resul
 }
 
 // Checks for both \n and \\n
-pub fn game_str_has_newline(string: *mut Il2CppString) -> bool {
+pub unsafe fn game_str_has_newline(string: *mut Il2CppString) -> bool {
     let mut got_backslash = false;
     for c in unsafe { (*string).as_utf16str().as_slice().iter() } {
         if got_backslash {

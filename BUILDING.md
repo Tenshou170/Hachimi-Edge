@@ -36,87 +36,69 @@ This is **fully automated** via Cargo. `Cargo.toml` is pre-configured to automat
 
 ---
 
-## 3. Local NDK Environment Setup
+## 3. NDK Environment Setup (Zero-Config)
 
-To keep the repository clean and avoid hardcoded absolute paths, Hachimi's build configuration uses a symbolic link named `ndk` in the project root pointing to your Android NDK directory.
+Hachimi's build configuration automatically discovers your Android NDK path in order of precedence:
+1. `$ANDROID_NDK_ROOT` environment variable
+2. `$ANDROID_NDK_HOME` environment variable
+3. A local `./ndk` symlink or directory in the project root
 
-### On Linux / macOS:
-Create the symlink pointing to your extracted NDK folder (for example, `r27d`):
+### Quick Setup Option A (Environment Variable - Recommended):
 ```bash
-ln -s /home/user/ndk/android-ndk-r27d ndk
+export ANDROID_NDK_ROOT=/path/to/android-ndk-r27d
 ```
 
-### On Windows:
-Create a directory junction using Command Prompt or PowerShell:
-```cmd
-mklink /J ndk C:\path\to\android-ndk-r27d
-```
-
-*Note: The `ndk` link is automatically ignored by Git.*
-
-> [!IMPORTANT]
-> **Host OS Configuration (`.cargo/config.toml`)**:
-> Depending on whether your host machine is Windows or Linux/macOS, you will need to toggle the active configuration lines inside [.cargo/config.toml](file:///.cargo/config.toml).
-> - **Windows Developers**: Keep the default Windows lines active (active by default).
-> - **Linux/macOS Developers**: Comment out the Windows lines and uncomment the commented Linux blocks under `[alias]`, `[target.aarch64-linux-android]`, and `[env]`.
+### Quick Setup Option B (Symlink / Junction):
+- **Linux / macOS**: `ln -s /path/to/android-ndk-r27d ndk`
+- **Windows**: `mklink /J ndk C:\path\to\android-ndk-r27d`
 
 ---
 
 ## 4. Compiling the Mod
 
-### Windows (x64)
+### Windows (x64 MSVC)
 
-#### Checking the code:
-Use our pre-configured Cargo alias:
+#### Quick check:
 ```bash
 cargo xcheck
 ```
-*(On Windows hosts, this checks natively. On Linux/macOS hosts, this cross-checks via `cargo-xwin`).*
 
-#### Building the DLL:
-Use our pre-configured Cargo alias:
+#### Build DLL & release package:
 ```bash
-cargo xbuild
+./tools/windows/build.sh
 ```
 *(On Windows hosts, this builds natively. On Linux/macOS hosts, this cross-compiles via `cargo-xwin`).*
 
-**Output**: `target/x86_64-pc-windows-msvc/release/hachimi.dll`
+**Output**: `build/hachimi.dll` and `build/blake3.json`
 
 ---
 
 ### Android (ARM64)
 
-#### Checking locally:
-Run the Android check alias:
+#### Quick check:
 ```bash
 cargo acheck
 ```
 
-#### Building locally:
-Run our pre-configured Cargo alias (requires the NDK symlink setup in Step 3):
+#### Build SO & release package:
 ```bash
-cargo abuild
+RELEASE=1 ./tools/android/build.sh
 ```
 *Note: This builds using unified **API Level 24** and targets **16KB page size alignment**, guaranteeing complete backward compatibility down to Android 7.0 and forward compatibility with Android 15.*
 
-#### Building using CI-script locally (requires setting `ANDROID_NDK_ROOT`):
-If you wish to run the identical script utilized by our GitHub Actions runner:
-```bash
-export ANDROID_NDK_ROOT=/path/to/android-ndk-r27d
-RELEASE=1 ./tools/android/build.sh
-```
-
-**Output**: `target/aarch64-linux-android/release/libhachimi.so`
+**Output**: `build/libmain-arm64-v8a.so` and `build/sha256.json`
 
 ---
 
-## Summary of Useful Cargo Aliases
+## Summary of Cargo & Script Aliases
 
-These aliases are defined in `.cargo/config.toml` for standardizing developer workflows:
+These aliases and scripts are defined to standardize developer workflows across platforms:
 
-*   `cargo abuild`: Compiles Android in release mode using the local `ndk` symlink.
-*   `cargo acheck`: Quick compiler-check for the Android target.
-*   `cargo xbuild`: Builds the Windows version (runs natively on Windows hosts; runs `cargo-xwin` to cross-compile on Linux/macOS hosts).
-*   `cargo xcheck`: Quick compiler-check for the Windows target (runs natively on Windows hosts; runs `cargo-xwin` to cross-check on Linux/macOS hosts).
+*   `cargo acheck`: Quick compiler check for the Android target.
+*   `cargo aclippy`: Clippy lint check for the Android target.
+*   `cargo xcheck`: Quick compiler check for Windows target (runs natively on Windows; `cargo-xwin` on Linux/macOS).
+*   `cargo xclippy`: Clippy lint check for Windows target.
+*   `./tools/android/build.sh`: Builds Android ARM64 `.so` binary and SHA256 checksums.
+*   `./tools/windows/build.sh`: Builds Windows MSVC `.dll` binary and BLAKE3 checksums.
 
-Raw Linux and Windows GNU target commands are intentionally unsupported and will fail in `build.rs`. Use the aliases above for routine checks and builds.
+Raw Linux and Windows GNU target commands are intentionally unsupported and will fail in `build.rs`. Use the aliases and scripts above for routine checks and builds.

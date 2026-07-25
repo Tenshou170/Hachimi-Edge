@@ -51,7 +51,7 @@ fn with_system_text_query(callback: impl FnOnce()) {
 
 type SetSystemTextWithLineHeadWrapFn = extern "C" fn(this: *mut Il2CppObject, system_text: *mut CharacterSystemText, maxCharacter: i32);
 extern "C" fn SetSystemTextWithLineHeadWrap(this: *mut Il2CppObject, system_text: *mut CharacterSystemText, max_character: i32) {
-    mark_as_system_text_component(this);
+    unsafe { mark_as_system_text_component(this); }
 
     with_system_text_query(|| {
         get_orig_fn!(SetSystemTextWithLineHeadWrap, SetSystemTextWithLineHeadWrapFn)(this, system_text, max_character);
@@ -60,7 +60,7 @@ extern "C" fn SetSystemTextWithLineHeadWrap(this: *mut Il2CppObject, system_text
 
 type SetTextWithLineHeadWrapFn = extern "C" fn(this: *mut Il2CppObject, str: *mut Il2CppString, maxCharacter: i32);
 extern "C" fn SetTextWithLineHeadWrap(this: *mut Il2CppObject, str: *mut Il2CppString, max_character: i32) {
-    mark_as_system_text_component(this);
+    unsafe { mark_as_system_text_component(this); }
 
     with_system_text_query(|| {
         get_orig_fn!(SetTextWithLineHeadWrap, SetTextWithLineHeadWrapFn)(this, str, max_character);
@@ -69,7 +69,7 @@ extern "C" fn SetTextWithLineHeadWrap(this: *mut Il2CppObject, str: *mut Il2CppS
 
 type SetTextWithLineHeadWrapWithColorTagFn = extern "C" fn(this: *mut Il2CppObject, str: *mut Il2CppString, maxCharacter: i32);
 extern "C" fn SetTextWithLineHeadWrapWithColorTag(this: *mut Il2CppObject, str: *mut Il2CppString, max_character: i32) {
-    mark_as_system_text_component(this);
+    unsafe { mark_as_system_text_component(this); }
 
     with_system_text_query(|| {
         get_orig_fn!(SetTextWithLineHeadWrapWithColorTag, SetTextWithLineHeadWrapWithColorTagFn)(this, str, max_character);

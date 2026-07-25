@@ -49,7 +49,7 @@ struct PendingOffset {
 unsafe impl Send for PendingOffset {}
 static PENDING_OFFSETS: Lazy<Mutex<Vec<PendingOffset>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
-pub fn mark_as_system_text_component(this: *mut Il2CppObject) {
+pub unsafe fn mark_as_system_text_component(this: *mut Il2CppObject) {
     if this.is_null() { return; }
     let id = Object::get_instanceID(this);
     SYSTEM_TEXT_COMPONENTS.lock().unwrap().insert(id);

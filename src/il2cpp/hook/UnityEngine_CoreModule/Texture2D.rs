@@ -52,6 +52,7 @@ pub fn from_image_file<P: AsRef<Path>>(path: P, mip_chain: bool, mark_non_readab
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn load_image_file<P: AsRef<Path>>(this: *mut Il2CppObject, path: P, mark_non_readable: bool) -> bool {
     // we've done everything we can, can't catch C# exceptions, yolo :)
     unsafe { load_image_file_unsafe(this, path, mark_non_readable) }

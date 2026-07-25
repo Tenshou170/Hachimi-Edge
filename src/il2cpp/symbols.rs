@@ -176,12 +176,11 @@ pub fn get_method_addr_cached(class: *mut Il2CppClass, name: &CStr, args_count: 
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn find_nested_class(class: *mut Il2CppClass, name: &CStr) -> Result<*mut Il2CppClass, Error> {
-    let mut iter: *mut c_void = null_mut();
-    loop {
-        let nested_class = il2cpp_class_get_nested_types(class, &mut iter);
-        if nested_class.is_null() { break; }
-
+    let mut iter = std::ptr::null_mut();
+    while let Some(nested_class) = std::ptr::NonNull::new(il2cpp_class_get_nested_types(class, &mut iter)) {
+        let nested_class = nested_class.as_ptr();
         let class_name = unsafe { CStr::from_ptr((*nested_class).name) };
         if class_name == name {
             return Ok(nested_class);
@@ -202,7 +201,7 @@ pub fn get_field_object_value<T>(obj: *mut Il2CppObject, field: *mut FieldInfo) 
     get_field_value(obj, field)
 }
 
-pub fn get_field_ptr<T>(obj: *mut Il2CppObject, field: *mut FieldInfo) -> *mut T {
+pub unsafe fn get_field_ptr<T>(obj: *mut Il2CppObject, field: *mut FieldInfo) -> *mut T {
     unsafe { (obj as usize + (*field).offset as usize) as _ }
 }
 
@@ -360,6 +359,7 @@ pub struct IList<T = *mut Il2CppObject> {
 }
 
 impl<T> IList<T> {
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn new(this: *mut Il2CppObject) -> Option<IList<T>> {
         if this.is_null() {
             return None;
@@ -451,6 +451,7 @@ pub struct IDictionary<K, V> {
 }
 
 impl<K, V> IDictionary<K, V> {
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn new(this: *mut Il2CppObject) -> Option<IDictionary<K, V>> {
         if this.is_null() {
             return None;
@@ -700,7 +701,11 @@ impl<T> Array<T> {
         self.this.add(1) as _
     }
 
-    pub unsafe fn as_slice(&self) -> &mut [T] {
+    pub unsafe fn as_slice(&self) -> &[T] {
+        std::slice::from_raw_parts(self.data_ptr(), (*self.this).max_length)
+    }
+
+    pub unsafe fn as_mut_slice(&mut self) -> &mut [T] {
         std::slice::from_raw_parts_mut(self.data_ptr(), (*self.this).max_length)
     }
 
@@ -807,7 +812,8 @@ impl<K, V> Dictionary<K, V> {
 
 impl<K: PartialEq, V> Dictionary<K, V> {
     pub fn find_entry(&self, key: &K) -> Option<&'static mut Il2CppDictionaryEntry<K, V>> {
-        for entry in unsafe { self.entries().as_slice().iter_mut() } {
+        let mut entries = self.entries();
+        for entry in unsafe { entries.as_mut_slice().iter_mut() } {
             if entry.key == *key {
                 // freaky lifetime erasure
                 return unsafe { std::ptr::from_mut(entry).as_mut() };
@@ -919,9 +925,10 @@ pub fn get_type_object_for_class(klass: *mut Il2CppClass) -> *mut Il2CppObject {
     il2cpp_type_get_object(type_obj) as *mut Il2CppObject
 }
 
-pub fn invoke_object_method(
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn invoke_instance_method(
     obj: *mut Il2CppObject,
-    method_name: &CStr,
+    method_name: &'static CStr,
     param_count: i32,
     params: &mut [*mut c_void],
 ) -> Option<*mut Il2CppObject> {

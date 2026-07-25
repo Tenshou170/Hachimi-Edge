@@ -88,6 +88,7 @@ unsafe fn inject_custom_ruby_blocks(this: *mut Il2CppObject, blocks: &[CustomRub
     set_DataArray(this, array);
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn on_LoadAsset(_bundle: *mut Il2CppObject, this: *mut Il2CppObject, name: &Utf16Str) {
     let asset_name = name.to_string();
     let localized_data = Hachimi::instance().localized_data.load();

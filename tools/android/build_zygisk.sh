@@ -1,39 +1,21 @@
 #!/usr/bin/env bash
 set -e
 
-SONAME=hachimi
-MODID=hachimi
-MODNAME=Hachimi
-AUTHOR=LeadRDRK
+SONAME=hachimi-edge
+MODID=hachimi-edge
+MODNAME=Hachimi-Edge
+AUTHOR=Tenshou170
 DESC="はちみーをなめると〜"
 UPDATEJSON=
 
 get_toml_value() {
-    # Takes three parameters:
-    # - TOML file path ($1)
-    # - section ($2)
-    # - the key ($3)
-    # 
-    # It first gets the section using the get_section function
-    # Then it finds the key within that section
-    # using grep and cut.
-
     local file="$1"
     local section="$2"
     local key="$3"
 
     get_section() {
-        # Function to get the section from a TOML file
-        # Takes two parameters:
-        # - TOML file path ($1)
-        # - section name ($2)
-        # 
-        # It uses sed to find the section
-        # A section is terminated by a line with [ in pos 0 or the end of file.
-
         local file="$1"
         local section="$2"
-
         sed -n "/^\[$section\]/,/^\[/p" "$file" | sed '$d'
     }
         
@@ -64,8 +46,8 @@ echo "*** Zygisk module: $MODNAME ($MODID)"
 echo "*** Version: $VERSION_STR"
 echo
 
-echo "-- Building"
-source ./tools/android/build.sh
+echo "-- Building Android Binaries"
+RELEASE=1 ./tools/android/build.sh
 
 echo "-- Generating module"
 
@@ -73,19 +55,29 @@ ZYGISK_BUILD_DIR="/tmp/zygisk-build"
 clean() {
     rm -rf "$ZYGISK_BUILD_DIR"
 }
+
 copy_lib() {
     local rust_lib_arch="$1"
     local mod_lib_arch="$2"
+    local lib_path="build/$rust_lib_arch/$BUILD_TYPE/lib$SONAME.so"
 
-    mkdir -p "$ZYGISK_BUILD_DIR/lib/$mod_lib_arch"
-    cp -v "build/$rust_lib_arch/$BUILD_TYPE/lib$SONAME.so" "$ZYGISK_BUILD_DIR/lib/$mod_lib_arch/lib$SONAME.so"
+    if [ -f "$lib_path" ]; then
+        mkdir -p "$ZYGISK_BUILD_DIR/lib/$mod_lib_arch"
+        cp -v "$lib_path" "$ZYGISK_BUILD_DIR/lib/$mod_lib_arch/lib$SONAME.so"
+
+        if [[ -n "$ANDROID_NDK_ROOT" ]] && [[ -f "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" ]]; then
+            "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug "$ZYGISK_BUILD_DIR/lib/$mod_lib_arch/lib$SONAME.so" || true
+        fi
+    else
+        echo "Skipping optional $mod_lib_arch ($lib_path not found)"
+    fi
 }
 
+BUILD_TYPE="release"
 clean
 
 cp -r -v ./tools/android/zygisk-template "$ZYGISK_BUILD_DIR"
 copy_lib aarch64-linux-android arm64-v8a
-copy_lib armv7-linux-androideabi armeabi-v7a
 
 cat << EOF > "$ZYGISK_BUILD_DIR/module.prop"
 id=$MODID
@@ -115,13 +107,13 @@ do
     generate_sha256 "$f"
 done
 
-echo "-- Zipping"
+echo "-- Zipping Zygisk Module"
 
 ZIP_FILENAME="zygisk-$MODID-$VERSION_STR-$BUILD_TYPE.zip"
 ZIP_FILE="$(realpath build)/$ZIP_FILENAME"
 
-pushd "$ZYGISK_BUILD_DIR"
+pushd "$ZYGISK_BUILD_DIR" > /dev/null
 zip -FSr6 "$ZIP_FILE" .
-popd
+popd > /dev/null
 
-echo "-- Module built: $ZIP_FILENAME"
+echo "-- Zygisk module built successfully: build/$ZIP_FILENAME"

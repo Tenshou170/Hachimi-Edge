@@ -93,6 +93,7 @@ extern "C" fn LoadAssetAsync_Internal(this: *mut Il2CppObject, name: *mut Il2Cpp
 }
 
 type OnLoadAssetFn = fn(bundle: *mut Il2CppObject, asset: *mut Il2CppObject, name: &Utf16Str);
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn on_LoadAsset(bundle: *mut Il2CppObject, asset: *mut Il2CppObject, name: *mut Il2CppString) {
     let class = unsafe { (*asset).klass() };
 

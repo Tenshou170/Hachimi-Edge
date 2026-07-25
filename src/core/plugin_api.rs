@@ -1280,6 +1280,7 @@ impl Vtable {
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn hachimi_get_api(name: *const c_char) -> *mut c_void {
     if name.is_null() {
         return std::ptr::null_mut();

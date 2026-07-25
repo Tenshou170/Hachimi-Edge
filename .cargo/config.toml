@@ -17,6 +17,7 @@ xtest = "test --no-run"
 # Aliases for Android target
 abuild = "build --target aarch64-linux-android --release"
 acheck = "check --target aarch64-linux-android --release"
+aclippy = "clippy --target aarch64-linux-android"
 atest = "test --target aarch64-linux-android --no-run"
 
 [target.aarch64-linux-android]

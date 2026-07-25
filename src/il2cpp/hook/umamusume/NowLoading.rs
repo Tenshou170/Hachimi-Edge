@@ -18,7 +18,7 @@ extern "C" fn SetupLoadingTips(this: *mut Il2CppObject) {
         let text = Text::get_text(comic_title);
         if text.is_null() { return; }
 
-        if let Some(new_text) = truncate_text_il2cpp(text, COMIC_TITLE_LINE_WIDTH, true) {
+        if let Some(new_text) = unsafe { truncate_text_il2cpp(text, COMIC_TITLE_LINE_WIDTH, true) } {
             Text::set_horizontalOverflow(comic_title, 1);
             Text::set_text(comic_title, new_text);
         }

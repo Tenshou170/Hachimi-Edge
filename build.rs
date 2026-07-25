@@ -127,6 +127,30 @@ fn main() {
     } else if target_os == "android" {
         println!("cargo:rustc-link-arg=-Wl,-z,max-page-size=16384");
         println!("cargo:rustc-link-arg=-Wl,-z,common-page-size=16384");
+
+        // Try to auto-link NDK sysroot if ANDROID_NDK_ROOT/HOME environment variable is set
+        let ndk_root = std::env::var("ANDROID_NDK_ROOT")
+            .or_else(|_| std::env::var("ANDROID_NDK_HOME"))
+            .ok();
+
+        if let Some(ndk_path) = ndk_root {
+            let host_os = if host.contains("windows") {
+                "windows-x86_64"
+            } else if host.contains("darwin") {
+                "darwin-x86_64"
+            } else {
+                "linux-x86_64"
+            };
+
+            let sysroot = std::path::PathBuf::from(ndk_path)
+                .join("toolchains/llvm/prebuilt")
+                .join(host_os)
+                .join("sysroot");
+
+            if sysroot.exists() {
+                println!("cargo:rustc-link-arg=--sysroot={}", sysroot.display());
+            }
+        }
     }
 
     setup_version_env();

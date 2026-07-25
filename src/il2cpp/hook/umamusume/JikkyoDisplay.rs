@@ -25,7 +25,7 @@ extern "C" fn Play(
         };
         jikkyou_text = final_text.to_il2cpp_string();
     }
-    else if let Some(wrapped) = wrap_text_il2cpp(jikkyou_text, LINE_WIDTH) {
+    else if let Some(wrapped) = unsafe { wrap_text_il2cpp(jikkyou_text, LINE_WIDTH) } {
         jikkyou_text = wrapped;
     }
 

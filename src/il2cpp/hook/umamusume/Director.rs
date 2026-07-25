@@ -47,8 +47,8 @@ extern "C" fn Awake(this: *mut Il2CppObject) {
 
                     let mscorlib = crate::il2cpp::symbols::get_assembly_image(c"mscorlib.dll").unwrap();
                     let string_class = crate::il2cpp::symbols::get_class(mscorlib, c"System", c"String").unwrap();
-                    let chara_name_array = Array::<*mut Il2CppString>::new(string_class, 9);
-                    let trainer_name_array = Array::<*mut Il2CppString>::new(string_class, 9);
+                    let mut chara_name_array = Array::<*mut Il2CppString>::new(string_class, 9);
+                    let mut trainer_name_array = Array::<*mut Il2CppString>::new(string_class, 9);
 
                     let get_chara_info_list_addr = crate::il2cpp::symbols::get_method_addr_cached((*load_settings).klass(), c"get_CharacterInfoList", 0);
                     let get_chara_info_list: extern "C" fn(*mut Il2CppObject) -> *mut Il2CppObject = std::mem::transmute(get_chara_info_list_addr);
@@ -77,8 +77,8 @@ extern "C" fn Awake(this: *mut Il2CppObject) {
                                 chara_name = name_str.to_il2cpp_string();
                             }
 
-                            chara_name_array.as_slice()[i as usize] = chara_name;
-                            trainer_name_array.as_slice()[i as usize] = trainer_name;
+                            chara_name_array.as_mut_slice()[i as usize] = chara_name;
+                            trainer_name_array.as_mut_slice()[i as usize] = trainer_name;
                         }
                     }
 
