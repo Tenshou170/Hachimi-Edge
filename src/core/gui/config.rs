@@ -126,6 +126,8 @@ impl ConfigEditor {
         tab: ConfigEditorTab,
     ) {
         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+        let on_surface_variant = get_global_color("onSurfaceVariant");
+        ui.style_mut().visuals.override_text_color = Some(on_surface_variant);
         match tab {
             ConfigEditorTab::General  => super::tabs::general::render(self, config, ui),
             ConfigEditorTab::Graphics => super::tabs::graphics::render(self, config, ui),
@@ -144,8 +146,37 @@ impl ConfigEditor {
     //
     // These replace the old stacked_* and option_slider grid helpers.
 
+    // ── Private building block ────────────────────────────────────────────────
+
+    /// Renders just the label + switch horizontal row.
+    /// No spacing, no separator — each public switch variant adds its own suffix.
+    fn switch_row(
+        ui: &mut egui::Ui,
+        label: impl Into<egui::WidgetText>,
+        value: &mut bool,
+        enabled: bool,
+    ) -> egui::Response {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            let avail    = ui.available_width();
+            let switch_w = 52.0;
+            let label_w  = (avail - switch_w - 8.0).max(40.0);
+
+            ui.allocate_ui_with_layout(
+                egui::vec2(label_w, LIST_TILE_H),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| { ui.add(egui::Label::new(label).wrap()); },
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.add(MaterialSwitch::new(value).enabled(enabled))
+            }).inner
+        }).inner
+    }
+
+    // ── Public list-tile helpers ──────────────────────────────────────────────
+
     /// Boolean toggle row: label left-aligned (wrapping), `MaterialSwitch` right.
-    /// Returns the Switch `Response` so callers can check `.clicked()`.
+    /// Ends with a consistent 8dp gap. Returns the Switch `Response`.
     pub fn list_tile_switch(
         ui: &mut egui::Ui,
         label: impl Into<egui::WidgetText>,
@@ -153,28 +184,83 @@ impl ConfigEditor {
         enabled: bool,
     ) -> egui::Response {
         ui.vertical(|ui| {
-            let row_resp = ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 8.0;
-                let avail    = ui.available_width();
-                let switch_w = 52.0;
-                let label_w  = (avail - switch_w - 8.0).max(40.0);
+            let resp = Self::switch_row(ui, label, value, enabled);
+            ui.add_space(8.0);
+            resp
+        }).inner
+    }
 
-                ui.allocate_ui_with_layout(
-                    egui::vec2(label_w, LIST_TILE_H),
-                    egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| { ui.add(egui::Label::new(label).wrap()); },
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add(MaterialSwitch::new(value).enabled(enabled))
-                }).inner
-            }).inner;
+    /// Switch row with a **conditional** hint shown only when `enabled` is false.
+    /// Use for capability-dependent settings (e.g. "Unavailable under Wine/Proton").
+    /// Hint appears inside the tile before the trailing gap.
+    pub fn list_tile_switch_with_hint(
+        ui: &mut egui::Ui,
+        label: impl Into<egui::WidgetText>,
+        value: &mut bool,
+        enabled: bool,
+        hint: impl Into<egui::WidgetText>,
+    ) -> egui::Response {
+        ui.vertical(|ui| {
+            let resp = Self::switch_row(ui, label, value, enabled);
+            if !enabled {
+                ui.add_space(2.0);
+                Self::list_tile_hint(ui, hint);
+            }
+            ui.add_space(6.0);
+            resp
+        }).inner
+    }
 
+    /// Switch row with a **permanent** description always shown below it.
+    /// Use for features that need a static explanatory note regardless of state.
+    /// Description appears inside the tile before the trailing gap.
+    pub fn list_tile_switch_described(
+        ui: &mut egui::Ui,
+        label: impl Into<egui::WidgetText>,
+        value: &mut bool,
+        enabled: bool,
+        description: impl Into<egui::WidgetText>,
+    ) -> egui::Response {
+        ui.vertical(|ui| {
+            let resp = Self::switch_row(ui, label, value, enabled);
             ui.add_space(2.0);
-            row_resp
+            Self::list_tile_hint(ui, description);
+            ui.add_space(4.0);
+            resp
+        }).inner
+    }
+
+    /// Switch row with a **permanent danger description** always shown below it.
+    /// Like `list_tile_switch_described` but the description is rendered in the
+    /// `error` color to warn users of a risky or potentially breaking setting.
+    pub fn list_tile_switch_described_danger(
+        ui: &mut egui::Ui,
+        label: impl Into<egui::WidgetText>,
+        value: &mut bool,
+        enabled: bool,
+        description: impl Into<egui::WidgetText>,
+    ) -> egui::Response {
+        ui.vertical(|ui| {
+            let resp = Self::switch_row(ui, label, value, enabled);
+            ui.add_space(2.0);
+            // Render description in error color — shares list_tile_hint's size/wrapping,
+            // but uses the danger palette color instead of onSurfaceVariant.
+            let color = egui_material3::theme::get_global_color("error");
+            let text_str = description.into().text().to_string();
+            ui.scope(|ui| {
+                ui.visuals_mut().override_text_color = None;
+                ui.add(egui::Label::new(
+                    egui::RichText::new(text_str).size(11.5).color(color)
+                ).wrap());
+            });
+            ui.add_space(2.0);
+            ui.add_space(4.0);
+            resp
         }).inner
     }
 
     /// Slider row: label on top, full-width `MaterialSlider` + number field below.
+    /// Ends with a consistent 8dp gap.
     pub fn list_tile_slider(
         ui: &mut egui::Ui,
         label: impl Into<egui::WidgetText>,
@@ -186,7 +272,7 @@ impl ConfigEditor {
         ui.vertical(|ui| {
             ui.add(egui::Label::new(label).wrap());
             let r = slider_with_input(ui, value, range, step, decimals);
-            ui.add_space(4.0);
+            ui.add_space(8.0);
             r
         }).inner
     }
@@ -205,7 +291,7 @@ impl ConfigEditor {
             let avail = ui.available_width();
             ui.data_mut(|d| d.insert_temp(egui::Id::new("grid_control_w"), avail));
             let changed = Gui::run_combo(ui, id_child, value, choices);
-            ui.add_space(4.0);
+            ui.add_space(8.0);
             changed
         }).inner
     }
@@ -220,12 +306,13 @@ impl ConfigEditor {
             ui.add(egui::Label::new(label).wrap());
             ui.set_max_width(ui.available_width());
             let r = ui.add(MaterialTextField::filled(value));
-            ui.add_space(4.0);
+            ui.add_space(8.0);
             r
         }).inner
     }
 
     /// Option-slider row: switch inline (enable/disable), then slider below when on.
+    /// The whole tile — whether expanded or collapsed — ends with a consistent 8dp gap.
     /// Returns the Switch response so callers can detect the toggle event.
     pub fn list_tile_option_slider<Num: egui::emath::Numeric>(
         ui: &mut egui::Ui,
@@ -235,7 +322,8 @@ impl ConfigEditor {
     ) -> egui::Response {
         ui.vertical(|ui| {
             let mut checked = value.is_some();
-            let sw_resp = Self::list_tile_switch(ui, label, &mut checked, true);
+            // Use switch_row (no trailing gap) — the gap belongs at the end of the whole tile.
+            let sw_resp = Self::switch_row(ui, label, &mut checked, true);
 
             if checked && value.is_none() {
                 *value = Some(*range.start());
@@ -249,16 +337,33 @@ impl ConfigEditor {
                 if slider_with_input(ui, &mut val_f, range_f, 1.0, 0).changed() {
                     *num = Num::from_f64(val_f as f64);
                 }
-                ui.add_space(4.0);
             }
 
+            ui.add_space(8.0);
             sw_resp
         }).inner
     }
 
-    /// Button row: label left-aligned (wrapping), filled tonal button right.
+    /// Button row: single full-width filled tonal button.
     /// Returns `true` if the button was clicked.
     pub fn list_tile_button(
+        ui: &mut egui::Ui,
+        label: impl Into<egui::WidgetText>,
+    ) -> bool {
+        ui.vertical(|ui| {
+            let clicked = ui.add(
+                MaterialButton::filled_tonal(label)
+                    .min_size(egui::vec2(ui.available_width(), LIST_TILE_H))
+            ).clicked();
+
+            ui.add_space(2.0);
+            clicked
+        }).inner
+    }
+
+    /// Split action button row: label left-aligned (wrapping), filled tonal button right.
+    /// Returns `true` if the button was clicked.
+    pub fn list_tile_action_button(
         ui: &mut egui::Ui,
         label: impl Into<egui::WidgetText>,
         btn_label: impl Into<egui::WidgetText>,
@@ -285,39 +390,26 @@ impl ConfigEditor {
         }).inner
     }
 
-    /// Danger button row: label left-aligned (wrapping), red filled error button right.
+    /// Danger button row: single full-width error button.
     /// Returns `true` if the button was clicked.
     pub fn list_tile_button_danger(
         ui: &mut egui::Ui,
         label: impl Into<egui::WidgetText>,
-        btn_label: impl Into<egui::WidgetText>,
     ) -> bool {
         ui.vertical(|ui| {
-            let clicked = ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 8.0;
-                let avail   = ui.available_width();
-                let btn_w   = 80.0_f32;
-                let label_w = (avail - btn_w - 8.0).max(40.0);
-
-                ui.allocate_ui_with_layout(
-                    egui::vec2(label_w, LIST_TILE_H),
-                    egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| { ui.add(egui::Label::new(label).wrap()); },
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add(
-                        MaterialButton::filled(btn_label)
-                            .fill(get_global_color("error"))
-                            .text_color(get_global_color("onError"))
-                    ).clicked()
-                }).inner
-            }).inner;
+            let clicked = ui.add(
+                MaterialButton::filled(label)
+                    .fill(get_global_color("error"))
+                    .text_color(get_global_color("onError"))
+                    .min_size(egui::vec2(ui.available_width(), LIST_TILE_H))
+            ).clicked();
 
             ui.add_space(2.0);
             clicked
         }).inner
     }
 
+    /// Info row: label left, value right. Ends with a consistent 8dp gap.
     pub fn list_tile_info(
         ui: &mut egui::Ui,
         label: impl Into<egui::WidgetText>,
@@ -348,7 +440,7 @@ impl ConfigEditor {
                 });
             });
 
-            ui.add_space(2.0);
+            ui.add_space(8.0);
         });
     }
 
@@ -375,7 +467,7 @@ impl ConfigEditor {
         if ui.push_id(id_salt, |ui| ui.add(select)).inner.changed() {
             if let Some(i) = sel { *current = options[i].clone(); }
         }
-        ui.add_space(4.0);
+        ui.add_space(8.0);
     }
 
     /// Number-field row: label on top, full-width `MaterialNumberField` below.
@@ -401,12 +493,14 @@ impl ConfigEditor {
             }
             field
         });
-        ui.add_space(4.0);
+        ui.add_space(8.0);
     }
 
     /// Supporting text row — rendered below a setting like the body text in
-    /// an Android settings app. Indented 16dp, 11sp, `onSurfaceVariant` color.
-    /// Visually subordinate to the preceding setting name.
+    /// an Android settings app. 11.5sp, `onSurfaceVariant` color.
+    /// Used standalone or as a building block inside `list_tile_switch_with_hint`
+    /// / `list_tile_switch_described`. No trailing separator — the containing
+    /// tile method is responsible for the trailing gap.
     pub fn list_tile_hint(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) {
         let color = egui_material3::theme::get_global_color("onSurfaceVariant");
         let text_str = text.into().text().to_string();
@@ -420,74 +514,7 @@ impl ConfigEditor {
                     .color(color)
             ).wrap());
         });
-        ui.add_space(6.0);
+        ui.add_space(2.0);
     }
 
-    // ── Legacy grid helpers (kept for backward compat during migration) ─────────
-
-    /// Grid-mode option renderer used by the landscape layout (legacy path).
-    /// Prefer `list_tile_option_slider` in new code.
-    #[allow(dead_code)]
-    pub fn option_slider<Num: egui::emath::Numeric>(
-        ui: &mut egui::Ui,
-        label: &str,
-        value: &mut Option<Num>,
-        range: RangeInclusive<Num>,
-    ) {
-        Self::list_tile_option_slider(ui, label, value, range);
-    }
-
-    // ── Backward-compat aliases (old stacked_* names → new list_tile_* bodies) ──
-
-    /// Alias for `list_tile_switch`.
-    pub fn stacked_checkbox(
-        ui: &mut egui::Ui,
-        label: impl Into<egui::WidgetText>,
-        value: &mut bool,
-        enabled: bool,
-    ) -> egui::Response {
-        Self::list_tile_switch(ui, label, value, enabled)
-    }
-
-    /// Alias for `list_tile_slider`.
-    pub fn stacked_slider(
-        ui: &mut egui::Ui,
-        label: impl Into<egui::WidgetText>,
-        value: &mut f32,
-        range: std::ops::RangeInclusive<f32>,
-        step: f64,
-        decimals: usize,
-    ) -> egui::Response {
-        Self::list_tile_slider(ui, label, value, range, step, decimals)
-    }
-
-    /// Alias for `list_tile_combo`.
-    pub fn stacked_combo<T: PartialEq + Copy>(
-        ui: &mut egui::Ui,
-        label: impl Into<egui::WidgetText>,
-        id_child: impl std::hash::Hash,
-        value: &mut T,
-        choices: &[(T, &str)],
-    ) -> bool {
-        Self::list_tile_combo(ui, label, id_child, value, choices)
-    }
-
-    /// Alias for `list_tile_text_field`.
-    pub fn stacked_text_field(
-        ui: &mut egui::Ui,
-        label: impl Into<egui::WidgetText>,
-        value: &mut String,
-    ) -> egui::Response {
-        Self::list_tile_text_field(ui, label, value)
-    }
-
-    /// Alias for `list_tile_option_slider`.
-    pub fn stacked_option_slider<Num: egui::emath::Numeric>(
-        ui: &mut egui::Ui,
-        label: &str,
-        value: &mut Option<Num>,
-        range: RangeInclusive<Num>,
-    ) {
-        Self::list_tile_option_slider(ui, label, value, range);
-    }
 }

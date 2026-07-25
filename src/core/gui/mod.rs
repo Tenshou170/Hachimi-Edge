@@ -323,13 +323,13 @@ impl Gui {
             #[cfg(target_os = "windows")]
             { Hachimi::instance().config.load().windows.enable_gui_landscape_ratio }
             #[cfg(target_os = "android")]
-            { false }
+            { Hachimi::instance().config.load().android.enable_gui_landscape_ratio }
         };
         let gui_landscape_ratio = {
             #[cfg(target_os = "windows")]
             { Hachimi::instance().config.load().windows.gui_landscape_ratio }
             #[cfg(target_os = "android")]
-            { 1.0f32 }
+            { Hachimi::instance().config.load().android.gui_landscape_ratio }
         };
 
         let pixels_per_point = compute_pixels_per_point(
@@ -569,42 +569,91 @@ impl Gui {
 
             IS_LIVE_SLIDER_ACTIVE.store(true, atomic::Ordering::Release);
             let scale = get_scale(ctx);
+
+            let curr_m = (current / 60.0).floor() as i32;
+            let curr_s = (current % 60.0).floor() as i32;
+            let tot_m  = (total  / 60.0).floor() as i32;
+            let tot_s  = (total  % 60.0).floor() as i32;
+
+            let surface_container = get_global_color("surfaceContainer");
+            let on_surface_variant = get_global_color("onSurfaceVariant");
+            let cr = egui_material3::theme::get_global_corner_radius()
+                .unwrap_or(8.0)
+                .max(8.0) as u8;
+
+            // Apply surface_alpha for Overlay and Full modes.
+            let hachimi_cfg = crate::core::Hachimi::instance().config.load();
+            let fill = match hachimi_cfg.ui_translucency_mode {
+                hachimi::UiTranslucencyMode::None => surface_container,
+                hachimi::UiTranslucencyMode::Overlay | hachimi::UiTranslucencyMode::Full => {
+                    let a = hachimi_cfg.ui_surface_alpha;
+                    egui::Color32::from_rgba_unmultiplied(
+                        surface_container.r(),
+                        surface_container.g(),
+                        surface_container.b(),
+                        a,
+                    )
+                }
+            };
+
             egui::Area::new(egui::Id::new("live_slider_area"))
-                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -40.0 * scale))
+                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -32.0 * scale))
+                .order(egui::Order::Foreground)
                 .show(ctx, |ui| {
-                    egui::Frame::window(&ctx.style())
-                        .fill(egui::Color32::from_black_alpha(150))
+                    egui::Frame::NONE
+                        .fill(fill)
+                        .corner_radius(egui::CornerRadius::same(cr))
+                        .shadow(egui::Shadow {
+                            blur:   (8.0 * scale) as u8,
+                            spread: 0,
+                            offset: [0, (2.0 * scale) as i8],
+                            color:  egui::Color32::from_black_alpha(40),
+                        })
                         .inner_margin(egui::Margin::symmetric(
                             (16.0 * scale) as i8,
-                            (8.0 * scale) as i8,
+                            (10.0 * scale) as i8,
                         ))
-                        .corner_radius(10.0 * scale)
                         .show(ui, |ui| {
-                            ui.set_width(ctx.content_rect().width() * 0.7);
+                            // 80 % of the viewport, consistent with wider MD3 content areas.
+                            ui.set_width(ctx.content_rect().width() * 0.80);
+
+                            // ── Slider ────────────────────────────────────────────
+                            let slider_w = ui.available_width();
+                            ui.scope(|ui| {
+                                ui.spacing_mut().slider_width = slider_w;
+                                let res = ui.add(
+                                    MaterialSlider::new(&mut current, 0.0..=total)
+                                        .show_value(false)
+                                        .show_value_indicator(true)
+                                        .width(slider_w),
+                                );
+                                if res.changed() {
+                                    crate::core::live_utils::move_live_playback(current);
+                                }
+                            });
+
+                            // ── Time labels row: current left, total right ────────
+                            ui.add_space(2.0 * scale);
+                            let time_font = egui::FontId::new(
+                                11.5 * scale,
+                                egui::FontFamily::Proportional,
+                            );
                             ui.horizontal(|ui| {
-                                let curr_m = (current / 60.0).floor() as i32;
-                                let curr_s = (current % 60.0).floor() as i32;
-                                let tot_m = (total / 60.0).floor() as i32;
-                                let tot_s = (total % 60.0).floor() as i32;
-                                ui.label(format!(
-                                    "{:02}:{:02} / {:02}:{:02}",
-                                    curr_m, curr_s, tot_m, tot_s
+                                ui.add(egui::Label::new(
+                                    egui::RichText::new(format!("{:02}:{:02}", curr_m, curr_s))
+                                        .font(time_font.clone())
+                                        .color(on_surface_variant),
                                 ));
-
-                                let available_w = ui.available_width();
-
-                                ui.scope(|ui| {
-                                    ui.spacing_mut().slider_width = available_w - (16.0 * scale);
-
-                                    let res = ui.add(
-                                        MaterialSlider::new(&mut current, 0.0..=total)
-                                            .show_value(false),
-                                    );
-
-                                    if res.changed() {
-                                        crate::core::live_utils::move_live_playback(current);
-                                    }
-                                });
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        ui.add(egui::Label::new(
+                                            egui::RichText::new(format!("{:02}:{:02}", tot_m, tot_s))
+                                                .font(time_font)
+                                                .color(on_surface_variant),
+                                        ));
+                                    },
+                                );
                             });
                         });
                 });
@@ -844,37 +893,73 @@ impl Gui {
         egui::Area::new(id)
             .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, current_y))
             .constrain(false)
+            .interactable(false)
             .show(ctx, |ui| {
-                let screen_w = ctx.content_rect().width();
-                let card_width = screen_w * 0.80;
+                let card_width = 320.0 * scale; // Locked size so it doesn't stretch in landscape
+                let rounding = Hachimi::instance().config.load().ui_window_rounding;
+                let corner_radius = rounding * scale;
 
+                // Tighter, cleaner version of the old layout:
+                // - Corner radius: linked to ui_window_rounding
+                // - Padding: 16dp horizontal, 10dp vertical
+                // - Shadow: Elevation level 2 (8dp blur, 2dp offset)
+                let splash_base = get_global_color("surfaceContainerHigh");
+                let splash_fill = {
+                    let cfg = Hachimi::instance().config.load();
+                    match cfg.ui_translucency_mode {
+                        hachimi::UiTranslucencyMode::None => splash_base,
+                        hachimi::UiTranslucencyMode::Overlay | hachimi::UiTranslucencyMode::Full => {
+                            egui::Color32::from_rgba_unmultiplied(
+                                splash_base.r(), splash_base.g(), splash_base.b(),
+                                cfg.ui_surface_alpha,
+                            )
+                        }
+                    }
+                };
                 egui::Frame::NONE
-                    .fill(get_global_color("surfaceContainerHigh"))
-                    .corner_radius(12.0 * scale)
+                    .fill(splash_fill)
+                    .corner_radius(corner_radius)
                     .shadow(egui::Shadow {
                         spread: 0,
                         blur: (8.0 * scale) as u8,
                         offset: [0, (2.0 * scale) as i8],
-                        color: egui::Color32::from_black_alpha(40),
+                        color: egui::Color32::from_black_alpha(35),
                     })
-                    .inner_margin(egui::Margin::same((16.0 * scale) as i8))
+                    .inner_margin(egui::Margin::symmetric(
+                        (16.0 * scale) as i8,
+                        (10.0 * scale) as i8,
+                    ))
                     .show(ui, |ui| {
                         ui.set_width(card_width);
-                        ui.horizontal(|ui| {
-                            ui.add(Self::icon(ctx));
-                            ui.heading("Hachimi");
-                            ui.label(
-                                egui::RichText::new(env!("HACHIMI_DISPLAY_VERSION"))
+                        ui.vertical(|ui| {
+                            ui.spacing_mut().item_spacing.y = 4.0 * scale;
+                            
+                            // Row 1: Icon, Heading, Version (inline horizontal flow)
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 8.0 * scale;
+                                ui.add(Self::icon(ctx));
+                                ui.add(egui::Label::new(
+                                    egui::RichText::new("Hachimi")
+                                        .size(15.0 * scale)
+                                        .strong()
+                                        .color(get_global_color("onSurface")),
+                                ));
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    ui.add(egui::Label::new(
+                                        egui::RichText::new(env!("HACHIMI_DISPLAY_VERSION"))
+                                            .color(get_global_color("onSurfaceVariant"))
+                                            .size(11.0 * scale),
+                                    ));
+                                });
+                            });
+
+                            // Row 2: Status text
+                            ui.add(egui::Label::new(
+                                egui::RichText::new(&self.splash_sub_str)
                                     .color(get_global_color("onSurfaceVariant"))
                                     .size(12.0 * scale),
-                            );
+                            ).wrap());
                         });
-                        ui.add_space(4.0 * scale);
-                        ui.label(
-                            egui::RichText::new(&self.splash_sub_str)
-                                .color(get_global_color("onSurfaceVariant"))
-                                .size(13.0 * scale),
-                        );
                     });
             });
     }
@@ -910,45 +995,42 @@ impl Gui {
                     .default_width((200.0 * scale).min(screen_w * 0.70))
                     .show_animated(ctx, self.show_menu, |ui| {
                         ui.with_layout(egui::Layout::top_down_justified(egui::Align::TOP), |ui| {
-                            #[cfg(target_os = "windows")]
-                            {
-                                ui.horizontal(|ui| {
-                                    ui.add(Self::icon(ctx));
-                                    ui.heading(t!("hachimi"));
-                                    if ui.add(MaterialButton::text(" \u{e887} ")).clicked() {
-                                        show_window = Some(Box::new(AboutWindow::new()));
-                                    }
+                            // Modernized Sidebar Header Area
+                            ui.spacing_mut().item_spacing.y = 6.0 * scale;
+
+                            // Header: branding row
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 10.0 * scale;
+                                ui.add(Self::icon_2x(ctx));
+                                ui.vertical(|ui| {
+                                    ui.spacing_mut().item_spacing.y = 1.0 * scale;
+                                    ui.add(egui::Label::new(
+                                        egui::RichText::new("Hachimi Edge")
+                                            .size(16.0 * scale)
+                                            .strong()
+                                            .color(get_global_color("onSurface")),
+                                    ));
+                                    ui.add(egui::Label::new(
+                                        egui::RichText::new(env!("HACHIMI_DISPLAY_VERSION"))
+                                            .color(get_global_color("onSurfaceVariant"))
+                                            .size(11.0 * scale),
+                                    ));
                                 });
-                                ui.label(env!("HACHIMI_DISPLAY_VERSION"));
-                                if ui
-                                    .add(MaterialButton::text(t!("menu.close_menu")))
-                                    .clicked()
-                                {
+                            });
+
+                            // Header: action buttons row (right-aligned)
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                                if ui.add(MaterialButton::text(" \u{e5cd} ")).on_hover_text(t!("menu.close_menu")).clicked() {
                                     self.show_menu = false;
                                     self.menu_anim_time = None;
                                 }
-                            }
-                            // did this because android phones have a notch
-                            #[cfg(target_os = "android")]
-                            {
-                                ui.horizontal(|ui| {
-                                    ui.add(Self::icon(ctx));
-                                    ui.heading(t!("hachimi"));
-                                });
-                                ui.label(env!("HACHIMI_DISPLAY_VERSION"));
-                                ui.horizontal(|ui| {
-                                    if ui
-                                        .add(MaterialButton::text(t!("menu.close_menu")))
-                                        .clicked()
-                                    {
-                                        self.show_menu = false;
-                                        self.menu_anim_time = None;
-                                    }
-                                    if ui.add(MaterialButton::text(" \u{e887} ")).clicked() {
-                                        show_window = Some(Box::new(AboutWindow::new()));
-                                    }
-                                });
-                            }
+                                if ui.add(MaterialButton::text(" \u{e887} ")).clicked() {
+                                    show_window = Some(Box::new(AboutWindow::new()));
+                                }
+                            });
+
+                            ui.add_space(6.0 * scale);
+
                             if ui
                                 .add(MaterialButton::filled(t!("menu.check_for_updates")))
                                 .clicked()
@@ -958,52 +1040,61 @@ impl Gui {
                                     .clone()
                                     .check_for_updates(|_| {});
                             }
-                            ui.separator();
+                            
+                            ui.add_space(8.0 * scale);
+
                             egui::ScrollArea::vertical().show(ui, |ui| {
                                 ui.set_width(ui.available_width());
 
                                 let render_heading = |ui: &mut egui::Ui, text: &str| {
-                                    egui::Frame::NONE
-                                        .inner_margin(egui::Margin::symmetric(
-                                            (LIST_TILE_PAD_H * scale) as i8,
-                                            (8.0 * scale) as i8,
-                                        ))
-                                        .show(ui, |ui| {
-                                            ui.heading(text);
-                                        });
+                                    ui.add_space(12.0 * scale); // Top gap before heading
+                                    ui.add(egui::Label::new(
+                                        egui::RichText::new(text)
+                                            .color(get_global_color("primary"))
+                                            .size(13.0 * scale)
+                                            .strong(),
+                                    ));
+                                    ui.add_space(6.0 * scale); // Bottom gap after heading
                                 };
 
                                 // 1. Stats Section
                                 render_heading(ui, &t!("menu.stats_heading"));
                                 egui::Frame::NONE
                                     .inner_margin(egui::Margin::symmetric(
-                                        (LIST_TILE_PAD_H * scale) as i8,
-                                        (4.0 * scale) as i8,
+                                        0,
+                                        (2.0 * scale) as i8,
                                     ))
                                     .show(ui, |ui| {
-                                        ui.label(&self.fps_text);
-                                        ui.label(t!("menu.localize_dict_entries", count = localize_dict_count));
-                                        ui.label(t!("menu.hashed_dict_entries", count = hashed_dict_count));
+                                        ui.spacing_mut().item_spacing.y = 4.0 * scale;
+                                        ui.add(egui::Label::new(
+                                            egui::RichText::new(&self.fps_text)
+                                                .color(get_global_color("onSurfaceVariant"))
+                                                .size(12.0 * scale),
+                                        ));
+                                        ui.add(egui::Label::new(
+                                            egui::RichText::new(t!("menu.localize_dict_entries", count = localize_dict_count))
+                                                .color(get_global_color("onSurfaceVariant"))
+                                                .size(12.0 * scale),
+                                        ));
+                                        ui.add(egui::Label::new(
+                                            egui::RichText::new(t!("menu.hashed_dict_entries", count = hashed_dict_count))
+                                                .color(get_global_color("onSurfaceVariant"))
+                                                .size(12.0 * scale),
+                                        ));
                                     });
-                                ui.add_space(4.0 * scale);
-                                ui.separator();
-                                ui.add_space(4.0 * scale);
 
                                 // 2. Config Section
                                 render_heading(ui, &t!("menu.config_heading"));
-                                if ConfigEditor::list_tile_button(ui, t!("menu.open_config_editor"), t!("open")) {
+                                if ConfigEditor::list_tile_button(ui, t!("menu.open_config_editor")) {
                                     show_window = Some(Box::new(ConfigEditor::new()));
                                 }
-                                if ConfigEditor::list_tile_button(ui, t!("menu.reload_config"), t!("reload")) {
+                                if ConfigEditor::list_tile_button(ui, t!("menu.reload_config")) {
                                     hachimi.reload_config();
                                     show_notification = Some(t!("notification.config_reloaded"));
                                 }
-                                if ConfigEditor::list_tile_button(ui, t!("menu.open_first_time_setup"), t!("open")) {
+                                if ConfigEditor::list_tile_button(ui, t!("menu.open_first_time_setup")) {
                                     show_window = Some(Box::new(FirstTimeSetupWindow::new()));
                                 }
-                                ui.add_space(4.0 * scale);
-                                ui.separator();
-                                ui.add_space(4.0 * scale);
 
                                 // 3. Graphics Section
                                 render_heading(ui, &t!("menu.graphics_heading"));
@@ -1118,32 +1209,30 @@ impl Gui {
                                         }
                                     }
                                 }
-                                ui.add_space(4.0 * scale);
-                                ui.separator();
-                                ui.add_space(4.0 * scale);
+                                ui.add_space(8.0 * scale);
 
                                 // 4. Translation Section
                                 render_heading(ui, &t!("menu.translation_heading"));
-                                if ConfigEditor::list_tile_button(ui, t!("menu.reload_localized_data"), t!("reload")) {
+                                if ConfigEditor::list_tile_button(ui, t!("menu.reload_localized_data")) {
                                     hachimi.load_localized_data();
                                     show_notification = Some(t!("notification.localized_data_reloaded"));
                                 }
-                                if ConfigEditor::list_tile_button(ui, t!("menu.tl_check_for_updates"), t!("check")) {
+                                if ConfigEditor::list_tile_button(ui, t!("menu.tl_check_for_updates")) {
                                     hachimi.tl_updater.skip_update(None);
                                     hachimi.tl_updater.clone().check_for_updates(false, false);
                                 }
-                                if ConfigEditor::list_tile_button(ui, t!("menu.tl_check_for_updates_pedantic"), t!("check")) {
+                                if ConfigEditor::list_tile_button(ui, t!("menu.tl_check_for_updates_pedantic")) {
                                     hachimi.tl_updater.skip_update(None);
                                     hachimi.tl_updater.clone().check_for_updates(true, false);
                                 }
                                 if hachimi.config.load().translation_repo_index_mod.is_some() {
-                                    if ConfigEditor::list_tile_button(ui, t!("menu.tl_check_for_addon_updates_pedantic"), t!("check")) {
+                                    if ConfigEditor::list_tile_button(ui, t!("menu.tl_check_for_addon_updates_pedantic")) {
                                         hachimi.tl_updater.skip_update(None);
                                         hachimi.tl_updater.clone().check_for_mod_updates_only(true, false);
                                     }
                                 }
                                 if hachimi.config.load().translator_mode {
-                                    if ConfigEditor::list_tile_button(ui, t!("menu.dump_localize_dict"), t!("dump")) {
+                                    if ConfigEditor::list_tile_button(ui, t!("menu.dump_localize_dict")) {
                                         Thread::main_thread().schedule(|| {
                                             let data = Localize::dump_strings();
                                             let dict_path = Hachimi::instance().get_data_path("localize_dump.json");
@@ -1156,9 +1245,7 @@ impl Gui {
                                         })
                                     }
                                 }
-                                ui.add_space(4.0 * scale);
-                                ui.separator();
-                                ui.add_space(4.0 * scale);
+                                ui.add_space(8.0 * scale);
 
                                 // 5. Plugins Section
                                 let plugin_items = get_plugin_menu_items();
@@ -1166,18 +1253,43 @@ impl Gui {
                                     render_heading(ui, "Plugins");
                                     for item in plugin_items {
                                         let icon = get_plugin_menu_icon(&item.label);
+                                        // Build label text: prepend icon image as a richtext
+                                        // inline prefix isn't supported cleanly, so we keep the
+                                        // icon as a leading image but size it to the button's
+                                        // text line height and float it inside a full-width row.
                                         let clicked = if let Some(icon) = icon {
-                                            let size = 18.0 * scale;
-                                            ui.horizontal(|ui| {
-                                                ui.add(
-                                                    egui::Image::new((icon.uri, icon.bytes))
-                                                        .fit_to_exact_size(egui::Vec2::splat(size)),
-                                                );
-                                                ConfigEditor::list_tile_button(ui, &item.label, t!("open"))
-                                            })
-                                            .inner
+                                            // Full-width row: fixed icon on the left, button
+                                            // fills the remaining width. Compute btn_avail
+                                            // from available_width() at this point (before any
+                                            // horizontal layout consumes space).
+                                            let icon_size = 16.0 * scale;
+                                            let gap = 6.0 * scale;
+                                            let btn_w = (ui.available_width() - icon_size - gap).max(0.0);
+                                            ui.vertical(|ui| {
+                                                let clicked = ui.horizontal(|ui| {
+                                                    ui.spacing_mut().item_spacing.x = gap;
+                                                    // Allocate icon at exact size so it doesn't
+                                                    // consume extra space.
+                                                    ui.allocate_ui_with_layout(
+                                                        egui::Vec2::splat(icon_size),
+                                                        egui::Layout::centered_and_justified(egui::Direction::TopDown),
+                                                        |ui| {
+                                                            ui.add(
+                                                                egui::Image::new((icon.uri, icon.bytes))
+                                                                    .fit_to_exact_size(egui::Vec2::splat(icon_size)),
+                                                            );
+                                                        },
+                                                    );
+                                                    ui.add(
+                                                        MaterialButton::filled_tonal(&item.label)
+                                                            .min_size(egui::vec2(btn_w, LIST_TILE_H * scale)),
+                                                    ).clicked()
+                                                }).inner;
+                                                ui.add_space(2.0 * scale);
+                                                clicked
+                                            }).inner
                                         } else {
-                                            ConfigEditor::list_tile_button(ui, &item.label, t!("open"))
+                                            ConfigEditor::list_tile_button(ui, &item.label)
                                         };
                                         if clicked {
                                             if let Some(callback) = item.callback {
@@ -1190,26 +1302,39 @@ impl Gui {
                                             }
                                         }
                                     }
-                                    ui.add_space(4.0 * scale);
-                                    ui.separator();
-                                    ui.add_space(4.0 * scale);
+                                    ui.add_space(8.0 * scale);
                                 }
 
                                 let plugin_sections = get_plugin_menu_sections();
                                 if !plugin_sections.is_empty() {
                                     for section in plugin_sections {
                                         if let Some(title) = section.title.clone() {
+                                            // Use render_heading rhythm (12dp top, 6dp bottom,
+                                            // primary color, 13sp bold) — same as all other sections.
+                                            // Icon, when present, sits inline to the left of the text.
                                             let icon = section.icon.clone();
-                                            let size = 18.0 * scale;
+                                            ui.add_space(12.0 * scale);
                                             ui.horizontal(|ui| {
+                                                ui.spacing_mut().item_spacing.x = 6.0 * scale;
                                                 if let Some(icon) = icon {
                                                     ui.add(
                                                         egui::Image::new((icon.uri, icon.bytes))
-                                                            .fit_to_exact_size(egui::Vec2::splat(size)),
+                                                            .fit_to_exact_size(egui::Vec2::splat(13.0 * scale)),
                                                     );
                                                 }
-                                                ui.heading(title);
+                                                ui.add(egui::Label::new(
+                                                    egui::RichText::new(title)
+                                                        .color(get_global_color("primary"))
+                                                        .family(egui::FontFamily::Proportional)
+                                                        .size(13.0 * scale)
+                                                        .strong(),
+                                                ));
                                             });
+                                            ui.add_space(6.0 * scale);
+                                        } else {
+                                            // Anonymous section (no title) — still needs a top
+                                            // gap to separate it from the previous section/items.
+                                            ui.add_space(12.0 * scale);
                                         }
                                         let _ = panic::catch_unwind(AssertUnwindSafe(|| {
                                             (section.callback)(
@@ -1220,28 +1345,51 @@ impl Gui {
                                         .inspect_err(|_| {
                                             error!("plugin menu section callback panicked");
                                         });
+                                        // Consistent 8dp gap after each section's content,
+                                        // matching the built-in sections' trailing rhythm.
+                                        ui.add_space(8.0 * scale);
                                     }
-                                    ui.add_space(4.0 * scale);
-                                    ui.separator();
-                                    ui.add_space(4.0 * scale);
                                 }
 
                                 // 6. Danger Zone Section
-                                render_heading(ui, &t!("menu.danger_zone_heading"));
+                                ui.add_space(12.0 * scale);
+                                ui.add(egui::Label::new(
+                                    egui::RichText::new(t!("menu.danger_zone_heading"))
+                                        .color(get_global_color("error"))
+                                        .family(egui::FontFamily::Proportional)
+                                        .size(13.0 * scale)
+                                        .strong(),
+                                ));
+                                ui.add_space(4.0 * scale);
+                                let dz_corner_radius = ui.visuals().window_corner_radius;
                                 egui::Frame::NONE
+                                    .fill(get_global_color("errorContainer"))
+                                    .corner_radius(dz_corner_radius)
                                     .inner_margin(egui::Margin::symmetric(
-                                        (LIST_TILE_PAD_H * scale) as i8,
-                                        (4.0 * scale) as i8,
+                                        (10.0 * scale) as i8,
+                                        (6.0 * scale) as i8,
                                     ))
                                     .show(ui, |ui| {
-                                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-                                        let layout = egui::Layout::left_to_right(egui::Align::Min)
-                                            .with_cross_justify(false);
-                                        ui.with_layout(layout, |ui| {
-                                            ui.label(t!("menu.danger_zone_warning"));
-                                        });
+                                        ui.set_width(ui.available_width());
+                                        // Reset to non-justified layout — the parent
+                                        // top_down_justified layout would otherwise
+                                        // stretch inter-character spacing to fill width.
+                                        ui.style_mut().override_text_style = None;
+                                        ui.with_layout(
+                                            egui::Layout::top_down(egui::Align::Min),
+                                            |ui| {
+                                                ui.add(egui::Label::new(
+                                                    egui::RichText::new(t!("menu.danger_zone_warning"))
+                                                        .color(get_global_color("onErrorContainer"))
+                                                        .family(egui::FontFamily::Proportional)
+                                                        .size(11.5 * scale),
+                                                ).wrap());
+                                            },
+                                        );
                                     });
-                                if ConfigEditor::list_tile_button_danger(ui, t!("menu.soft_restart"), t!("restart")) {
+                                ui.add_space(6.0 * scale);
+
+                                if ConfigEditor::list_tile_button_danger(ui, t!("menu.soft_restart")) {
                                     show_window = Some(Box::new(SimpleYesNoDialog::new(
                                         &t!("confirm_dialog_title"),
                                         &t!("soft_restart_confirm_content"),
@@ -1256,7 +1404,7 @@ impl Gui {
                                     )));
                                 }
                                 #[cfg(not(target_os = "windows"))]
-                                if ConfigEditor::list_tile_button_danger(ui, t!("menu.open_in_game_browser"), t!("open")) {
+                                if ConfigEditor::list_tile_button_danger(ui, t!("menu.open_in_game_browser")) {
                                     show_window = Some(Box::new(SimpleYesNoDialog::new(
                                         &t!("confirm_dialog_title"),
                                         &t!("in_game_browser_confirm_content"),
@@ -1276,10 +1424,9 @@ impl Gui {
                                         },
                                     )));
                                 }
-                                if ConfigEditor::list_tile_button(ui, t!("menu.toggle_game_ui"), t!("toggle")) {
+                                if ConfigEditor::list_tile_button(ui, t!("menu.toggle_game_ui")) {
                                     Thread::main_thread().schedule(Self::toggle_game_ui);
                                 }
-
                             });
                         });
                     });
@@ -1407,7 +1554,7 @@ impl Gui {
     ) -> bool {
         let mut changed = false;
         let scale = get_scale(ui.ctx());
-        let row_height = 24.0 * scale;
+        let row_height = 28.0 * scale;
         let padding = ui.spacing().button_padding;
 
         let button_id = ui.make_persistent_id(id_salt);
@@ -1419,15 +1566,7 @@ impl Gui {
             .map(|(_, s)| *s)
             .unwrap_or("Unknown");
 
-        let font_id = egui::TextStyle::Button.resolve(ui.style());
-        let galley = ui.painter().layout_no_wrap(
-            selected_text.to_owned(),
-            font_id,
-            ui.visuals().text_color(),
-        );
-
-        let icon_size = 12.0 * scale;
-        let desired_width = galley.size().x + icon_size + padding.x * 2.0 + 8.0 * scale;
+        let desired_width = ui.available_width();
         let min_width = 145.0 * scale;
         let popup_width = desired_width.max(min_width);
 
@@ -1437,38 +1576,62 @@ impl Gui {
 
         if ui.is_rect_visible(rect) {
             let is_open = egui::Popup::is_id_open(ui.ctx(), popup_id);
-            let visuals = if is_open {
-                &ui.visuals().widgets.open
+            let is_hovered = button_res.hovered();
+
+            // Material Design colors
+            let primary_color = get_global_color("primary");
+            let surface = get_global_color("surface");
+            let outline = get_global_color("outline");
+            let on_surface = get_global_color("onSurface");
+            let on_surface_variant = get_global_color("onSurfaceVariant");
+
+            let (bg_color, border_color, text_color) = if is_hovered || is_open {
+                (surface, primary_color, on_surface)
             } else {
-                ui.style().interact(&button_res)
+                (surface, outline, on_surface_variant)
             };
 
-            ui.painter().rect(
-                rect.expand(visuals.expansion),
-                visuals.corner_radius,
-                visuals.weak_bg_fill,
-                visuals.bg_stroke,
-                egui::epaint::StrokeKind::Inside,
+            let border_stroke = egui::Stroke::new(
+                if is_hovered || is_open { 2.0 } else { 1.0 },
+                border_color,
             );
+
+            // Draw background and outline (using corner radius 4.0 matching MaterialSelect)
+            ui.painter().rect_filled(rect, 4.0, bg_color);
+            ui.painter().rect_stroke(rect, 4.0, border_stroke, egui::epaint::StrokeKind::Outside);
 
             let icon_size = 12.0 * scale;
             let icon_rect = egui::Rect::from_center_size(
                 egui::pos2(rect.right() - padding.x - icon_size / 2.0, rect.center().y),
                 egui::vec2(icon_size, icon_size),
             );
-            Self::down_triangle_icon(ui.painter(), icon_rect, visuals);
+            
+            let dummy_visuals = egui::style::WidgetVisuals {
+                fg_stroke: egui::Stroke::new(1.0, text_color),
+                ..ui.visuals().widgets.noninteractive.clone()
+            };
+            Self::down_triangle_icon(ui.painter(), icon_rect, &dummy_visuals);
 
-            let galley = ui.painter().layout_no_wrap(
+            let icon_w = icon_size + padding.x + 4.0 * scale;
+            let text_max_w = (rect.width() - padding.x - icon_w).max(0.0);
+            let mut job = egui::text::LayoutJob::simple_singleline(
                 selected_text.to_owned(),
                 egui::TextStyle::Button.resolve(ui.style()),
-                visuals.text_color(),
+                text_color,
             );
+            job.wrap = egui::text::TextWrapping {
+                max_width: text_max_w,
+                max_rows: 1,
+                break_anywhere: false,
+                overflow_character: Some('…'),
+            };
+            let galley = ui.painter().layout_job(job);
 
             let text_pos = egui::pos2(
                 rect.left() + padding.x,
                 rect.center().y - galley.size().y / 2.0,
             );
-            ui.painter().galley(text_pos, galley, visuals.text_color());
+            ui.painter().galley(text_pos, galley, text_color);
         }
 
         let close_behavior = {
@@ -1497,18 +1660,25 @@ impl Gui {
                 ui.set_width(popup_width);
                 ui.set_max_width(popup_width);
 
-                ui.horizontal(|ui| {
-                    egui::ScrollArea::neither().show(ui, |ui| {
-                        let _res = ui.add_sized(
-                                [ui.available_width() - 30.0 * scale, row_height],
-                                MaterialTextField::filled(search_term).hint_text(t!("search_filter")),
-                            );
-                    });
+                egui::Frame::NONE
+                    .inner_margin(egui::Margin::symmetric(8 as i8, 4 as i8))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 4.0 * scale;
+                            let avail_w = ui.available_width();
+                            let clear_btn_w = 32.0 * scale;
+                            let field_w = (avail_w - clear_btn_w - 4.0 * scale).max(50.0);
 
-                    if ui.add(MaterialButton::text("X").small()).clicked() {
-                        search_term.clear();
-                    }
-                });
+                            ui.add_sized(
+                                [field_w, 28.0 * scale],
+                                MaterialTextField::outlined(search_term).hint_text(t!("search_filter")),
+                            );
+
+                            if ui.add(MaterialButton::text("\u{e5cd}").small()).clicked() {
+                                search_term.clear();
+                            }
+                        });
+                    });
 
                 ui.separator();
 
@@ -1519,26 +1689,74 @@ impl Gui {
                     .show(ui, |ui| {
                         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
 
-                        ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
-                            for (choice_val, label) in choices {
-                                if !search_term.is_empty()
-                                    && !label.to_lowercase().contains(&search_term.to_lowercase())
-                                {
-                                    continue;
-                                }
+                        let secondary_container = get_global_color("secondaryContainer");
+                        let on_secondary_container = get_global_color("onSecondaryContainer");
+                        let on_surface = get_global_color("onSurface");
 
-                                let is_selected = value == choice_val;
-                                if ui
-                                    .add(MaterialButton::filled_tonal(*label).selected(is_selected))
-                                    .clicked()
-                                {
-                                    *value = *choice_val;
-                                    changed = true;
-                                    egui::Popup::close_id(ui.ctx(), popup_id);
-                                    search_term.clear();
-                                }
+                        for (choice_val, label) in choices {
+                            if !search_term.is_empty()
+                                && !label.to_lowercase().contains(&search_term.to_lowercase())
+                            {
+                                continue;
                             }
-                        });
+
+                            let is_selected = value == choice_val;
+                            let text_color = if is_selected {
+                                on_secondary_container
+                            } else {
+                                on_surface
+                            };
+
+                            let font_id = egui::TextStyle::Button.resolve(ui.style());
+                            let item_text_w = (ui.available_width() - 16.0 * scale).max(0.0);
+                            let galley = ui.painter().layout(
+                                (*label).to_string(),
+                                font_id,
+                                text_color,
+                                item_text_w,
+                            );
+
+                            let text_height = galley.size().y;
+                            let option_height = (text_height + 8.0 * scale).max(36.0 * scale);
+                            let option_rect = egui::Rect::from_min_size(
+                                egui::pos2(ui.max_rect().min.x, ui.cursor().min.y),
+                                egui::vec2(ui.max_rect().width(), option_height),
+                            );
+
+                            let option_response = ui.interact(
+                                option_rect,
+                                egui::Id::new(("vocals_option", *label)),
+                                egui::Sense::click(),
+                            );
+
+                            let bg_color = if is_selected {
+                                secondary_container
+                            } else if option_response.hovered() {
+                                on_surface.linear_multiply(0.08)
+                            } else {
+                                egui::Color32::TRANSPARENT
+                            };
+
+                            if bg_color != egui::Color32::TRANSPARENT {
+                                ui.painter().rect_filled(option_rect, 0.0, bg_color);
+                            }
+
+                            let text_pos = egui::pos2(
+                                option_rect.min.x + 16.0 * scale,
+                                option_rect.center().y - galley.size().y / 2.0,
+                            );
+                            ui.painter().galley(text_pos, galley, text_color);
+
+                            // Advance cursor
+                            ui.advance_cursor_after_rect(option_rect);
+
+                            if option_response.clicked() {
+                                *value = *choice_val;
+                                changed = true;
+                                egui::Popup::close_id(ui.ctx(), popup_id);
+                                search_term.clear();
+                            }
+                        }
                     });
             });
 
@@ -1582,15 +1800,17 @@ impl Gui {
 
         let ratio = progress.current as f32 / progress.total as f32;
 
-        // Center-top card, 80% screen width, MD3 styled
+        // Center-top card, 85% screen width (max 360dp), MD3 styled
         egui::Area::new("update_progress".into())
             .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 8.0 * scale))
             .constrain(false)
+            .interactable(false)
             .show(ctx, |ui| {
-                let screen_w = ctx.content_rect().width();
-                let card_width = screen_w * 0.80;
+                let card_width = 320.0 * scale; // Locked size so it doesn't stretch in landscape
+                let rounding = Hachimi::instance().config.load().ui_window_rounding;
+                let corner_radius = rounding * scale;
                 let pad_h = 16.0 * scale;
-                let pad_v = 10.0 * scale;
+                let pad_v = 10.0 * scale; // Align with splash card
                 let is_downloading = Hachimi::instance().tl_updater.is_downloading();
                 let title = if is_mod {
                     t!("tl_updater.title_mod")
@@ -1599,15 +1819,28 @@ impl Gui {
                 } else {
                     t!("tl_updater.checking")
                 };
+                let progress_base = get_global_color("surfaceContainerHigh");
+                let progress_fill = {
+                    let cfg = Hachimi::instance().config.load();
+                    match cfg.ui_translucency_mode {
+                        hachimi::UiTranslucencyMode::None => progress_base,
+                        hachimi::UiTranslucencyMode::Overlay | hachimi::UiTranslucencyMode::Full => {
+                            egui::Color32::from_rgba_unmultiplied(
+                                progress_base.r(), progress_base.g(), progress_base.b(),
+                                cfg.ui_surface_alpha,
+                            )
+                        }
+                    }
+                };
                 egui::Frame::NONE
-                    .fill(get_global_color("surfaceContainerHigh"))
+                    .fill(progress_fill)
                     .inner_margin(egui::Margin::symmetric(pad_h as i8, pad_v as i8))
-                    .corner_radius(12.0 * scale)
+                    .corner_radius(corner_radius) // Align with splash card (linked to main rounding config)
                     .shadow(egui::Shadow {
                         spread: 0,
-                        blur: (6.0 * scale) as u8,
-                        offset: [0, (2.0 * scale) as i8],
-                        color: egui::Color32::from_black_alpha(30),
+                        blur: (8.0 * scale) as u8,
+                        offset: [0, (2.0 * scale) as i8], // Align with splash card
+                        color: egui::Color32::from_black_alpha(35),
                     })
                     .show(ui, |ui| {
                         ui.set_width(card_width);
@@ -1664,6 +1897,8 @@ impl Gui {
             // Floating behavior with center-bottom positioning per MD3 snackbar spec.
             // Max-width is capped so long text wraps rather than the bar overflowing.
             let max_w = (ctx.content_rect().width() - 32.0 * scale).max(120.0 * scale);
+            let rounding = Hachimi::instance().config.load().ui_window_rounding;
+            let corner_radius = rounding * scale;
             let inner = egui::Area::new(egui::Id::new("snackbar").with(s.id))
                 .order(egui::Order::Foreground)
                 .anchor(
@@ -1675,7 +1910,7 @@ impl Gui {
                     ui.add(
                         MaterialSnackbar::new(&s.message)
                             .behavior(SnackBarBehavior::Floating)
-                            .corner_radius(4.0 * scale)
+                            .corner_radius(corner_radius)
                             .auto_dismiss(None), // lifetime managed by retain above
                     );
                 });
@@ -1848,24 +2083,9 @@ impl AppWindow for ConfigEditor {
         let mut reset_clicked = false;
         let mut save_clicked  = false;
 
-        // ── Window frame: explicit surfaceContainer background ─────────────
-        let surface_container = get_global_color("surfaceContainer");
-        let outline_variant   = get_global_color("outlineVariant");
-        let cr = egui_material3::theme::get_global_corner_radius();
-        let window_frame = egui::Frame::window(&ctx.style())
-            .fill(egui::Color32::from_rgba_unmultiplied(
-                surface_container.r(),
-                surface_container.g(),
-                surface_container.b(),
-                255,
-            ))
-            .stroke(egui::Stroke::new(1.0, outline_variant))
-            .corner_radius(egui::CornerRadius::same(cr.unwrap_or(8.0).max(8.0) as u8));
-
         new_window(ctx, self.id, t!("config_editor.title"))
             .open(&mut open)
             .fixed_size(config_editor_window_size(ctx))
-            .frame(window_frame)
             .show(ctx, |ui| {
                 let content_w = ui.max_rect().width();
                 ui.set_width(content_w);
@@ -1923,7 +2143,7 @@ impl ConfigEditor {
 
         let tab_h = 48.0 * scale;
         let action_bar_h = 48.0 * scale;
-        let scroll_h = (ui.available_height() - action_bar_h - tab_h - 16.0 * scale).max(40.0);
+        let scroll_h = (ui.available_height() - action_bar_h - tab_h - 7.0 * scale).max(40.0);
 
         // 1. Settings Scroll Area
         egui::ScrollArea::vertical()
@@ -1943,9 +2163,7 @@ impl ConfigEditor {
                 if ime_pad > 0.0 { ui.add_space(ime_pad); }
             });
 
-        ui.add_space(4.0 * scale);
         ui.separator();
-        ui.add_space(4.0 * scale);
 
         // 2. Tab Bar (at the bottom, above action buttons)
         let mut tab_idx = self.current_tab.as_index();
@@ -1964,9 +2182,7 @@ impl ConfigEditor {
         });
         self.current_tab = ConfigEditorTab::from_index(tab_idx);
 
-        ui.add_space(4.0 * scale);
-        ui.separator();
-        ui.add_space(4.0 * scale);
+        ui.add_space(6.0 * scale);
 
         // 3. Action Bar (Restore Defaults, Save, Cancel)
         ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
@@ -2190,10 +2406,7 @@ pub fn compute_pixels_per_point(
     };
 
     let landscape_adjust = if is_landscape {
-        #[cfg(all(not(target_os = "android"), not(test)))]
-        { 2.2 / 3.0 }
-        #[cfg(any(target_os = "android", test))]
-        { 1.0 }
+        2.2 / 3.0
     } else {
         1.0
     };

@@ -3,7 +3,6 @@ use crate::core::gui::config::ConfigEditor;
 use crate::core::gui::utils::grid_control_w;
 #[allow(unused_imports)]
 use egui_material3::*;
-use egui_material3::theme::get_global_color;
 use rust_i18n::t;
 use crate::il2cpp::hook::umamusume::CameraData::ShadowResolution;
 use crate::il2cpp::hook::umamusume::GraphicSettings::{GraphicsQuality, MsaaQuality};
@@ -12,8 +11,6 @@ use crate::il2cpp::hook::UnityEngine_CoreModule::Texture::AnisoLevel;
 
 #[allow(unused_variables)]
 pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, ui: &mut egui::Ui) {
-    let on_surface_variant = get_global_color("onSurfaceVariant");
-    ui.style_mut().visuals.override_text_color = Some(on_surface_variant);
 
     ConfigEditor::list_tile_option_slider(ui, &t!("config_editor.target_fps"), &mut config.target_fps, 30..=240);
     ConfigEditor::list_tile_slider(ui, t!("config_editor.virtual_resolution_multiplier"), &mut config.virtual_res_mult, 1.0..=4.0, 0.1, 1);

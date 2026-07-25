@@ -10,11 +10,6 @@ splash_sub: "\ue88a Press %{open_key_str} to open menu."
 loading_label: "Loading..."
 search_filter: "Type to search..."
 open: "Open"
-reload: "Reload"
-check: "Check"
-dump: "Dump"
-restart: "Restart"
-toggle: "Toggle"
 cancel: "Cancel"
 save: "Save"
 done: "Done"
@@ -177,7 +172,8 @@ config_editor:
     additional translation will happen and gameplay may be affected.
     Please leave this option disabled if you do not have a translation
     server available.
-  auto_translate_ui: "Auto translate UI (MIGHT BREAK UIs)"
+  auto_translate_ui: "Auto translate UI"
+  auto_translate_ui_desc: "MIGHT BREAK UIs"
   notification_tp: "TP Recovery Notification"
   notification_rp: "RP Recovery Notification"
   notification_jobs: "Job Completion Notification"
@@ -213,7 +209,8 @@ config_editor:
   live_theater_allow_same_chara: "Live theater allow same chara"
   physics_update_mode: "Physics update mode"
   cyspring_mono_uncap_frame_scale: "CySpring Mono Frame Scale Uncap"
-  cyspring_disable_native: "Force CySpring Mono path (disable native plugin)"
+  cyspring_disable_native: "Force CySpring Mono path"
+  cyspring_disable_native_desc: "Disables the native plugin"
   disable_skill_name_translation: "Disable skill name translation"
   hide_ingame_ui_hotkey: "Hide ingame UI hotkey"
   hide_ingame_ui_hotkey_info: >-
@@ -296,7 +293,10 @@ theme_editor:
   on_surface: "On Surface"
   transparency: "Background Transparency"
   corner_radius: "Corner Radius"
-  translucent_windows: "Translucent Windows"
+  translucency_method: "Translucency Method"
+  translucency_none: "None"
+  translucency_overlay: "Floating Cards"
+  translucency_full: "Full"
 
 tl_update_dialog:
   title: "New update available"

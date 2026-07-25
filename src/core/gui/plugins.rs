@@ -17,7 +17,7 @@ pub struct PluginWindow {
 impl AppWindow for PluginWindow {
     fn run(&mut self, ctx: &egui::Context) -> bool {
         let mut open = true;
-        let id = egui::Id::new("plugin_AppWindow").with(self.id);
+        let id = egui::Id::new("plugin_window").with(self.id);
 
         new_window(ctx, id, &self.title)
             .open(&mut open)
@@ -147,30 +147,6 @@ pub fn enqueue_plugin_notification(message: String) {
 }
 
 
-pub fn show_plugin_AppWindow(
-    id: i32,
-    title: String,
-    contents_callback: Option<PluginWindowCallback>,
-    bottom_callback: Option<PluginWindowCallback>,
-    userdata: usize,
-) {
-    let AppWindow = PluginWindow {
-        id,
-        title,
-        contents_callback,
-        bottom_callback,
-        userdata,
-    };
-
-    PLUGIN_WINDOWS_TO_SHOW.lock().unwrap().push(AppWindow);
-}
-
-
-pub fn close_plugin_AppWindow(id: i32) {
-    PLUGIN_WINDOWS_TO_CLOSE.lock().unwrap().push(id);
-}
-
-
 pub fn drain_plugin_windows_to_show() -> Vec<PluginWindow> {
     let mut windows = PLUGIN_WINDOWS_TO_SHOW.lock().unwrap();
     std::mem::take(&mut *windows)
@@ -202,12 +178,6 @@ pub fn drain_plugin_notifications() -> Vec<String> {
     let mut notifications = PLUGIN_NOTIFICATIONS.lock().unwrap();
     std::mem::take(&mut *notifications)
 }
-
-
-
-
-
-
 
 
 pub fn show_plugin_window(

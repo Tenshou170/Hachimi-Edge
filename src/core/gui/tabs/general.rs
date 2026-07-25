@@ -7,14 +7,13 @@ use crate::core::gui::windows::theme::ThemeEditorWindow;
 use crate::core::hachimi::*;
 #[allow(unused_imports)]
 use egui_material3::{MaterialButton, MaterialSwitch};
+#[cfg(target_os = "windows")]
 use egui_material3::theme::get_global_color;
 use rust_i18n::t;
 use std::thread;
 
 
 pub fn render(_editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, ui: &mut egui::Ui) {
-    let on_surface_variant = get_global_color("onSurfaceVariant");
-    ui.style_mut().visuals.override_text_color = Some(on_surface_variant);
 
     let lang_changed = ConfigEditor::list_tile_combo(
         ui, t!("config_editor.language"), "language", &mut config.language, Language::CHOICES,
@@ -33,6 +32,15 @@ pub fn render(_editor: &ConfigEditor, config: &mut crate::core::hachimi::Config,
     }
 
     ConfigEditor::list_tile_slider(ui, t!("config_editor.gui_scale"), &mut config.gui_scale, 0.25..=2.0, 0.05, 2);
+
+    #[cfg(target_os = "android")]
+    {
+        ConfigEditor::list_tile_switch(ui, t!("config_editor.gui_landscape_ratio"),
+            &mut config.android.enable_gui_landscape_ratio, true);
+        if config.android.enable_gui_landscape_ratio {
+            ConfigEditor::list_tile_slider(ui, "", &mut config.android.gui_landscape_ratio, 0.25..=2.0, 0.05, 2);
+        }
+    }
 
     #[cfg(target_os = "windows")]
     {
@@ -91,7 +99,7 @@ pub fn render(_editor: &ConfigEditor, config: &mut crate::core::hachimi::Config,
     }
 
     // Theme Settings
-    if ConfigEditor::list_tile_button(ui, t!("theme_editor.title"), t!("open")) {
+    if ConfigEditor::list_tile_action_button(ui, t!("theme_editor.title"), t!("open")) {
         thread::spawn(|| {
             Gui::instance().unwrap().lock().unwrap_or_else(|e| e.into_inner())
                 .show_window(Box::new(ThemeEditorWindow::new()));

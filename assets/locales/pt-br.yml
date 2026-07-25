@@ -10,11 +10,6 @@ splash_sub: "\ue88a Pressione %{open_key_str}\npara abrir o menu."
 loading_label: "Carregando..."
 search_filter: "Digite para pesquisar..."
 open: "Abrir"
-reload: "Recarregar"
-check: "Verificar"
-dump: "Dump"
-restart: "Reiniciar"
-toggle: "Alternar"
 cancel: "Cancelar"
 save: "Salvar"
 done: "Finalizar"
@@ -177,7 +172,8 @@ config_editor:
     poderá ser realizada e a jogabilidade do jogo pode acabar sendo afetada.
     Por favor, deixe esta opção desabilitada se você não tem um servidor
     de tradução disponível.
-  auto_translate_ui: "Tradução automática da UI (PODE QUEBRAR AS UIs)"
+  auto_translate_ui: "Tradução automática da UI"
+  auto_translate_ui_desc: "PODE QUEBRAR AS UIs"
   notification_tp: "Notificação de recuperação de TP"
   notification_rp: "Notificação de recuperação de RP"
   notification_jobs: "Notificação de conclusão de trabalho"
@@ -213,7 +209,8 @@ config_editor:
   live_theater_allow_same_chara: "Permitir personagens repetidos nos shows"
   physics_update_mode: "Modo de atualização das físicas"
   cyspring_mono_uncap_frame_scale: "Desbloquear escala de quadros CySpring Mono"
-  cyspring_disable_native: "Forçar caminho Mono do CySpring (desabilitar plugin nativo)"
+  cyspring_disable_native: "Forçar caminho Mono do CySpring"
+  cyspring_disable_native_desc: "Desabilita o plugin nativo"
   disable_skill_name_translation: "Desabilitar tradução dos nomes das habilidades"
   hide_ingame_ui_hotkey: "Atalho para esconder a UI do jogo"
   hide_ingame_ui_hotkey_info: >-
@@ -296,7 +293,10 @@ theme_editor:
   on_surface: "Sobre Superfície"
   transparency: "Transparência do Fundo"
   corner_radius: "Raio do Canto"
-  translucent_windows: "Janelas translúcidas"
+  translucency_method: "Método de translucência"
+  translucency_none: "Nenhum"
+  translucency_overlay: "Cards flutuantes"
+  translucency_full: "Completo"
 
 tl_update_dialog: 
   title: "Uma nova atualização está disponível."

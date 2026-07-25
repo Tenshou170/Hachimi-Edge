@@ -10,11 +10,6 @@ splash_sub: "\ue88a Tekan %{open_key_str} untuk buka menu."
 loading_label: "Memuat..."
 search_filter: "Ketik untuk cari..."
 open: "Buka"
-reload: "Muat Ulang"
-check: "Periksa"
-dump: "Dump"
-restart: "Mulai Ulang"
-toggle: "Alihkan"
 cancel: "Batal"
 save: "Simpan"
 done: "Selesai"
@@ -176,7 +171,8 @@ config_editor:
     Sugoi Toolkit. Tanpa server yang berjalan, tidak akan ada terjemahan tambahan
     dan permainan mungkin terganggu. Harap biarkan opsi ini dinonaktifkan jika Anda
     tidak memiliki server terjemahan.
-  auto_translate_ui: "Otomatis terjemahkan UI (BISA MERUSAK UI)"
+  auto_translate_ui: "Otomatis terjemahkan UI"
+  auto_translate_ui_desc: "BISA MERUSAK UI"
   notification_tp: "Notifikasi Pemulihan TP"
   notification_rp: "Notifikasi Pemulihan RP"
   notification_jobs: "Notifikasi Pekerjaan Selesai"
@@ -212,7 +208,8 @@ config_editor:
   live_theater_allow_same_chara: "Izinkan karakter yang sama untuk konser"
   physics_update_mode: "Mode update fisik"
   cyspring_mono_uncap_frame_scale: "Hapus Batas Skala Frame CySpring Mono"
-  cyspring_disable_native: "Paksa jalur CySpring Mono (nonaktifkan plugin native)"
+  cyspring_disable_native: "Paksa jalur CySpring Mono"
+  cyspring_disable_native_desc: "Nonaktifkan plugin native"
   disable_skill_name_translation: "Matikan translasi nama skill"
   hide_ingame_ui_hotkey: "Sembunyikan hotkey UI dalam game"
   hide_ingame_ui_hotkey_info: >-
@@ -295,7 +292,10 @@ theme_editor:
   on_surface: "Di Atas Permukaan"
   transparency: "Transparansi Latar Belakang"
   corner_radius: "Radius Sudut"
-  translucent_windows: "Jendela Tembus Pandang"
+  translucency_method: "Metode Transparansi"
+  translucency_none: "Tidak Ada"
+  translucency_overlay: "Kartu Mengambang"
+  translucency_full: "Penuh"
 
 tl_update_dialog: 
   title: "Pembaruan Translasi Tersedia"

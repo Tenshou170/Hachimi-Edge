@@ -208,12 +208,35 @@ pub fn new_window<'a>(
 
     // Unless the user explicitly enabled translucent windows in Theme Settings,
     // force all child windows to be fully opaque (the sidebar panel is unaffected).
-    let mut frame = egui::Frame::window(&ctx.style());
-    if !Hachimi::instance().config.load().ui_translucent_windows {
-        frame.fill = egui::Color32::from_rgba_unmultiplied(
-            frame.fill.r(), frame.fill.g(), frame.fill.b(), 255,
-        );
-    }
+    // Use surfaceContainer for the fill so all windows match the Config Editor background.
+    let surface_container = egui_material3::theme::get_global_color("surfaceContainer");
+    let outline_variant = egui_material3::theme::get_global_color("outlineVariant");
+    let cr = egui_material3::theme::get_global_corner_radius();
+
+    // Global surface colors are always fully opaque (alpha is not baked in).
+    // When translucency mode is Full, manually apply surface_alpha to the fill.
+    // Overlay mode and None leave modal windows fully opaque.
+    let config = Hachimi::instance().config.load();
+    let fill = if config.ui_translucency_mode == hachimi::UiTranslucencyMode::Full {
+        let alpha = config.ui_surface_alpha;
+        egui::Color32::from_rgba_unmultiplied(
+            surface_container.r(), surface_container.g(), surface_container.b(), alpha,
+        )
+    } else {
+        surface_container
+    };
+
+    // Build frame from scratch to avoid inheriting the alpha-modified
+    // window_fill / window_shadow from the egui style.
+    let frame = egui::Frame::NONE
+        .fill(fill)
+        .stroke(egui::Stroke::new(1.0, outline_variant))
+        .inner_margin(egui::Margin::same(
+            ctx.style().spacing.window_margin.left as i8,
+        ))
+        .corner_radius(egui::CornerRadius::same(
+            cr.unwrap_or(8.0).max(8.0) as u8,
+        ));
 
     egui::Window::new(title)
         .id(id.with(salt.to_bits()))
@@ -244,7 +267,10 @@ pub fn simple_window_layout(
         // full-width widgets (tab bar, grid) stretch edge-to-edge.
         ui.with_layout(
             egui::Layout::top_down(egui::Align::Min).with_cross_justify(true),
-            add_contents,
+            |ui| {
+                ui.set_min_width(ui.available_width());
+                add_contents(ui);
+            },
         );
 
         ui.separator();
@@ -253,32 +279,14 @@ pub fn simple_window_layout(
     });
 }
 
-#[allow(dead_code)]
-pub fn centered_and_wrapped_text(ui: &mut egui::Ui, text: &str) {
-    let rect = ui.available_rect_before_wrap();
-
-    let text_style = egui::TextStyle::Body;
-    let text_font = ui
-        .style()
-        .text_styles
-        .get(&text_style)
-        .cloned()
-        .unwrap_or_default();
-    let text_color = ui.style().visuals.text_color();
-
-    let mut job =
-        egui::text::LayoutJob::simple(text.to_owned(), text_font, text_color, rect.width());
-    job.halign = egui::Align::Center;
-
-    let galley = ui.painter().layout_job(job);
-
-    let text_rect = galley.rect;
-    let text_size = text_rect.size();
-
-    let center_pos = rect.min + (rect.size() - text_size) / 2.0;
-
-    let paint_pos = center_pos - text_rect.min.to_vec2();
-    ui.painter().galley(paint_pos, galley, text_color);
+/// Returns an `egui::Frame` styled as a grouped settings section:
+/// `surfaceContainerHigh` background, 12dp corner radius, 12×8 inner margin.
+/// Used by ThemeEditorWindow and any future settings sub-groups.
+pub fn section_group_frame() -> egui::Frame {
+    egui::Frame::NONE
+        .fill(egui_material3::theme::get_global_color("surfaceContainerHigh"))
+        .corner_radius(12.0)
+        .inner_margin(egui::Margin::symmetric(12, 8))
 }
 
 pub fn paginated_window_layout(
@@ -410,21 +418,21 @@ pub const LIST_TILE_H: f32 = 36.0;
 /// Horizontal padding inside each list-tile row and the settings card.
 pub const LIST_TILE_PAD_H: f32 = 16.0;
 
-/// Vertical spacing between list-tile rows inside a card.
-pub const LIST_TILE_SPACING: f32 = 0.0;
-
 /// Renders an MD3-styled section heading using the `primary` color token.
 ///
 /// Used above `settings_card` groups. Draws the label in primary color with
 /// a `12sp` bold-weight font and a thin `outlineVariant` divider underneath.
 pub fn section_heading(ui: &mut egui::Ui, text: impl Into<String>) {
-    let primary        = egui_material3::theme::get_global_color("primary");
-    let outline_variant = egui_material3::theme::get_global_color("outlineVariant");
+    let primary = egui_material3::theme::get_global_color("primary");
     let text = text.into();
+
+    // Extra gap above — visually closes the separator of the last item in the
+    // preceding section before this heading appears.
+    ui.add_space(12.0);
 
     let galley = ui.painter().layout_no_wrap(
         text,
-        egui::FontId::proportional(14.0),  // larger — more readable as a section header
+        egui::FontId::proportional(17.0),  // larger — prominent section header
         primary,
     );
 
@@ -439,12 +447,6 @@ pub fn section_heading(ui: &mut egui::Ui, text: impl Into<String>) {
         egui::pos2(rect.min.x + LIST_TILE_PAD_H, rect.min.y + (rect.height() - galley.size().y) / 2.0),
         galley,
         primary,
-    );
-
-    // Thin bottom divider.
-    painter.line_segment(
-        [rect.left_bottom(), rect.right_bottom()],
-        egui::Stroke::new(1.0, outline_variant),
     );
 }
 

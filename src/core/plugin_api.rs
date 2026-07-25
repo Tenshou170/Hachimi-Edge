@@ -335,7 +335,19 @@ unsafe extern "C" fn gui_ui_heading(ui: *mut c_void, text: *const c_char) -> boo
     let Some(ui) = ui_from_ptr(ui) else {
         return false;
     };
-    ui.heading(cstr_or_empty(text));
+    // Match render_heading: primary color, 13sp bold, proportional font.
+    // No spacing added here — callers are responsible for layout gaps, just
+    // like the raw egui heading it replaces.
+    let color = egui_material3::theme::get_global_color("primary");
+    let scale = gui::utils::get_scale(ui.ctx());
+    let label = remap_missing_glyphs(cstr_or_empty(text));
+    ui.add(egui::Label::new(
+        egui::RichText::new(label.as_ref())
+            .color(color)
+            .family(egui::FontFamily::Proportional)
+            .size(13.0 * scale)
+            .strong(),
+    ));
     true
 }
 
@@ -343,7 +355,14 @@ unsafe extern "C" fn gui_ui_label(ui: *mut c_void, text: *const c_char) -> bool 
     let Some(ui) = ui_from_ptr(ui) else {
         return false;
     };
-    ui.label(cstr_or_empty(text));
+    // Match sidebar body text: onSurfaceVariant color, proportional font.
+    let color = egui_material3::theme::get_global_color("onSurfaceVariant");
+    let label = remap_missing_glyphs(cstr_or_empty(text));
+    ui.add(egui::Label::new(
+        egui::RichText::new(label.as_ref())
+            .color(color)
+            .family(egui::FontFamily::Proportional),
+    ));
     true
 }
 
@@ -363,11 +382,44 @@ unsafe extern "C" fn gui_ui_separator(ui: *mut c_void) -> bool {
     true
 }
 
+/// Substitute Unicode codepoints that are absent from the loaded font stack
+/// with visually equivalent Material Symbols codepoints that *are* present.
+///
+/// The loaded fonts are GoogleSansFlex + MaterialSymbolsOutlined + HarmonyOSSans.
+/// Several common block/arrow characters (U+25xx range) are missing from all
+/// three — HarmonyOS only covers U+25BC (▼). Plugins that use these for
+/// expand/collapse toggles end up showing "?" unless we remap them here.
+fn remap_missing_glyphs(text: &str) -> std::borrow::Cow<'_, str> {
+    // Map of (missing codepoint → Material Symbols replacement).
+    // Values are in the Private-Use Area covered by MaterialSymbolsOutlined.
+    const MAP: &[(char, char)] = &[
+        ('◀', '\u{E314}'), // BLACK LEFT-POINTING TRIANGLE  → keyboard_arrow_left
+        ('▶', '\u{E315}'), // BLACK RIGHT-POINTING TRIANGLE → keyboard_arrow_right
+        ('▲', '\u{E316}'), // BLACK UP-POINTING TRIANGLE    → keyboard_arrow_up
+        ('▼', '\u{E313}'), // BLACK DOWN-POINTING TRIANGLE  → keyboard_arrow_down
+    ];
+
+    if !text.chars().any(|c| MAP.iter().any(|(from, _)| *from == c)) {
+        return std::borrow::Cow::Borrowed(text);
+    }
+
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        let replaced = MAP.iter().find(|(from, _)| *from == ch).map(|(_, to)| *to);
+        out.push(replaced.unwrap_or(ch));
+    }
+    std::borrow::Cow::Owned(out)
+}
+
 unsafe extern "C" fn gui_ui_button(ui: *mut c_void, text: *const c_char) -> bool {
     let Some(ui) = ui_from_ptr(ui) else {
         return false;
     };
-    ui.add(MaterialButton::outlined(cstr_or_empty(text)))
+    // Use filled_tonal to match the sidebar's button style, but do NOT force
+    // available_width — plugin callbacks may call this inside a grid or
+    // horizontal layout where forcing full width would break the layout.
+    let label = remap_missing_glyphs(cstr_or_empty(text));
+    ui.add(MaterialButton::filled_tonal(label.as_ref()))
         .clicked()
 }
 
@@ -375,7 +427,8 @@ unsafe extern "C" fn gui_ui_small_button(ui: *mut c_void, text: *const c_char) -
     let Some(ui) = ui_from_ptr(ui) else {
         return false;
     };
-    ui.add(MaterialButton::text(cstr_or_empty(text)).small())
+    let label = remap_missing_glyphs(cstr_or_empty(text));
+    ui.add(MaterialButton::text(label.as_ref()).small())
         .clicked()
 }
 

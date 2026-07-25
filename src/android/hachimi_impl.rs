@@ -102,10 +102,15 @@ pub struct Config {
     #[serde(default)]
     pub hook_libc_dlopen: bool,
     #[serde(default)]
-    pub keep_screen_on: bool
+    pub keep_screen_on: bool,
+    #[serde(default)]
+    pub enable_gui_landscape_ratio: bool,
+    #[serde(default = "Config::default_gui_landscape_ratio")]
+    pub gui_landscape_ratio: f32,
 }
 
 impl Config {
     fn default_menu_open_key() -> i32 { keymap::KEYCODE_DPAD_RIGHT }
     fn default_hide_ingame_ui_hotkey_bind() -> i32 { keymap::KEYCODE_INSERT }
+    fn default_gui_landscape_ratio() -> f32 { 1.0 }
 }

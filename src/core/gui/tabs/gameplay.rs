@@ -12,8 +12,6 @@ use crate::il2cpp::hook::umamusume::TimeUtil::BgSeason;
 
 #[allow(unused_variables)]
 pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, ui: &mut egui::Ui) {
-    let on_surface_variant = get_global_color("onSurfaceVariant");
-    ui.style_mut().visuals.override_text_color = Some(on_surface_variant);
 
     ConfigEditor::list_tile_combo(ui, t!("config_editor.physics_update_mode"), "physics_update_mode",
         &mut config.physics_update_mode, &[
@@ -24,13 +22,13 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
             (SpringUpdateMode::SkipFramePostAlways.into(), "SkipFramePostAlways"),
         ]);
     ConfigEditor::list_tile_switch(ui, t!("config_editor.cyspring_mono_uncap_frame_scale"), &mut config.cyspring_mono_uncap_frame_scale, true);
-    ConfigEditor::list_tile_switch(ui, t!("config_editor.cyspring_disable_native"), &mut config.cyspring_disable_native, true);
+    ConfigEditor::list_tile_switch_described(ui, t!("config_editor.cyspring_disable_native"), &mut config.cyspring_disable_native, true, t!("config_editor.cyspring_disable_native_desc"));
     ConfigEditor::list_tile_slider(ui, t!("config_editor.story_choice_auto_select_delay"), &mut config.story_choice_auto_select_delay, 0.1..=10.0, 0.05, 2);
     ConfigEditor::list_tile_slider(ui, t!("config_editor.story_text_speed_multiplier"), &mut config.story_tcps_multiplier, 0.1..=10.0, 0.1, 1);
     ConfigEditor::list_tile_switch(ui, t!("config_editor.force_allow_dynamic_camera"), &mut config.force_allow_dynamic_camera, true);
     ConfigEditor::list_tile_switch(ui, t!("config_editor.live_theater_allow_same_chara"), &mut config.live_theater_allow_same_chara, true);
 
-    if ConfigEditor::list_tile_button(ui, t!("config_editor.live_vocals_swap"), t!("open")) {
+    if ConfigEditor::list_tile_action_button(ui, t!("config_editor.live_vocals_swap"), t!("open")) {
         thread::spawn(|| {
             Gui::instance().unwrap().lock().unwrap_or_else(|e| e.into_inner())
                 .show_window(Box::new(LiveVocalsSwapWindow::new()));
@@ -84,8 +82,11 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
         ConfigEditor::list_tile_slider(ui, t!("config_editor.caption_pos_y"), &mut config.caption.caption_pos_y, -10.0..=10.0, 0.1, 1);
         ConfigEditor::list_tile_slider(ui, t!("config_editor.caption_bg_alpha"), &mut config.caption.caption_bg_alpha, 0.0..=1.0, 0.1, 2);
 
-        ConfigEditor::list_tile_switch(ui, t!("config_editor.caption_fallback_enable"), &mut config.caption.caption_fallback_enable, true);
-        ConfigEditor::list_tile_hint(ui, t!("config_editor.caption_fallback_tooltip"));
+        ConfigEditor::list_tile_switch_described(
+            ui, t!("config_editor.caption_fallback_enable"),
+            &mut config.caption.caption_fallback_enable, true,
+            t!("config_editor.caption_fallback_tooltip"),
+        );
 
         if config.caption.caption_fallback_enable {
             let mut line_count = config.caption.caption_lines_char_count as f32;

@@ -47,6 +47,18 @@ fn default_config_field_order() -> Vec<String> {
     obj.keys().cloned().collect()
 }
 
+/// Returns the canonical default value for every top-level key in Config.
+/// Used by sanitize_config_raw to fill in missing keys so they are always
+/// present in the written file and serde `default = "..."` is never used as
+/// the source of truth for fields that the user may have explicitly changed.
+fn default_config_values() -> serde_json::Map<String, serde_json::Value> {
+    serde_json::to_value(&Config::default())
+        .expect("default Config must serialize to JSON")
+        .as_object()
+        .expect("default Config JSON must be an object")
+        .clone()
+}
+
 #[cfg(test)]
 fn caption_config_fields() -> Vec<String> {
     let value = serde_json::to_value(&CaptionConfig::default())
@@ -60,7 +72,6 @@ fn caption_config_fields() -> Vec<String> {
 fn config_legacy_alias_map() -> FnvHashMap<&'static str, &'static str> {
     FnvHashMap::from_iter([("caption_log_enable", "caption_show_log_enable")])
 }
-
 pub struct Hachimi {
     // Hooking stuff
     pub interceptor: Interceptor,
@@ -256,6 +267,7 @@ impl Hachimi {
 
         let canonical_fields = default_config_field_order();
         let canonical_set: FnvHashSet<&str> = canonical_fields.iter().map(String::as_str).collect();
+        let canonical_defaults = default_config_values();
 
         let mut new_obj = serde_json::Map::new();
 
@@ -272,9 +284,14 @@ impl Hachimi {
             let value = if key == "config_schema_version" {
                 Some(serde_json::Value::Number(2.into()))
             } else {
-                obj.get(key).cloned().or_else(|| {
-                    platform_obj.and_then(|nested| nested.get(key).cloned())
-                })
+                // Prefer the user's saved value, falling back to the legacy
+                // nested platform object, then to the canonical default.
+                // Writing the default explicitly prevents serde's
+                // `default = "fn"` from silently overriding a key the user
+                // explicitly set to a non-default value in a prior session.
+                obj.get(key).cloned()
+                    .or_else(|| platform_obj.and_then(|nested| nested.get(key).cloned()))
+                    .or_else(|| canonical_defaults.get(key).cloned())
             };
 
             if let Some(value) = value {
@@ -294,6 +311,20 @@ impl Hachimi {
 
             if let Some(value) = value {
                 new_obj.insert(canonical_key.to_string(), value);
+            }
+        }
+
+        // Migrate legacy ui_translucent_windows (bool) → ui_translucency_mode (enum string).
+        // Only runs when the old key exists and the new key hasn't been set yet.
+        if !new_obj.contains_key("ui_translucency_mode") {
+            let legacy_bool = obj.get("ui_translucent_windows")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            if legacy_bool {
+                new_obj.insert(
+                    "ui_translucency_mode".to_string(),
+                    serde_json::Value::String("Full".to_string()),
+                );
             }
         }
 
@@ -420,6 +451,7 @@ impl Hachimi {
             }
         };
         self.localized_data.store(Arc::new(new_data));
+        crate::il2cpp::hook::umamusume::PartsSingleModeSkillListItem::clear_skill_text_cache();
     }
 
     pub fn init_character_data(&self) {
@@ -644,6 +676,25 @@ impl Default for UiColorSchemeMode {
     }
 }
 
+/// Controls which surfaces receive the background-transparency effect.
+///
+/// - `None`    — all windows are fully opaque (default).
+/// - `Overlay` — only floating overlay cards (splash card, update-progress card,
+///               live seekbar, dropdown lists) become translucent.  Modal windows
+///               (Config Editor, Theme Editor, etc.) remain opaque.
+/// - `Full`    — every surface (overlays + modal windows) becomes translucent.
+#[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+pub enum UiTranslucencyMode {
+    None,
+    Overlay,
+    Full,
+}
+impl Default for UiTranslucencyMode {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone)]
 pub struct CaptionConfig {
     #[serde(default)]
@@ -760,8 +811,11 @@ pub struct Config {
     pub ui_surface_alpha: u8,
     #[serde(default = "Config::default_ui_window_rounding")]
     pub ui_window_rounding: f32,
-    #[serde(default)]
-    pub ui_translucent_windows: bool,
+    /// Translucency scope.  The old `ui_translucent_windows: true` serialises
+    /// as `"ui_translucency_mode": "Full"` going forward; existing configs that
+    /// only have the legacy bool key are migrated by the custom deserialiser below.
+    #[serde(default, alias = "ui_translucency_mode")]
+    pub ui_translucency_mode: UiTranslucencyMode,
     #[serde(default = "Config::default_ui_scale")]
     pub ui_scale: f32,
     #[serde(default = "Config::default_ui_animation_scale")]
@@ -876,8 +930,6 @@ pub struct Config {
     pub dump_msgpack: bool,
     #[serde(default)]
     pub dump_msgpack_request: bool,
-    #[serde(default)]
-    pub enable_smtc: bool,
     #[serde(default)]
     pub notification_tp: bool,
     #[serde(default)]
@@ -1769,6 +1821,10 @@ mod tests {
 
     #[test]
     fn sanitize_config_rewrites_duplicate_fields() {
+        // Duplicate keys can appear in configs written by older builds that had
+        // `enable_smtc` defined in both the top-level Config struct and the
+        // flattened hachimi_impl::Config. The sanitizer must produce valid JSON
+        // (one occurrence per key) regardless of the input.
         let test_json = r#"
         {
           "language": "en",
@@ -1789,12 +1845,27 @@ mod tests {
         Hachimi::sanitize_config(&config_path);
 
         let sanitized = fs::read_to_string(&config_path).expect("read sanitized config");
+
+        // Must parse cleanly and contain exactly one occurrence of enable_smtc.
+        let parsed: serde_json::Value = serde_json::from_str(&sanitized)
+            .expect("sanitized config must be valid JSON");
+        let obj = parsed.as_object().expect("must be a JSON object");
+        let occurrences = sanitized.matches("\"enable_smtc\"").count();
+        assert_eq!(occurrences, 1, "sanitized config must deduplicate enable_smtc");
+        // serde_json::Value picks the last duplicate value when parsing — sanitizer
+        // preserves that (true), so the canonical file should have true here.
+        assert_eq!(obj.get("enable_smtc").and_then(|v| v.as_bool()), Some(true));
+
         serde_json::from_str::<Config>(&sanitized)
             .expect("sanitized config must deserialize into Config");
     }
 
     #[test]
     fn load_config_sanitizes_duplicate_keys_on_parse_failure() {
+        // When the JSON has duplicate keys, serde_json strict mode fails to
+        // parse (or silently takes last value). The load path falls back to
+        // sanitize_config_raw which deduplicates. The last occurrence wins
+        // (serde_json Value behaviour), so this specific input yields true.
         let temp_dir = std::env::temp_dir().join(format!(
             "hachimi_load_sanitize_test_{}",
             SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
@@ -1809,6 +1880,7 @@ mod tests {
 
         let config = Hachimi::load_config(&temp_dir, &Region::Unknown)
             .expect("load config should recover from duplicate keys");
+        // Last value (true) wins — this tests recovery, not preference.
         assert!(config.windows.enable_smtc);
     }
 }

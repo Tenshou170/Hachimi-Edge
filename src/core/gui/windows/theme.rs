@@ -22,8 +22,8 @@ pub struct ThemeEditorWindow {
     old_surface_alpha: u8,
     window_rounding: f32,
     old_window_rounding: f32,
-    translucent_windows: bool,
-    old_translucent_windows: bool,
+    translucency_mode: hachimi::UiTranslucencyMode,
+    old_translucency_mode: hachimi::UiTranslucencyMode,
     // Manual color editing state
     manual_colors: std::collections::HashMap<String, [u8; 3]>,
     old_manual_colors: std::collections::HashMap<String, [u8; 3]>,
@@ -66,8 +66,8 @@ impl ThemeEditorWindow {
             old_surface_alpha: cfg.ui_surface_alpha,
             window_rounding: cfg.ui_window_rounding,
             old_window_rounding: cfg.ui_window_rounding,
-            translucent_windows: cfg.ui_translucent_windows,
-            old_translucent_windows: cfg.ui_translucent_windows,
+            translucency_mode: cfg.ui_translucency_mode,
+            old_translucency_mode: cfg.ui_translucency_mode,
             manual_colors: cfg.ui_manual_colors.clone(),
             old_manual_colors: cfg.ui_manual_colors,
             manual_primary,
@@ -86,7 +86,7 @@ impl ThemeEditorWindow {
         cfg.ui_manual_colors = self.manual_colors.clone();
         cfg.ui_surface_alpha = self.surface_alpha;
         cfg.ui_window_rounding = self.window_rounding;
-        cfg.ui_translucent_windows = self.translucent_windows;
+        cfg.ui_translucency_mode = self.translucency_mode;
         cfg
     }
 }
@@ -122,16 +122,12 @@ impl AppWindow for ThemeEditorWindow {
                     self.id,
                     |ui| {
                         egui::ScrollArea::vertical().show(ui, |ui| {
-                            ui.set_min_width(ui.available_width());
                             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                             // Match ConfigEditor label color across all settings windows.
                             let on_surface_variant = get_global_color("onSurfaceVariant");
                             ui.style_mut().visuals.override_text_color = Some(on_surface_variant);
 
-                            let section_frame = egui::Frame::NONE
-                                .fill(get_global_color("surfaceContainerHigh"))
-                                .corner_radius(12.0)
-                                .inner_margin(egui::Margin::symmetric(12, 8));
+                            let section_frame = section_group_frame();
 
                             // ── Theme Mode ──────────────────────────────────────
                             ui.label(t!("theme_editor.theme_mode"));
@@ -286,7 +282,7 @@ impl AppWindow for ThemeEditorWindow {
                                 ui.add_space(8.0);
                             }
 
-                            // ── Transparency ─────────────────────────────────────
+                            // ── Background Transparency ───────────────────────────
                             ui.label(t!("theme_editor.transparency"));
                             let mut alpha_f = self.surface_alpha as f32 / 255.0;
                             if slider_with_input(ui, &mut alpha_f, 0.0..=1.0, 0.1, 2).changed()
@@ -305,13 +301,39 @@ impl AppWindow for ThemeEditorWindow {
                             }
                             ui.add_space(8.0);
 
-                            // ── Translucent Windows ──────────────────────────────
-                            ConfigEditor::list_tile_switch(
-                                ui,
-                                t!("theme_editor.translucent_windows"),
-                                &mut self.translucent_windows,
-                                true,
-                            );
+                            // ── Translucency Method ───────────────────────────────
+                            ui.label(t!("theme_editor.translucency_method"));
+                            ui.add_space(2.0);
+                            section_frame.show(ui, |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    for (label_key, val) in [
+                                        (
+                                            "theme_editor.translucency_none",
+                                            hachimi::UiTranslucencyMode::None,
+                                        ),
+                                        (
+                                            "theme_editor.translucency_overlay",
+                                            hachimi::UiTranslucencyMode::Overlay,
+                                        ),
+                                        (
+                                            "theme_editor.translucency_full",
+                                            hachimi::UiTranslucencyMode::Full,
+                                        ),
+                                    ] {
+                                        if ui
+                                            .add(
+                                                MaterialButton::filled_tonal(t!(label_key))
+                                                    .selected(self.translucency_mode == val),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.translucency_mode = val;
+                                            preview_dirty = true;
+                                        }
+                                    }
+                                });
+                            });
+                            ui.add_space(8.0);
                         });
                     },
                     |ui| {
@@ -372,7 +394,7 @@ impl AppWindow for ThemeEditorWindow {
             self.scheme_mode = self.old_scheme_mode;
             self.surface_alpha = self.old_surface_alpha;
             self.window_rounding = self.old_window_rounding;
-            self.translucent_windows = self.old_translucent_windows;
+            self.translucency_mode = self.old_translucency_mode;
             self.manual_colors = self.old_manual_colors.clone();
             enqueue_theme_preview(self.build_preview_config());
         }
@@ -383,7 +405,7 @@ impl AppWindow for ThemeEditorWindow {
             self.scheme_mode = hachimi::UiColorSchemeMode::Auto;
             self.surface_alpha = hachimi::Config::default_ui_surface_alpha();
             self.window_rounding = hachimi::Config::default_ui_window_rounding();
-            self.translucent_windows = false;
+            self.translucency_mode = hachimi::UiTranslucencyMode::None;
             self.manual_colors.clear();
             self.manual_primary = hachimi::Config::default_ui_theme_seed();
             self.manual_surface = egui::Color32::from_rgb(18, 18, 18);
@@ -394,8 +416,3 @@ impl AppWindow for ThemeEditorWindow {
         open & open2
     }
 }
-
-
-
-
-

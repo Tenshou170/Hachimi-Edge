@@ -10,11 +10,6 @@ splash_sub: "\ue88a Pindutin ang %{open_key_str} para buksan ang menu."
 loading_label: "Naglo-load..."
 search_filter: "I-type para hanapin..."
 open: "Buksan"
-reload: "Reload"
-check: "I-check"
-dump: "Dump"
-restart: "I-restart"
-toggle: "Toggle"
 cancel: "Kanselahin"
 save: "I-save"
 done: "Tapos na"
@@ -177,7 +172,8 @@ config_editor:
     sa iyong computer o isang cloud service na nagpapakita ng API tulad ng py3translationServer o Sugoi
     Toolkit. Kung walang tumatakbong server, walang karagdagang pag-translate ang mangyayari at maaaring
     maapektuhan ang gameplay. Paki-disable ang opsyong ito kung wala kang available na translation server.
-  auto_translate_ui: "Awtomatikong i-translate ang UI (BAKA MASIRA ANG MGA UI)"
+  auto_translate_ui: "Awtomatikong i-translate ang UI"
+  auto_translate_ui_desc: "BAKA MASIRA ANG MGA UI"
   notification_tp: "Notipikasyon ng Pagbawi ng TP"
   notification_rp: "Notipikasyon ng Pagbawi ng RP"
   notification_jobs: "Notipikasyon ng Natapos na Trabaho"
@@ -213,7 +209,8 @@ config_editor:
   live_theater_allow_same_chara: "Payagan ang katulad na character sa live theater"
   physics_update_mode: "Mode ng pag-update ng physics"
   cyspring_mono_uncap_frame_scale: "Alisin ang limitasyon ng frame scale ng CySpring Mono"
-  cyspring_disable_native: "Pilitin ang CySpring Mono path (i-disable ang native plugin)"
+  cyspring_disable_native: "Pilitin ang CySpring Mono path"
+  cyspring_disable_native_desc: "I-disable ang native plugin"
   disable_skill_name_translation: "I-disable ang pag-translate ng mga skill name"
   hide_ingame_ui_hotkey: "I-enable ang hotkey ng pagtago ng game UI"
   hide_ingame_ui_hotkey_info: >-
@@ -296,7 +293,10 @@ theme_editor:
   on_surface: "Sa Ibabaw"
   transparency: "Transparency ng Background"
   corner_radius: "Radius ng Sulok"
-  translucent_windows: "Translucent na Windows"
+  translucency_method: "Paraan ng Translucency"
+  translucency_none: "Wala"
+  translucency_overlay: "Mga Lumulutang na Card"
+  translucency_full: "Buo"
 
 tl_update_dialog: 
   title: "May bagong update"

@@ -49,56 +49,74 @@ impl AppWindow for LiveVocalsSwapWindow {
             .map(|&(id, ref name)| (id, name.as_str()))
             .collect();
 
+
         new_window(ctx, self.id, t!("config_editor.live_vocals_swap"))
             .open(&mut open)
+            .fixed_size(config_editor_window_size(ctx))
             .show(ctx, |ui| {
-                simple_window_layout(
-                    ui,
-                    self.id,
-                    |ui| {
+                let content_w = ui.max_rect().width();
+                ui.set_width(content_w);
+
+                let avail_w = ui.available_width();
+                ui.data_mut(|d| {
+                    d.insert_temp(egui::Id::new("grid_control_w"), avail_w - LIST_TILE_PAD_H * 2.0 * scale);
+                });
+
+                let action_bar_h = 48.0 * scale;
+                let scroll_h = (ui.available_height() - action_bar_h - 16.0 * scale).max(40.0);
+
+                // 1. Scroll Area
+                egui::ScrollArea::vertical()
+                    .id_salt("live_vocals_scroll")
+                    .max_height(scroll_h)
+                    .show(ui, |ui| {
+                        ui.set_width(avail_w);
                         egui::Frame::NONE
-                            .inner_margin(egui::Margin::symmetric(8, 0))
+                            .inner_margin(egui::Margin::symmetric(
+                                (LIST_TILE_PAD_H * scale) as i8,
+                                (4.0 * scale) as i8,
+                            ))
                             .show(ui, |ui| {
-                                egui::Grid::new(self.id.with("live_vocals_swap_grid"))
-                                    .striped(true)
-                                    .num_columns(2)
-                                    .spacing([16.0 * scale, 8.0 * scale])
-                                    .show(ui, |ui| {
-                                        for i in 0..6 {
-                                            ui.horizontal_centered(|ui| {
-                                                ui.label(t!(
-                                                    "config_editor.live_vocals_swap_character_n",
-                                                    index = i + 1
-                                                ));
-                                            });
-                                            ui.horizontal_centered(|ui| {
-                                                Gui::run_combo_menu(
-                                                    ui,
-                                                    egui::Id::new("vocals_swap").with(i),
-                                                    &mut self.config.live_vocals_swap[i],
-                                                    &combo_items,
-                                                    &mut self.search_term,
-                                                );
-                                            });
-                                            ui.end_row();
-                                        }
+                                for i in 0..6 {
+                                    let label = t!(
+                                        "config_editor.live_vocals_swap_character_n",
+                                        index = i + 1
+                                    );
+                                    ui.vertical(|ui| {
+                                        ui.add(egui::Label::new(label).wrap());
+                                        let avail = ui.available_width();
+                                        ui.data_mut(|d| d.insert_temp(egui::Id::new("grid_control_w"), avail));
+                                        Gui::run_combo_menu(
+                                            ui,
+                                            egui::Id::new("vocals_swap").with(i),
+                                            &mut self.config.live_vocals_swap[i],
+                                            &combo_items,
+                                            &mut self.search_term,
+                                        );
+                                        ui.add_space(4.0);
                                     });
-                            });
-                    },
-                    |ui| {
-                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                                if ui.add(MaterialButton::text(t!("cancel"))).clicked() {
-                                    open2 = false;
-                                }
-                                if ui.add(MaterialButton::filled(t!("save"))).clicked() {
-                                    save_clicked = true;
-                                    open2 = false;
                                 }
                             });
-                        });
-                    },
-                );
+                        let ime_pad = ime_scroll_padding(ui.ctx());
+                        if ime_pad > 0.0 { ui.add_space(ime_pad); }
+                    });
+
+                ui.add_space(4.0 * scale);
+                ui.separator();
+                ui.add_space(4.0 * scale);
+
+                // 2. Action Bar
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                        if ui.add(MaterialButton::outlined(t!("cancel"))).clicked() {
+                            open2 = false;
+                        }
+                        if ui.add(MaterialButton::filled(t!("save"))).clicked() {
+                            save_clicked = true;
+                            open2 = false;
+                        }
+                    });
+                });
             });
 
         if save_clicked {

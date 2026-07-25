@@ -162,34 +162,13 @@ pub fn apply_seed(
             }
         }
 
-        // Apply transparency to surface-tier roles
-        if params.surface_alpha < 255 {
-            let alpha = params.surface_alpha;
-            let surface_roles = [
-                "surface",
-                "surfaceContainer",
-                "surfaceContainerHigh",
-                "surfaceContainerHighest",
-                "surfaceContainerLow",
-                "surfaceContainerLowest",
-                "surfaceDim",
-                "surfaceBright",
-                "background",
-            ];
-            for role in &surface_roles {
-                // Only override if not already manually set
-                if params.scheme_mode == UiColorSchemeMode::Manual
-                    && params.manual_colors.contains_key(*role)
-                {
-                    continue;
-                }
-                let base = theme.get_color_by_name(role);
-                theme.selected_colors.insert(
-                    role.to_string(),
-                    Color32::from_rgba_unmultiplied(base.r(), base.g(), base.b(), alpha),
-                );
-            }
-        }
+        // NOTE: surface_alpha is NOT applied to the global color roles here.
+        // Global surface colors stay fully opaque so widgets inside windows
+        // render at full opacity. The transparency is applied selectively:
+        //   • panel_fill (sidebar) — always gets surface_alpha (see below)
+        //   • window frames       — only in Full mode (see new_window in utils.rs)
+        //   • overlay cards       — in Overlay and Full modes (see run_live_slider,
+        //                           splash card, and update progress card in mod.rs)
     }
 
     let mode_clone = egui_mode;
@@ -197,6 +176,19 @@ pub fn apply_seed(
     // pick it up during their own rendering. None = use each widget's MD3 spec default.
     set_global_corner_radius(Some(params.window_rounding));
     apply_theme(ctx, Some(move || mode_clone));
+
+    // Apply surface_alpha to panel_fill only (sidebar panel).
+    // The sidebar always respects the user's transparency setting regardless
+    // of the ui_translucency_mode value.
+    if params.surface_alpha < 255 {
+        let alpha = params.surface_alpha;
+        ctx.style_mut(|style| {
+            let pf = style.visuals.panel_fill;
+            style.visuals.panel_fill = Color32::from_rgba_unmultiplied(
+                pf.r(), pf.g(), pf.b(), alpha,
+            );
+        });
+    }
 
     {
         let r = params.window_rounding;

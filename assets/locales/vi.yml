@@ -10,11 +10,6 @@ splash_sub: "\ue88a Nhấn nút %{open_key_str} để mở menu."
 loading_label: "Đang tải..."
 search_filter: "Nhập để tìm kiếm..."
 open: "Mở"
-reload: "Tải lại"
-check: "Kiểm tra"
-dump: "Xuất"
-restart: "Khởi động lại"
-toggle: "Bật/Tắt"
 cancel: "Hủy"
 save: "Lưu"
 done: "Hoàn tất"
@@ -172,7 +167,8 @@ config_editor:
     Sugoi Toolkit. Nếu không có máy chủ chạy, sẽ không có bản dịch bổ sung và
     trải nghiệm chơi game có thể bị ảnh hưởng. Vui lòng để tùy chọn này bị tắt
     nếu bạn không có sẵn máy chủ dịch thuật.
-  auto_translate_ui: "Tự động dịch UI (KHÔNG ỔN ĐỊNH)"
+  auto_translate_ui: "Tự động dịch UI"
+  auto_translate_ui_desc: "KHÔNG ỔN ĐỊNH"
   notification_tp: "Thông báo hồi phục TP"
   notification_rp: "Thông báo hồi phục RP"
   notification_jobs: "Thông báo hoàn thành công việc"
@@ -208,7 +204,8 @@ config_editor:
   live_theater_allow_same_chara: "Cho phép cùng nhân vật trong live"
   physics_update_mode: "Chế độ vật lý"
   cyspring_mono_uncap_frame_scale: "Bỏ giới hạn tỷ lệ khung CySpring Mono"
-  cyspring_disable_native: "Buộc dùng đường dẫn CySpring Mono (tắt plugin gốc)"
+  cyspring_disable_native: "Buộc dùng đường dẫn CySpring Mono"
+  cyspring_disable_native_desc: "Tắt plugin gốc"
   disable_skill_name_translation: "Tắt dịch tên kỹ năng"
   hide_ingame_ui_hotkey: "Phím tắt ẩn giao diện trong game"
   hide_ingame_ui_hotkey_info: >-
@@ -291,7 +288,10 @@ theme_editor:
   on_surface: "Trên bề mặt"
   transparency: "Độ trong suốt nền"
   corner_radius: "Bán kính bo góc"
-  translucent_windows: "Cửa sổ trong suốt"
+  translucency_method: "Phương thức trong suốt"
+  translucency_none: "Không"
+  translucency_overlay: "Thẻ nổi"
+  translucency_full: "Toàn bộ"
 
 tl_update_dialog: 
   title: "Bản cập nhật mới"

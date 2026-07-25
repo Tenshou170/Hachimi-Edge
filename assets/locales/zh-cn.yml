@@ -10,11 +10,6 @@ splash_sub: "\ue88a 按 %{open_key_str} 打开菜单"
 loading_label: "加载中..."
 search_filter: "输入以搜索..."
 open: "打开"
-reload: "重载"
-check: "检查"
-dump: "导出"
-restart: "重启"
-toggle: "切换"
 cancel: "取消"
 save: "保存"
 done: "完成"
@@ -175,7 +170,8 @@ config_editor:
     或使用提供 API 的云服务（如 py3translationServer 或 Sugoi Toolkit）。
     若未运行服务器，将无法进行额外翻译，且可能影响游戏运行。
     如果您没有可用的翻译服务器，请保持此选项关闭。
-  auto_translate_ui: "自动翻译游戏界面 (可能导致游戏界面异常)"
+  auto_translate_ui: "自动翻译游戏界面"
+  auto_translate_ui_desc: "可能导致游戏界面异常"
   notification_tp: "TP 恢复通知"
   notification_rp: "RP 恢复通知"
   notification_jobs: "任务完成通知"
@@ -211,7 +207,8 @@ config_editor:
   live_theater_allow_same_chara: "在 LIVE 剧场中 允许设置多个相同角色"
   physics_update_mode: "物理引擎更新模式"
   cyspring_mono_uncap_frame_scale: "CySpring Mono 帧率缩放解锁"
-  cyspring_disable_native: "强制 CySpring Mono 路径（禁用原生插件）"
+  cyspring_disable_native: "强制 CySpring Mono 路径"
+  cyspring_disable_native_desc: "禁用原生插件"
   disable_skill_name_translation: "禁用技能名称翻译"
   hide_ingame_ui_hotkey: "隐藏游戏内 UI 的快捷键"
   hide_ingame_ui_hotkey_info: >-
@@ -294,7 +291,10 @@ theme_editor:
   on_surface: "表面文字色"
   transparency: "背景透明度"
   corner_radius: "圆角半径"
-  translucent_windows: "半透明窗口"
+  translucency_method: "半透明方式"
+  translucency_none: "关闭"
+  translucency_overlay: "浮动卡片"
+  translucency_full: "全部"
 
 tl_update_dialog: 
   title: "新翻译更新可用"

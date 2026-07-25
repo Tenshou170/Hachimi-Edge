@@ -10,11 +10,6 @@ splash_sub: "\ue88a Pulsa %{open_key_str} para abrir el menú."
 loading_label: "Cargando..."
 search_filter: "Buscar..."
 open: "Abrir"
-reload: "Recargar"
-check: "Comprobar"
-dump: "Volcar"
-restart: "Reiniciar"
-toggle: "Alternar"
 cancel: "Cancelar"
 save: "Guardar"
 done: "Listo"
@@ -178,7 +173,8 @@ config_editor:
     py3translationServer o Sugoi Toolkit. Sin un servidor activo, no obtendrás
     traducciones adicionales y el rendimiento del juego podría verse afectado.
     Por favor, déjela desactivada si no dispone de un servidor de traducción.
-  auto_translate_ui: "Auto-traducir UI\n(PUEDE ROMPER EL UI)"
+  auto_translate_ui: "Auto-traducir UI"
+  auto_translate_ui_desc: "PUEDE ROMPER EL UI"
   notification_tp: "Notificación de recuperación de TP"
   notification_rp: "Notificación de recuperación de RP"
   notification_jobs: "Notificación de trabajo completado"
@@ -214,7 +210,8 @@ config_editor:
   live_theater_allow_same_chara: "Permitir personajes iguales en Live Theater"
   physics_update_mode: "Modo de actualización de físicas"
   cyspring_mono_uncap_frame_scale: "Desbloquear escala de fotogramas CySpring Mono"
-  cyspring_disable_native: "Forzar ruta Mono de CySpring (deshabilitar plugin nativo)"
+  cyspring_disable_native: "Forzar ruta Mono de CySpring"
+  cyspring_disable_native_desc: "Deshabilita el plugin nativo"
   disable_skill_name_translation: "No traducir habilidades"
   hide_ingame_ui_hotkey: "Atajo para ocultar UI del juego"
   hide_ingame_ui_hotkey_info: >-
@@ -297,7 +294,10 @@ theme_editor:
   on_surface: "En Superficie"
   transparency: "Transparência de Fondo"
   corner_radius: "Radio de Esquina"
-  translucent_windows: "Ventanas translúcidas"
+  translucency_method: "Método de translucidez"
+  translucency_none: "Ninguno"
+  translucency_overlay: "Tarjetas flotantes"
+  translucency_full: "Completo"
 
 tl_update_dialog: 
   title: "Nueva actualización disponible"

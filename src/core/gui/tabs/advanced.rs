@@ -12,6 +12,7 @@ use crate::core::Hachimi;
 #[allow(unused_imports)]
 use egui_material3::{MaterialButton, MaterialNumberField};
 use egui_material3::*;
+#[cfg(target_os = "windows")]
 use egui_material3::theme::get_global_color;
 use rust_i18n::t;
 use std::thread;
@@ -19,8 +20,6 @@ use std::thread;
 
 #[allow(unused_variables)]
 pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, ui: &mut egui::Ui) {
-    let on_surface_variant = get_global_color("onSurfaceVariant");
-    ui.style_mut().visuals.override_text_color = Some(on_surface_variant);
 
     // ── Advanced ──────────────────────────────────────────────────────────────
     section_heading(ui, t!("config_editor.advanced_settings_heading"));
@@ -94,15 +93,21 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
         let mut minutes = (config.bg_update_interval_sec / 60) as i32;
         let prev_minutes = minutes;
 
-        let unit_str = t!("config_editor.bg_update_interval_unit");
-        ConfigEditor::list_tile_number(
-            ui,
-            t!("config_editor.bg_update_interval"),
-            &mut minutes,
-            1..=10080,
-            1.0,
-            Some(&unit_str),
-        );
+        ui.add(egui::Label::new(t!("config_editor.bg_update_interval")).wrap());
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            let scale = crate::core::gui::utils::get_scale(ui.ctx());
+            let number_w = 48.0 * scale;
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(number_w, 32.0), egui::Sense::hover());
+            ui.put(
+                rect,
+                MaterialNumberField::filled(&mut minutes)
+                    .range(1..=999)
+                    .decimals(0),
+            );
+            ui.label(t!("config_editor.bg_update_interval_unit"));
+        });
+        ui.add_space(4.0);
 
         if minutes != prev_minutes {
             config.bg_update_interval_sec = (minutes as u64) * 60;
@@ -126,12 +131,10 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
         ConfigEditor::list_tile_switch(ui, t!("config_editor.discord_rpc"), &mut config.windows.discord_rpc, true);
 
         // SMTC — disabled with Wine hint when unavailable
-        if supports_smtc {
-            ConfigEditor::list_tile_switch(ui, t!("config_editor.enable_smtc"), &mut config.windows.enable_smtc, true);
-        } else {
-            ConfigEditor::list_tile_switch(ui, t!("config_editor.enable_smtc"), &mut config.windows.enable_smtc, false);
-            ConfigEditor::list_tile_hint(ui, t!("config_editor.unavailable_wine_proton"));
-        }
+        ConfigEditor::list_tile_switch_with_hint(
+            ui, t!("config_editor.enable_smtc"), &mut config.windows.enable_smtc,
+            supports_smtc, t!("config_editor.unavailable_wine_proton"),
+        );
 
         // Notification settings — disabled with Wine hint when unavailable
         for (label_key, val) in [
@@ -139,12 +142,10 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
             ("config_editor.notification_rp",    &mut config.notification_rp),
             ("config_editor.notification_jobs",  &mut config.notification_jobs),
         ] {
-            if supports_toasts {
-                ConfigEditor::list_tile_switch(ui, t!(label_key), val, true);
-            } else {
-                ConfigEditor::list_tile_switch(ui, t!(label_key), val, false);
-                ConfigEditor::list_tile_hint(ui, t!("config_editor.unavailable_wine_proton"));
-            }
+            ConfigEditor::list_tile_switch_with_hint(
+                ui, t!(label_key), val,
+                supports_toasts, t!("config_editor.unavailable_wine_proton"),
+            );
         }
 
         // Taskbar progress — disabled with Wine hint when unavailable
@@ -152,12 +153,10 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
             ("config_editor.taskbar_show_progress_on_download",    &mut config.windows.taskbar_show_progress_on_download   as &mut bool),
             ("config_editor.taskbar_show_progress_on_connecting",  &mut config.windows.taskbar_show_progress_on_connecting),
         ] {
-            if supports_taskbar {
-                ConfigEditor::list_tile_switch(ui, t!(label_key), val, true);
-            } else {
-                ConfigEditor::list_tile_switch(ui, t!(label_key), val, false);
-                ConfigEditor::list_tile_hint(ui, t!("config_editor.unavailable_wine_proton"));
-            }
+            ConfigEditor::list_tile_switch_with_hint(
+                ui, t!(label_key), val,
+                supports_taskbar, t!("config_editor.unavailable_wine_proton"),
+            );
         }
 
         // Hide-ingame-UI hotkey bind — interactive rebind row
@@ -296,23 +295,26 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
         });
     }
 
-    // Sugoi URL
-    {
-        let mut url = config.sugoi_url.clone().unwrap_or_default();
-        if ConfigEditor::list_tile_text_field(ui, t!("config_editor.sugoi_url"), &mut url).changed() {
-            config.sugoi_url = if url.is_empty() { None } else { Some(url) };
+    // Sub-options — only visible when auto-translate is enabled
+    if config.auto_translate_stories {
+        // Sugoi URL
+        {
+            let mut url = config.sugoi_url.clone().unwrap_or_default();
+            if ConfigEditor::list_tile_text_field(ui, t!("config_editor.sugoi_url"), &mut url).changed() {
+                config.sugoi_url = if url.is_empty() { None } else { Some(url) };
+            }
         }
-    }
 
-    if ConfigEditor::list_tile_switch(ui, t!("config_editor.auto_translate_ui"), &mut config.auto_translate_localize, true)
-        .clicked() && config.auto_translate_localize
-    {
-        thread::spawn(|| {
-            Gui::instance().unwrap().lock().unwrap_or_else(|e| e.into_inner())
-                .show_window(Box::new(SimpleOkDialog::new(
-                    &t!("warning"), &t!("config_editor.auto_tl_warning"), || {},
-                )));
-        });
+        if ConfigEditor::list_tile_switch_described_danger(ui, t!("config_editor.auto_translate_ui"), &mut config.auto_translate_localize, true, t!("config_editor.auto_translate_ui_desc"))
+            .clicked() && config.auto_translate_localize
+        {
+            thread::spawn(|| {
+                Gui::instance().unwrap().lock().unwrap_or_else(|e| e.into_inner())
+                    .show_window(Box::new(SimpleOkDialog::new(
+                        &t!("warning"), &t!("config_editor.auto_tl_warning"), || {},
+                    )));
+            });
+        }
     }
 
     ConfigEditor::list_tile_switch(ui, t!("config_editor.unlock_live_chara"),  &mut config.unlock_live_chara,  true);
