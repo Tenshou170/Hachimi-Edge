@@ -1,9 +1,11 @@
 use std::sync::atomic::Ordering;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock};
+use std::num::NonZeroUsize;
 use std::ptr::null_mut;
 use std::ops::Not;
 use fnv::FnvHashSet;
+use lru::LruCache;
 use once_cell::sync::Lazy;
 use crate::{
     core::{
@@ -23,7 +25,8 @@ use crate::{
 };
 
 static DUMPED_PATHS: Lazy<Mutex<FnvHashSet<String>>> = Lazy::new(|| Mutex::default());
-static SYSTEM_TEXT_COMPONENTS: Lazy<Mutex<FnvHashSet<i32>>> = Lazy::new(|| Mutex::default());
+static SYSTEM_TEXT_COMPONENTS: Lazy<RwLock<FnvHashSet<i32>>> = Lazy::new(|| RwLock::default());
+static HIERARCHY_PATH_CACHE: Lazy<RwLock<LruCache<i32, String>>> = Lazy::new(|| RwLock::new(LruCache::new(NonZeroUsize::new(2048).unwrap())));
 
 struct StoredPosition {
     base: Vector2_t,
@@ -52,12 +55,12 @@ static PENDING_OFFSETS: Lazy<Mutex<Vec<PendingOffset>>> = Lazy::new(|| Mutex::ne
 pub unsafe fn mark_as_system_text_component(this: *mut Il2CppObject) {
     if this.is_null() { return; }
     let id = Object::get_instanceID(this);
-    SYSTEM_TEXT_COMPONENTS.lock().unwrap().insert(id);
+    SYSTEM_TEXT_COMPONENTS.write().unwrap().insert(id);
     unsafe {
         let go = (*this).game_object();
         if !go.is_null() {
             let go_id = Object::get_instanceID(go);
-            SYSTEM_TEXT_COMPONENTS.lock().unwrap().insert(go_id);
+            SYSTEM_TEXT_COMPONENTS.write().unwrap().insert(go_id);
         }
     }
 }
@@ -70,7 +73,7 @@ fn find_text_property_override<'a>(
         return Some(props);
     }
     for (key, props) in overrides {
-        if key.starts_with('/') && path.ends_with(&key[1..]) {
+        if key.as_bytes().first() == Some(&b'/') && path.ends_with(&key[1..]) {
             return Some(props);
         }
     }
@@ -85,7 +88,7 @@ fn find_font_override(
         return Some(size);
     }
     for (key, &size) in overrides {
-        if key.starts_with('/') && path.ends_with(&key[1..]) {
+        if key.as_bytes().first() == Some(&b'/') && path.ends_with(&key[1..]) {
             return Some(size);
         }
     }
@@ -137,7 +140,7 @@ extern "C" fn PopulateWithErrors(
     if IS_SYSTEM_TEXT_QUERY.load(Ordering::Relaxed) || TDQ_IS_SKILL_LEARNING_QUERY.load(Ordering::Relaxed) {
         force_wrap = true;
     } else {
-        let components = SYSTEM_TEXT_COMPONENTS.lock().unwrap();
+        let components = SYSTEM_TEXT_COMPONENTS.read().unwrap();
         if !context.is_null() {
             if components.contains(&Object::get_instanceID(context)) { force_wrap = true; }
         } else if !this.is_null() {
@@ -630,24 +633,36 @@ fn dump_properties(obj: *mut Il2CppObject, path: &str, settings: &TextGeneration
 
 fn get_hierarchy_path(obj: *mut Il2CppObject) -> String {
     if obj.is_null() { return "None".to_owned(); }
-    let mut path = Vec::new();
+    let instance_id = Object::get_instanceID(obj);
+    if instance_id != 0 {
+        if let Some(path) = HIERARCHY_PATH_CACHE.read().unwrap().peek(&instance_id) {
+            return path.clone();
+        }
+    }
+
+    let mut path_vec = Vec::new();
     unsafe {
-        path.push((*obj).name());
+        path_vec.push((*obj).name());
         let mut curr = (*obj).transform();
         while !curr.is_null() {
             let parent = Transform::get_parent(curr);
             if parent.is_null() { break; }
-            path.push((*parent).name());
+            path_vec.push((*parent).name());
             curr = parent;
         }
     }
 
-    if path.is_empty() {
-        return "Unknown".to_owned();
-    }
+    let res = if path_vec.is_empty() {
+        "Unknown".to_owned()
+    } else {
+        path_vec.reverse();
+        path_vec.join("/")
+    };
 
-    path.reverse();
-    path.join("/")
+    if instance_id != 0 {
+        HIERARCHY_PATH_CACHE.write().unwrap().put(instance_id, res.clone());
+    }
+    res
 }
 
 struct TemplateContext<'a> {

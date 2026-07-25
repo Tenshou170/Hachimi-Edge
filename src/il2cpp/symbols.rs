@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::num::NonZeroUsize;
 use std::os::raw::c_void;
-use std::sync::Mutex;
+use std::sync::RwLock;
 
 use fnv::FnvHashMap;
 use lru::LruCache;
@@ -138,28 +138,30 @@ pub fn get_method_overload_addr(class: *mut Il2CppClass, name: &str, params: &[I
 const METHOD_CACHE_CLASS_CAP: usize = 512;
 
 pub static METHOD_CACHE: Lazy<
-    Mutex<LruCache<usize, FnvHashMap<(Cow<'static, CStr>, i32), usize>>>
-> = Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(METHOD_CACHE_CLASS_CAP).unwrap())));
+    RwLock<LruCache<usize, FnvHashMap<(Cow<'static, CStr>, i32), usize>>>
+> = Lazy::new(|| RwLock::new(LruCache::new(NonZeroUsize::new(METHOD_CACHE_CLASS_CAP).unwrap())));
 
 pub fn get_method_cached(class: *mut Il2CppClass, name: &CStr, args_count: i32) -> Result<*const MethodInfo, Error> {
-    let mut cache = METHOD_CACHE.lock().unwrap();
-    // Peek first to avoid promoting on a hit that returns early
-    if let Some(inner) = cache.get(&(class as usize)) {
-        if let Some(addr) = inner.get(&(name.into(), args_count)) {
-            if *addr == 0 {
-                return Err(Error::MethodNotFound(name.to_str().unwrap().to_owned()));
-            } else {
-                return Ok(*addr as *const MethodInfo);
+    {
+        let cache = METHOD_CACHE.read().unwrap();
+        if let Some(inner) = cache.peek(&(class as usize)) {
+            if let Some(addr) = inner.get(&(name.into(), args_count)) {
+                if *addr == 0 {
+                    return Err(Error::MethodNotFound(name.to_str().unwrap().to_owned()));
+                } else {
+                    return Ok(*addr as *const MethodInfo);
+                }
             }
         }
     }
 
-    // Miss — resolve and insert
+    // Miss — resolve and insert under write lock
     let res = get_method(class, name, args_count);
     let addr = match res {
         Ok(addr) => addr as usize,
         Err(_) => 0,
     };
+    let mut cache = METHOD_CACHE.write().unwrap();
     let inner = cache.get_or_insert_mut(class as usize, FnvHashMap::default);
     inner.insert((name.to_owned().into(), args_count), addr);
     res
