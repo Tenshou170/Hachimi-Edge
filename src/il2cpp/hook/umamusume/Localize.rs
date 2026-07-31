@@ -28,6 +28,9 @@ pub extern "C" fn Get(id: i32) -> *mut Il2CppString {
         return get_orig_fn!(Get, GetFn)(id);
     }
 
+    // Take both snapshots together so they stay consistent.
+    let config = hachimi.config.load();
+
     let name = match unsafe { TEXTID_NAME_CACHE.entry(id) } {
         Entry::Occupied(e) => &*e.into_mut(),
         Entry::Vacant(e) => {
@@ -37,7 +40,6 @@ pub extern "C" fn Get(id: i32) -> *mut Il2CppString {
         },
     };
 
-    let config = hachimi.config.load();
     if let Some(text) = localized_data.localize_dict.get(name) {
         if config.text_debug && config.text_localize_dump {
             let orig_str = get_orig_fn!(Get, GetFn)(id);

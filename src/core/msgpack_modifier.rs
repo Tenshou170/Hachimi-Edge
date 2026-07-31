@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 static REAL_OWNED_CHARAS: Lazy<Mutex<FnvHashSet<i32>>> = Lazy::new(|| Mutex::default());
 static REAL_OWNED_DRESSES: Lazy<Mutex<FnvHashSet<i32>>> = Lazy::new(|| Mutex::default());
 static REAL_OWNED_SONGS: Lazy<Mutex<FnvHashSet<i32>>> = Lazy::new(|| Mutex::default());
-static LIVE_SAVE_INFO_MAP: Lazy<Mutex<std::collections::HashMap<i32, Value>>> = Lazy::new(|| Mutex::default());
+static LIVE_SAVE_INFO_MAP: Lazy<Mutex<fnv::FnvHashMap<i32, Value>>> = Lazy::new(|| Mutex::default());
 
 #[cfg(target_os = "windows")]
 static LEADER_CHARA_ID: AtomicI32 = AtomicI32::new(1001);
@@ -39,75 +39,71 @@ pub fn dump_msgpack(data: &[u8], suffix: &str) {
 }
 
 pub fn modify_request(data: &[u8]) -> Option<Vec<u8>> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let config = Hachimi::instance().config.load();
-        if !config.unlock_live_chara { return None; }
+    let config = Hachimi::instance().config.load();
+    if !config.unlock_live_chara { return None; }
 
-        let mut cursor = std::io::Cursor::new(data);
-        let mut val = match rmpv::decode::read_value(&mut cursor) {
-            Ok(v) => v,
-            Err(_) => return None,
-        };
+    let mut cursor = std::io::Cursor::new(data);
+    let mut val = match rmpv::decode::read_value(&mut cursor) {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
 
-        let mut modified = false;
+    let mut modified = false;
 
-        if let Value::Map(ref mut map) = val {
-            for (k, v) in map.iter_mut() {
-                if k.as_str() == Some("live_theater_save_info") {
-                    if let Value::Map(ref mut info_map) = v {
-                        if process_theater_save(info_map) {
-                            modified = true;
-                        }
+    if let Value::Map(ref mut map) = val {
+        for (k, v) in map.iter_mut() {
+            if k.as_str() == Some("live_theater_save_info") {
+                if let Value::Map(ref mut info_map) = v {
+                    if process_theater_save(info_map) {
+                        modified = true;
                     }
                 }
             }
         }
+    }
 
-        if modified {
-            let mut out = Vec::new();
-            if rmpv::encode::write_value(&mut out, &val).is_ok() {
-                return Some(out);
-            }
+    if modified {
+        let mut out = Vec::new();
+        if rmpv::encode::write_value(&mut out, &val).is_ok() {
+            return Some(out);
         }
-        None
-    })).unwrap_or(None)
+    }
+    None
 }
 
 pub fn modify_response(data: &[u8]) -> Option<Vec<u8>> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let config = Hachimi::instance().config.load();
-        if !config.unlock_live_chara { return None; }
+    let config = Hachimi::instance().config.load();
+    if !config.unlock_live_chara { return None; }
 
-        let mut cursor = std::io::Cursor::new(data);
-        let mut val = match rmpv::decode::read_value(&mut cursor) {
-            Ok(v) => v,
-            Err(_) => return None,
-        };
+    let mut cursor = std::io::Cursor::new(data);
+    let mut val = match rmpv::decode::read_value(&mut cursor) {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
 
-        let mut modified = false;
+    let mut modified = false;
 
-        if let Value::Map(ref mut map) = val {
-            for (k, v) in map.iter_mut() {
-                if k.as_str() == Some("data") {
-                    if let Value::Map(ref mut data_map) = v {
-                        if process_chara_list(data_map) { modified = true; }
-                        if process_chara_profile(data_map) { modified = true; }
-                        if process_cloth_list(data_map) { modified = true; }
-                        if process_music_list(data_map) { modified = true; }
-                        if process_save_info(data_map) { modified = true; }
-                    }
+    if let Value::Map(ref mut map) = val {
+        for (k, v) in map.iter_mut() {
+            if k.as_str() == Some("data") {
+                if let Value::Map(ref mut data_map) = v {
+                    if process_chara_list(data_map) { modified = true; }
+                    if process_chara_profile(data_map) { modified = true; }
+                    if process_cloth_list(data_map) { modified = true; }
+                    if process_music_list(data_map) { modified = true; }
+                    if process_save_info(data_map) { modified = true; }
                 }
             }
         }
+    }
 
-        if modified {
-            let mut out = Vec::new();
-            if rmpv::encode::write_value(&mut out, &val).is_ok() {
-                return Some(out);
-            }
+    if modified {
+        let mut out = Vec::new();
+        if rmpv::encode::write_value(&mut out, &val).is_ok() {
+            return Some(out);
         }
-        None
-    })).unwrap_or(None)
+    }
+    None
 }
 
 // panicking.  A poisoned mutex means a previous call panicked while holding
@@ -209,7 +205,7 @@ fn process_theater_save(info_map: &mut Vec<(Value, Value)>) -> bool {
 
 fn process_chara_list(data_map: &mut Vec<(Value, Value)>) -> bool {
     let mut modified = false;
-    let mut existing_map = std::collections::HashMap::new();
+    let mut existing_map = fnv::FnvHashMap::default();
     let mut target_idx = None;
     let mut template_item = None;
 
@@ -282,7 +278,7 @@ fn process_chara_list(data_map: &mut Vec<(Value, Value)>) -> bool {
 
 fn process_chara_profile(data_map: &mut Vec<(Value, Value)>) -> bool {
     let mut modified = false;
-    let mut existing_map = std::collections::HashMap::new();
+    let mut existing_map = fnv::FnvHashMap::default();
     let mut target_idx = None;
     let mut template_item = None;
 

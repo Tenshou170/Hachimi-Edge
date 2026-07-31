@@ -467,10 +467,12 @@ fn generate_auto_tl_dict(this: *mut Il2CppObject) -> Result<StoryTimelineDataDic
         if !name.is_null() && unsafe { (*name).length > 0 } {
             let name_str = unsafe { (*name).as_utf16str().to_string() };
             if name_str != "モノローグ" && name_str != "<username>" {
-                if !name_indices.contains_key(&name_str) {
-                    name_indices.insert(name_str.clone(), names_tmp.len());
+                let idx = name_indices.entry(name_str.clone()).or_insert_with(|| {
+                    let i = names_tmp.len();
                     names_tmp.push(name_str.clone());
-                }
+                    i
+                });
+                let _ = idx;
                 block_dict.name = Some(name_str);
             }
         }

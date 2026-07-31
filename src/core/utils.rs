@@ -38,16 +38,28 @@ pub fn get_localized_string(id_name: &str) -> String {
         return result;
     }
 
-    let id_name_owned = id_name.to_owned();
-    static PENDING_NAME: Mutex<Option<String>> = Mutex::new(None);
-    *PENDING_NAME.lock().unwrap() = Some(id_name_owned.clone());
-
-    Thread::main_thread().schedule(|| {
-        if let Some(name) = PENDING_NAME.lock().unwrap().take() {
-            let val = TextId::from_name(&name);
-            LOCALIZE_ID_CACHE.lock().unwrap().insert(name, val);
+    // Enqueue into the pending vec (all entries drained in one main-thread callback).
+    // Using a Vec instead of a single Option slot prevents concurrent callers from
+    // clobbering each other's name before the scheduler fires.
+    static PENDING_NAMES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    {
+        let mut pending = PENDING_NAMES.lock().unwrap();
+        // Avoid duplicate entries if the same name is requested concurrently.
+        if !pending.iter().any(|n| n == id_name) {
+            pending.push(id_name.to_owned());
         }
-    });
+        if pending.len() == 1 {
+            // Only register the callback when the queue transitions from empty to
+            // non-empty — it will drain everything present at that point.
+            Thread::main_thread().schedule(|| {
+                let names: Vec<String> = std::mem::take(&mut *PENDING_NAMES.lock().unwrap());
+                let mut cache = LOCALIZE_ID_CACHE.lock().unwrap();
+                for name in names {
+                    cache.entry(name.clone()).or_insert_with(|| TextId::from_name(&name));
+                }
+            });
+        }
+    }
 
     check_cache(id_name).unwrap_or_else(|| id_name.to_owned())
 }
@@ -159,11 +171,17 @@ impl<'a> Iterator for IsolateTags<'a> {
                                     in_tag = false;
                                     break 'tag_name_end;
                                 }
-                                let mut closing_tag = String::with_capacity(3 + tag_name.len());
-                                closing_tag += "</";
-                                closing_tag += tag_name;
-                                closing_tag += ">";
-                                if !self.s[self.i..].contains(&closing_tag) {
+                                // Check for a matching closing tag without allocating.
+                                // Scan self.s[self.i..] for "</" + tag_name + ">" by
+                                // finding every "</" and then checking the bytes that follow.
+                                let rest = self.s[self.i..].as_bytes();
+                                let tag_bytes = tag_name.as_bytes();
+                                let has_closing = rest.windows(2 + tag_bytes.len() + 1).any(|w| {
+                                    w[0] == b'<' && w[1] == b'/'
+                                        && w[2..2 + tag_bytes.len()] == *tag_bytes
+                                        && w[2 + tag_bytes.len()] == b'>'
+                                });
+                                if !has_closing {
                                     in_tag = false;
                                     break 'tag_name_end;
                                 }
@@ -409,10 +427,13 @@ pub unsafe fn wrap_text_il2cpp(string: *mut Il2CppString, base_line_width: i32) 
 
 pub fn add_size_tag(string: &str, size: i32) -> String {
     // <size=xx>...</size>
-    let mut new_str = String::with_capacity(9 + string.len() + 7);
+    // Use itoa to avoid a temporary String allocation for the integer.
+    let mut buf = itoa::Buffer::new();
+    let size_str = buf.format(size);
+    let mut new_str = String::with_capacity(6 + size_str.len() + 1 + string.len() + 7);
     new_str.push_str("<size=");
-    new_str.push_str(&size.to_string());
-    new_str.push_str(">");
+    new_str.push_str(size_str);
+    new_str.push('>');
     new_str.push_str(string);
     new_str.push_str("</size>");
     new_str

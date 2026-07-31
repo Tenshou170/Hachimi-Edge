@@ -230,7 +230,7 @@ pub fn new_window<'a>(
     // window_fill / window_shadow from the egui style.
     let frame = egui::Frame::NONE
         .fill(fill)
-        .stroke(egui::Stroke::new(1.0, outline_variant))
+        .stroke(egui::Stroke::new(1.0_f32, outline_variant))
         .inner_margin(egui::Margin::same(
             ctx.style().spacing.window_margin.left as i8,
         ))
@@ -462,7 +462,7 @@ pub fn settings_card(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui)
 
     egui::Frame::NONE
         .fill(surface_low)
-        .stroke(egui::Stroke::new(1.0, outline_variant))
+        .stroke(egui::Stroke::new(1.0_f32, outline_variant))
         .corner_radius(egui::CornerRadius::same(cr.unwrap_or(8.0).max(8.0) as u8))
         .inner_margin(egui::Margin { left: 0, right: 0, top: 4, bottom: 4 })
         .show(ui, add_contents);
