@@ -375,4 +375,3 @@ pub fn get_game_dir() -> PathBuf {
     let package_name = game_impl::get_package_name();
     game_impl::get_data_dir(&package_name)
 }
-

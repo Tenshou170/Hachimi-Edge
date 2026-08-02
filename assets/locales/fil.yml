@@ -4,9 +4,9 @@ windows:
   menu_open_key: "Kanang arrow"
 
 android: 
-  menu_open_key: "Vol Up + Vol Down\n\ue87c o i-tap nang tatlong beses ang top-left ng screen"
+  menu_open_key: "Vol Up + Vol Down\n\uf72b o i-tap nang tatlong beses ang top-left ng screen"
 
-splash_sub: "\ue88a Pindutin ang %{open_key_str} para buksan ang menu."
+splash_sub: "\ue5d2 Pindutin ang %{open_key_str} para buksan ang menu."
 loading_label: "Naglo-load..."
 search_filter: "I-type para hanapin..."
 open: "Buksan"

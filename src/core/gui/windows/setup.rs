@@ -1,6 +1,6 @@
 use crate::core::gui::*;
 
-use egui_material3::*;
+use egui_material3::{theme::get_global_color, *};
 use rust_i18n::t;
 
 use crate::core::*;
@@ -60,8 +60,13 @@ impl AppWindow for FirstTimeSetupWindow {
                     |ui, i| {
                         match i {
                             0 => {
-                                ui.heading(t!("first_time_setup.welcome_heading"));
-                                ui.separator();
+                                ui.add(egui::Label::new(
+                                    egui::RichText::new(t!("first_time_setup.welcome_heading"))
+                                        .size(16.0)
+                                        .strong()
+                                        .color(get_global_color("onSurface")),
+                                ));
+                                ui.add_space(8.0);
                                 let mut language = self.config.language;
                                 let lang_changed = ConfigEditor::list_tile_combo(
                                     ui,
@@ -114,8 +119,13 @@ impl AppWindow for FirstTimeSetupWindow {
                                 ui.label(t!("first_time_setup.welcome_content"));
                             }
                             1 => {
-                                ui.heading(t!("first_time_setup.translation_repo_heading"));
-                                ui.separator();
+                                ui.add(egui::Label::new(
+                                    egui::RichText::new(t!("first_time_setup.translation_repo_heading"))
+                                        .size(16.0)
+                                        .strong()
+                                        .color(get_global_color("onSurface")),
+                                ));
+                                ui.add_space(8.0);
                                 ui.label(t!("first_time_setup.select_translation_repo"));
                                 ui.add_space(4.0);
 
@@ -238,8 +248,13 @@ impl AppWindow for FirstTimeSetupWindow {
                                 );
                             }
                             2 => {
-                                ui.heading(t!("first_time_setup.complete_heading"));
-                                ui.separator();
+                                ui.add(egui::Label::new(
+                                    egui::RichText::new(t!("first_time_setup.complete_heading"))
+                                        .size(16.0)
+                                        .strong()
+                                        .color(get_global_color("onSurface")),
+                                ));
+                                ui.add_space(8.0);
                                 ui.label(t!("first_time_setup.complete_content"));
                             }
                             _ => {}

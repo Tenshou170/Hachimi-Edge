@@ -57,7 +57,18 @@ impl AppWindow for LicenseWindow {
                         .corner_radius(8.0)
                         .inner_margin(egui::Margin::same(8));
 
-                    ui.heading(t!("hachimi"));
+                    // Section heading helper: onSurface strong text, no separator
+                    let heading = |ui: &mut egui::Ui, text: &str| {
+                        ui.add(egui::Label::new(
+                            egui::RichText::new(text)
+                                .size(16.0)
+                                .strong()
+                                .color(get_global_color("onSurface")),
+                        ));
+                        ui.add_space(6.0);
+                    };
+
+                    heading(ui, &t!("hachimi"));
                     ui.collapsing(t!("license.gpl_v3_only_notice"), |ui| {
                         license_frame.show(ui, |ui| {
                             ui.add(
@@ -68,15 +79,22 @@ impl AppWindow for LicenseWindow {
                             );
                         });
                     });
-                    ui.separator();
 
-                    ui.heading("Font Licenses");
-                    ui.label("This software bundles the following fonts:");
+                    ui.add_space(12.0);
+                    heading(ui, "Font Licenses");
+                    ui.add(egui::Label::new(
+                        egui::RichText::new("This software bundles the following fonts:")
+                            .color(get_global_color("onSurfaceVariant")),
+                    ));
                     ui.add_space(4.0);
 
                     for font in FONT_NOTICES {
                         license_frame.show(ui, |ui| {
-                            ui.strong(font.name);
+                            ui.add(egui::Label::new(
+                                egui::RichText::new(font.name)
+                                    .strong()
+                                    .color(get_global_color("primary")),
+                            ));
                             ui.label(format!("License: {}", font.license));
                             ui.label(font.copyright);
                         });
