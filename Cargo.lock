@@ -1226,8 +1226,8 @@ dependencies = [
 
 [[package]]
 name = "egui-material3"
-version = "0.0.11"
-source = "git+https://github.com/Tenshou170/egui-material3.git?rev=d76ab19d0bdaa3b25c702ad44fe540080818e42b#d76ab19d0bdaa3b25c702ad44fe540080818e42b"
+version = "0.0.12"
+source = "git+https://github.com/Tenshou170/egui-material3.git#1cb02900f3c91827b0379c6a79500239ed8f34fd"
 dependencies = [
  "base64",
  "dark-light",
@@ -1952,6 +1952,7 @@ dependencies = [
  "glow",
  "http",
  "image",
+ "itoa",
  "jni 0.21.1",
  "libc",
  "log",
@@ -1959,6 +1960,7 @@ dependencies = [
  "material-colors",
  "memmap2",
  "microseh",
+ "mimalloc",
  "minhook",
  "once_cell",
  "pelite",
@@ -2428,6 +2430,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
+name = "libmimalloc-sys"
+version = "0.1.49"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a45a52f43e1c16f667ccfe4dd8c85b7f7c204fd5e3bf46c5b0db9a5c3c0b8e9"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "libredox"
 version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2556,6 +2567,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c21a3b5df1f93ad17fea4bdf3c99fbd841cda0d4102cd42a6003ff3fdf89b59"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "mimalloc"
+version = "0.1.52"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d4139bb28d14ad1facf21d5eb8825051b326e172d216b39f6d31df53cc97862"
+dependencies = [
+ "libmimalloc-sys",
 ]
 
 [[package]]

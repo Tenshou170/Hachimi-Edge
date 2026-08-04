@@ -12,6 +12,7 @@ opt-level = 3
 strip = true
 lto = "fat"
 codegen-units = 1
+panic = "abort"
 
 [profile.dev]
 debug = "limited"
@@ -28,7 +29,7 @@ serde_json = "1.0"
 fnv = "1.0"
 widestring = "1.1"
 egui = { version = "0.33.3", default-features = false, features = ["serde"] }
-egui-material3 = { git = "https://github.com/Tenshou170/egui-material3.git", rev = "d76ab19d0bdaa3b25c702ad44fe540080818e42b", default-features = false }
+egui-material3 = { git = "https://github.com/Tenshou170/egui-material3.git", default-features = false }
 # egui-material3 = { path = "../egui-material3", default-features = false }
 egui-scale = "0.3.0"
 egui_extras = { version = "0.33.3", default-features = false, features = ["image"] }
@@ -54,6 +55,8 @@ regex = "1.12.3"
 rmpv = "1.3.1"
 rand = "0.10.1"
 lru = "0.16"
+itoa = "1.0"
+mimalloc = { version = "0.1", default-features = false }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15.1"

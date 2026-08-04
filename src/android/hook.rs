@@ -3,6 +3,7 @@ use std::{
     os::raw::{c_char, c_int, c_void}
 };
 
+use log::{info, warn};
 use jni::sys::{jint, JNINativeMethod, JNIEnv, jclass};
 
 use crate::{android::gui_impl::input_hook, core::{Error, Hachimi, Interceptor}};
@@ -92,17 +93,26 @@ fn init_internal(env: *mut jni::sys::JNIEnv) -> Result<(), Error> {
     const DO_DLOPEN_V24: &str = "__dl__Z9do_dlopenPKciPK17android_dlextinfoPv";  // A7, A7.1
     const DO_DLOPEN_V26: &str = "__dl__Z9do_dlopenPKciPK17android_dlextinfoPKv"; // A8 or later
     if !force_hook_dlopen && api_level > 0 {
-        if api_level >= 26 {
-            dlopen_orig = Interceptor::find_symbol_by_name(LINKER_MODULE, DO_DLOPEN_V26)?;
-            dlopen_hook = do_dlopen as _;
-            dlopen_name = DO_DLOPEN_V26;
+        let sym_to_find = if api_level >= 26 {
+            Some(DO_DLOPEN_V26)
+        } else if api_level >= 24 {
+            Some(DO_DLOPEN_V24)
+        } else {
+            None
+        };
+
+        if let Some(sym_name) = sym_to_find {
+            match Interceptor::find_symbol_by_name(LINKER_MODULE, sym_name) {
+                Ok(addr) => {
+                    dlopen_orig = addr;
+                    dlopen_hook = do_dlopen as _;
+                    dlopen_name = sym_name;
+                }
+                Err(e) => {
+                    warn!("Failed to find linker symbol {}: {}, falling back to libc::dlopen", sym_name, e);
+                }
+            }
         }
-        else if api_level >= 24 {
-            dlopen_orig = Interceptor::find_symbol_by_name(LINKER_MODULE, DO_DLOPEN_V24)?;
-            dlopen_hook = do_dlopen as _;
-            dlopen_name = DO_DLOPEN_V24;
-        }
-        // otherwise hook dlopen
     }
 
     info!("Hooking {} at {:#x}", dlopen_name, dlopen_orig);

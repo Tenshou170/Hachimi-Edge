@@ -1,53 +1,57 @@
-<img align="left" width="80" height="80" src="assets/icon.png">
+<div align="center">
+  <img src="assets/icon.png" width="128" height="128" alt="Hachimi Edge Logo">
+  <h1>Hachimi Edge</h1>
+  <p><b>Game enhancement and translation mod for UM:PD</b></p>
 
-# Hachimi Edge
+  <p>English | <a href="README-zh_cn.md">简体中文</a> | <a href="README-zh_tw.md">繁體中文</a></p>
 
-English | [简体中文](README-zh_cn.md) | [繁體中文](README-zh_tw.md)
+  <p>
+    <a href="https://github.com/Tenshou170/Hachimi-Edge/actions"><img src="https://img.shields.io/github/actions/workflow/status/Tenshou170/Hachimi-Edge/test_build.yml?branch=main&label=Build&style=for-the-badge" alt="Build Status"></a> <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-blue?style=for-the-badge" alt="Target Platforms">
+  </p>
+  <p>
+    <a href="https://discord.gg/YjBgmuqqYr"><img src="https://dcbadge.limes.pink/api/server/https://discord.gg/YjBgmuqqYr" alt="Discord Server"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL%203.0-blue.svg?style=flat-square" alt="License"></a>
+  </p>
+</div>
 
-[![Discord server](https://dcbadge.limes.pink/api/server/https://discord.gg/YjBgmuqqYr)](https://discord.gg/YjBgmuqqYr)
+<div align="center">
+  <img height="400" src="assets/Screenshot.png">
+</div>
 
-Game enhancement and translation mod for UM:PD.
+## Sharing & Redistribution Guidelines
 
-<img height="400" src="assets/screenshot.jpg">
+This project modifies game runtime behavior and violates the target application's Terms of Service (TOS). To minimize risk to the project and its userbase, please observe the following guidelines:
 
-# ⚠️ Please don't link to this repo or Hachimi's website
-We understand that you want to help people install Hachimi and have a better experience playing the game. However, this project is inherently against the game's TOS and The Game Developer most definitely wants it gone if they were ever to learn about it.
+- **Do not post direct links** to this repository, project website, or associated tools on public websites, forums, or social media platforms.
+- Share information exclusively via direct private messaging or self-managed community groups.
+- When referencing the target application publicly, use indirect references (such as "UM:PD" or "The Honse Game") to prevent search engine indexing.
 
-While sharing in your self-managed chat services and through private messaging is fine, we humbly ask that you refrain from sharing links to this project on public facing sites, or to any of the tools involved.
+## Features
 
-Or share them and ruin it for the dozens of Hachimi users. It's up to you.
+- **High-Quality Localizations:** Advanced text formatting support (plural forms, ordinal numbers, dynamic layout fitting) without manual asset modifications.
+  - Supported components:
+    - UI Text
+    - Database entries (`master.mdb`, skill names, descriptions)
+    - Race stories and main scenario dialogs
+    - Song lyrics
+    - Dynamic texture and sprite atlas replacement
+  - Configurable language system supporting custom localization dictionaries.
+- **In-Game Configuration:** Embedded GUI configuration editor allows real-time tuning of settings without restarting the application.
+- **Automatic Localization Updates:** Integrated updater downloads and reloads updated translation packages directly within the game runtime.
+- **Graphics Enhancement:** Device optimization features including target frame rate unlocking (FPS unlock) and resolution scaling.
+- **Cross-Platform:** Native support for Windows (DirectX 11 proxy DLL) and Android (Zygisk / Dobby inline hooks).
 
-### If you're going to share it anyways
-Do what you must, but we would respectfully request that you try to label the game as "UM:PD" or "The Honse Game" instead of the actual name of the game, to avoid search engine parsing.
+## Installation
 
-# Features
-- **High quality translations:** Hachimi comes with advanced translation features that help translations feel more natural (plural forms, ordinal numbers, etc.) and prevent introducing jank to the UI. It also supports translating most in-game components; no manual assets patching needed!
+Refer to the official [Getting Started Documentation](https://hachimi.noccu.art/docs/hachimi/getting-started.html).
 
-    Supported components:
-    - UI text
-    - master.mdb (skill name, skill desc, etc.)
-    - Race story
-    - Main story/Home dialog
-    - Lyrics
-    - Texture replacement
-    - Sprite atlas replacement
+## Building from Source
 
-    Additionally, Hachimi does not provide translation features for only a single language; it has been designed to be fully configurable for any language.
+Detailed compilation and environment setup instructions are documented in [BUILDING.md](BUILDING.md).
 
-- **Easy setup:** Just plug and play. All setup is done within the game itself, no external application needed.
-- **Translation auto update:** Built-in translation updater lets you play the game as normal while it updates, and reloads it in-game when it's done, no restart needed!
-- **Built-in GUI:** Comes with a config editor so you can modify settings without even exiting the game!
-- **Graphics settings:** You can adjust the game's graphics settings to make full use of your device's specs, such as FPS unlocking and resolution scaling.
-- **Cross-platform:** Designed from the ground up to be portable, with Windows and Android support.
+## Credits & References
 
-# Installation
-Please see the [Getting started](https://hachimi.noccu.art/docs/hachimi/getting-started.html) page.
-
-# Building
-See [BUILDING.md](BUILDING.md) for instructions on how to build Hachimi Edge from source.
-
-# Special thanks
-These projects have been the basis for Hachimi's development; without them, Hachimi would never have existed in its current form:
+Hachimi Edge incorporates concepts and techniques established by the following open-source projects:
 
 - [Trainers' Legend G](https://github.com/MinamiChiwa/Trainers-Legend-G)
 - [umamusume-localify-android](https://github.com/Kimjio/umamusume-localify-android)
@@ -56,5 +60,6 @@ These projects have been the basis for Hachimi's development; without them, Hach
 - [umamusu-translate](https://github.com/noccu/umamusu-translate)
 - [frida-il2cpp-bridge](https://github.com/vfsfitvnm/frida-il2cpp-bridge)
 
-# License
-[GNU GPLv3](LICENSE)
+## License
+
+This project is licensed under the [GNU General Public License v3.0](LICENSE).

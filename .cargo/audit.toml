@@ -29,4 +29,12 @@ ignore = [
     # Warning: unmaintained (`rustybuzz` is unmaintained)
     # Reason: Transitively brought in by `resvg` via the `egui-material3` desktop path for host-side rendering, not part of the Android/Windows production runtime.
     "RUSTSEC-2026-0206",
+
+    # Crate: event-listener
+    # Vulnerability: `!Send` tags can cross thread boundaries via `StackSlot` (unsound)
+    # Reason: event-listener 5.4.1 is pulled in transitively via dark-light → ashpd → zbus, and
+    # via accesskit_unix → atspi → zbus. Both paths are Linux-desktop-only (D-Bus / AT-SPI / XDG
+    # portal) and are never compiled into the Android or Windows production targets. Not exploitable
+    # in this project. Patched in >=5.4.2; will be resolved automatically when upstream updates zbus.
+    "RUSTSEC-2026-0221",
 ]

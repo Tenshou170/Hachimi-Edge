@@ -20,6 +20,17 @@ extern crate log;
 #[macro_use]
 extern crate cstr;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+/// Explicit version marker for external tooling (e.g. UmaPatcher).
+/// The byte sequence "HACHIMI_VERSION:" followed immediately by the version string
+/// is guaranteed to be present in the .so binary. Do NOT remove or rename this.
+#[used]
+#[no_mangle]
+static HACHIMI_VERSION_MARKER: &str =
+    concat!("HACHIMI_VERSION:", env!("HACHIMI_DISPLAY_VERSION"));
+
 rust_i18n::i18n!("assets/locales", fallback = "en");
 
 #[macro_use]

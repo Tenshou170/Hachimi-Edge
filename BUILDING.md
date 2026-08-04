@@ -1,8 +1,8 @@
 # Building Hachimi Edge
 
-Hachimi Edge is a cross-platform game enhancement and translation mod written in Rust, supporting Windows (x64) and Android (ARM64).
+Hachimi Edge is a cross-platform game enhancement and translation mod written in Rust, supporting Windows (x64 MSVC) and Android (ARM64).
 
-> **Supported targets only:** Hachimi Edge does not support Linux builds or Windows GNU/MinGW builds. The build script intentionally hard-fails those targets so accidental `cargo check --target x86_64-unknown-linux-gnu` or `cargo check --target x86_64-pc-windows-gnu` runs stop immediately with the supported commands.
+> **Supported targets only:** Linux and Windows GNU/MinGW targets are not supported. `build.rs` will hard-fail those targets immediately with a clear error message pointing to the correct commands.
 
 ---
 
@@ -11,94 +11,107 @@ Hachimi Edge is a cross-platform game enhancement and translation mod written in
 ### Rust Toolchain
 Install the latest stable Rust toolchain via [rustup.rs](https://rustup.rs/).
 
-### Windows Support
-- **Native (on Windows)**: Standard MSVC toolchain (installed via Visual Studio or Build Tools).
-- **Cross-compilation (on Linux)**: `cargo-xwin` is required to build for Windows on Linux hosts:
+### Windows (x64 MSVC)
+- **On Windows:** Standard MSVC toolchain, installed via Visual Studio or the standalone Build Tools.
+- **On Linux / macOS:** `cargo-xwin`, which downloads and sets up the MSVC sysroot automatically:
   ```bash
   cargo install cargo-xwin
   ```
-- **Unsupported**: Windows GNU/MinGW targets are blocked. Use `x86_64-pc-windows-msvc` through the commands below.
 
-### Android Support
-- **Android NDK**: **r27d LTS** (Long-Term Support) is highly recommended.
-- **Rust Target**: Add the ARM64 Android cross-compilation target:
+### Android (ARM64)
+- **Android NDK r27d LTS** is recommended.
+- Add the ARM64 Rust target:
   ```bash
   rustup target add aarch64-linux-android
   ```
 
 ---
 
-## 2. Dependency Setup (Required for Visual Parity)
+## 2. NDK Setup
 
-To achieve absolute visual parity with the official release builds (such as the custom Combo Box sizing and UI rendering), Hachimi Edge compiles against custom-patched versions of Egui.
+The build system discovers the NDK path automatically, in order of precedence:
 
-This is **fully automated** via Cargo. `Cargo.toml` is pre-configured to automatically fetch, cache, and apply these patches from the git fork repository (`Tenshou170/egui` on `main` branch) upon compilation. No manual cloning, patching, or local setup script is required!
-
----
-
-## 3. NDK Environment Setup (Zero-Config)
-
-Hachimi's build configuration automatically discovers your Android NDK path in order of precedence:
 1. `$ANDROID_NDK_ROOT` environment variable
 2. `$ANDROID_NDK_HOME` environment variable
-3. A local `./ndk` symlink or directory in the project root
+3. A `./ndk` symlink or directory at the project root
 
-### Quick Setup Option A (Environment Variable - Recommended):
+**Option A — Environment variable (recommended for CI and one-off builds):**
 ```bash
 export ANDROID_NDK_ROOT=/path/to/android-ndk-r27d
 ```
 
-### Quick Setup Option B (Symlink / Junction):
-- **Linux / macOS**: `ln -s /path/to/android-ndk-r27d ndk`
-- **Windows**: `mklink /J ndk C:\path\to\android-ndk-r27d`
+**Option B — Local symlink (recommended for day-to-day development):**
+```bash
+# Linux / macOS
+ln -s /path/to/android-ndk-r27d ndk
+
+# Windows (Command Prompt)
+mklink /J ndk C:\path\to\android-ndk-r27d
+```
+
+No manual edits to `.cargo/config.toml` are needed — the build system handles all host platforms automatically.
 
 ---
 
-## 4. Compiling the Mod
+## 3. Building
 
 ### Windows (x64 MSVC)
 
-#### Quick check:
+**Compiler check:**
 ```bash
 cargo xcheck
 ```
 
-#### Build DLL & release package:
+**Debug build:**
 ```bash
 ./tools/windows/build.sh
 ```
-*(On Windows hosts, this builds natively. On Linux/macOS hosts, this cross-compiles via `cargo-xwin`).*
 
-**Output**: `build/hachimi.dll` and `build/blake3.json`
+**Release build:**
+```bash
+RELEASE=1 ./tools/windows/build.sh
+```
+
+The script detects the host OS automatically:
+- On Windows: builds natively using the MSVC toolchain.
+- On Linux / macOS: cross-compiles via `cargo-xwin`.
+
+**Output:** `build/hachimi.dll` and `build/blake3.json` (release only)
 
 ---
 
 ### Android (ARM64)
 
-#### Quick check:
+**Compiler check:**
 ```bash
 cargo acheck
 ```
 
-#### Build SO & release package:
+**Debug build:**
+```bash
+./tools/android/build.sh
+```
+
+**Release build:**
 ```bash
 RELEASE=1 ./tools/android/build.sh
 ```
-*Note: This builds using unified **API Level 24** and targets **16KB page size alignment**, guaranteeing complete backward compatibility down to Android 7.0 and forward compatibility with Android 15.*
 
-**Output**: `build/libmain-arm64-v8a.so` and `build/sha256.json`
+Builds against **API level 24** with **16 KB page-size alignment**, giving full compatibility from Android 7.0 through Android 15+.
+
+**Output:** `build/libmain-arm64-v8a.so` and `build/sha256.json` (release only)
 
 ---
 
-## Summary of Cargo & Script Aliases
+## 4. Cargo Aliases Reference
 
-These aliases and scripts are defined to standardize developer workflows across platforms:
+Defined in `.cargo/config.toml`. For day-to-day development only — use the build scripts above for producing release artifacts.
 
-*   `cargo acheck`: Quick compiler check for the Android target.
-*   `cargo aclippy`: Clippy lint check for the Android target.
-*   `cargo xcheck`: Quick compiler check for Windows target (runs natively on Windows; `cargo-xwin` on Linux/macOS).
-*   `cargo xclippy`: Clippy lint check for Windows target.
-*   `./tools/android/build.sh`: Builds Android ARM64 `.so` binary and SHA256 checksums.
-*   `./tools/windows/build.sh`: Builds Windows MSVC `.dll` binary and BLAKE3 checksums.
-
-Raw Linux and Windows GNU target commands are intentionally unsupported and will fail in `build.rs`. Use the aliases and scripts above for routine checks and builds.
+| Alias | Description |
+|---|---|
+| `cargo xcheck` | Compiler check for Windows MSVC target (release profile) |
+| `cargo xbuild` | Build for Windows MSVC (no `--release`; use the script for releases) |
+| `cargo xclippy` | Clippy lint for Windows MSVC target |
+| `cargo acheck` | Compiler check for Android ARM64 target (release profile) |
+| `cargo abuild` | Build for Android ARM64 (no `--release`; use the script for releases) |
+| `cargo aclippy` | Clippy lint for Android ARM64 target |

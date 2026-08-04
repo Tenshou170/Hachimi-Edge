@@ -98,7 +98,7 @@ fn main() {
         hard_compile_error(
             "========================================================================\n\
              ERROR: Windows GNU/MinGW targets are not supported by Hachimi Edge.\n\
-             Use the Windows MSVC target through cargo-xwin instead.\n\
+             Use the Windows MSVC target (x86_64-pc-windows-msvc) instead.\n\
              \n\
              Supported Windows commands:\n\
                cargo xcheck\n\
@@ -107,11 +107,11 @@ fn main() {
         );
     }
 
-    if host.contains("linux") && target.contains("windows") {
+    if !host.contains("windows") && target.contains("windows") {
         if std::env::var("CL_FLAGS").is_err() || std::env::var("LIB").is_err() {
             hard_compile_error(
                 "========================================================================\n\
-                 ERROR: Compiling for Windows MSVC on Linux requires cargo-xwin.\n\
+                 ERROR: Compiling for Windows MSVC on a non-Windows host requires cargo-xwin.\n\
                  It seems you are running raw cargo commands instead of the cargo-xwin wrapper.\n\
                  \n\
                  Supported Windows commands:\n\
@@ -125,8 +125,8 @@ fn main() {
     if target_os == "windows" {
         setup_windows_build();
     } else if target_os == "android" {
-        println!("cargo:rustc-link-arg=-Wl,-z,max-page-size=16384");
-        println!("cargo:rustc-link-arg=-Wl,-z,common-page-size=16384");
+        println!("cargo:rustc-link-arg=-Wl,-z,max-page-size=65536");
+        println!("cargo:rustc-link-arg=-Wl,-z,common-page-size=65536");
 
         // Try to auto-link NDK sysroot if ANDROID_NDK_ROOT/HOME environment variable is set
         let ndk_root = std::env::var("ANDROID_NDK_ROOT")

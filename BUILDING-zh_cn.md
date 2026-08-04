@@ -1,6 +1,8 @@
 # Hachimi Edge 构建指南
 
-Hachimi Edge 是一个使用 Rust 编写的跨平台游戏增强与翻译模组，支持 Windows (x64) 和 Android (ARM64)。
+Hachimi Edge 是一个使用 Rust 编写的跨平台游戏增强与翻译模组，支持 Windows (x64 MSVC) 和 Android (ARM64)。
+
+> **仅支持特定目标平台：** 不支持 Linux 或 Windows GNU/MinGW 目标。若尝试使用这些目标，`build.rs` 会立即报错并提示正确的构建命令。
 
 ---
 
@@ -9,103 +11,107 @@ Hachimi Edge 是一个使用 Rust 编写的跨平台游戏增强与翻译模组�
 ### Rust 工具链
 请通过 [rustup.rs](https://rustup.rs/) 安装最新的稳定版 Rust 工具链。
 
-### Windows 支持
-- **原生构建 (在 Windows 上)**: 标准 MSVC 工具链（通过 Visual Studio 或 Build Tools 安装）。
-- **交叉编译 (在 Linux 上)**: 需要在 Linux 主机上安装 `cargo-xwin` 以构建 Windows 版本：
+### Windows (x64 MSVC)
+- **在 Windows 上：** 标准 MSVC 工具链（通过 Visual Studio 或独立的 Build Tools 安装）。
+- **在 Linux / macOS 上：** 需要 `cargo-xwin`，它会自动下载并配置 MSVC sysroot：
   ```bash
   cargo install cargo-xwin
   ```
 
-### Android 支持
-- **Android NDK**: 强烈建议使用 **r27d LTS** (长期支持版本)。
-- **Rust Target**: 添加 ARM64 Android 交叉编译目标：
+### Android (ARM64)
+- 推荐使用 **Android NDK r27d LTS**。
+- 添加 ARM64 Rust 目标：
   ```bash
   rustup target add aarch64-linux-android
   ```
 
 ---
 
-## 2. 依赖项配置 (实现界面视觉一致性)
+## 2. NDK 环境配置
 
-为了与官方发布的构建版本（例如自定义 Combo Box 大小和 UI 渲染）保持绝对的视觉一致性，Hachimi Edge 需要针对自定义修补版本的 Egui 进行编译。
+构建系统会按以下优先级自动查找 NDK 路径：
 
-此过程**完全由 Cargo 自动处理**。`Cargo.toml` 中已预先配置好 Git 补丁（指向 Git Fork 仓库 `Tenshou170/egui` 的 `main` 分支）。在编译项目时，Cargo 会自动拉取、缓存并应用这些修改，无需开发人员进行任何手动克隆、修补或运行本地设置脚本！
+1. `$ANDROID_NDK_ROOT` 环境变量
+2. `$ANDROID_NDK_HOME` 环境变量
+3. 项目根目录下名为 `ndk` 的符号链接或目录
 
----
-
-## 3. 本地 NDK 环境配置
-
-为了保持仓库的整洁并避免硬编码绝对路径，Hachimi 的构建配置使用项目根目录下名为 `ndk` 的符号链接，指向您的 Android NDK 目录。
-
-### 在 Linux / macOS 上：
-创建指向您已解压的 NDK 文件夹（例如 `r27d`）的符号链接：
+**方式 A — 环境变量（推荐用于 CI 及临时构建）：**
 ```bash
-ln -s /home/user/ndk/android-ndk-r27d ndk
+export ANDROID_NDK_ROOT=/path/to/android-ndk-r27d
 ```
 
-### 在 Windows 上：
-使用命令提示符或 PowerShell 创建目录联接：
-```cmd
+**方式 B — 本地符号链接（推荐用于日常开发）：**
+```bash
+# Linux / macOS
+ln -s /path/to/android-ndk-r27d ndk
+
+# Windows（命令提示符）
 mklink /J ndk C:\path\to\android-ndk-r27d
 ```
 
-*注意：`ndk` 链接已被 Git 自动忽略。*
-
-> [!IMPORTANT]
-> **开发机操作系统配置 (`.cargo/config.toml`)**:
-> 请根据您的开发机系统是 Windows 还是 Linux/macOS，相应地切换 [.cargo/config.toml](file:///.cargo/config.toml) 中的配置：
-> - **Windows 开发者**: 保持默认的 Windows 配置行启用（默认已启用）。
-> - **Linux/macOS 开发者**: 注释掉 Windows 相关的配置行，并取消注释 `[alias]`、`[target.aarch64-linux-android]` 和 `[env]` 下对应的 Linux 配置行。
+无需手动修改 `.cargo/config.toml`——构建系统会自动处理所有主机平台。
 
 ---
 
-## 4. 编译模组
+## 3. 编译模组
 
-### Windows (x64)
+### Windows (x64 MSVC)
 
-#### 检查代码：
-使用我们预定配置的 Cargo 别名：
+**编译器检查：**
 ```bash
 cargo xcheck
 ```
-*(在 Windows 主机上进行原生检查；在 Linux/macOS 主机上通过 `cargo-xwin` 交叉检查)。*
 
-#### 编译 DLL：
-使用我们预配置的 Cargo 别名：
+**调试构建：**
 ```bash
-cargo xbuild
+./tools/windows/build.sh
 ```
-*(在 Windows 主机上进行原生构建；在 Linux/macOS 主机上通过 `cargo-xwin` 交叉编译)。*
 
-**构建产物**：`target/x86_64-pc-windows-msvc/release/hachimi.dll`
+**发布构建：**
+```bash
+RELEASE=1 ./tools/windows/build.sh
+```
+
+脚本会自动检测主机操作系统：
+- 在 Windows 上：直接使用 MSVC 工具链进行原生构建。
+- 在 Linux / macOS 上：通过 `cargo-xwin` 进行交叉编译。
+
+**构建产物：** `build/hachimi.dll` 及 `build/blake3.json`（仅发布构建）
 
 ---
 
 ### Android (ARM64)
 
-#### 本地构建：
-运行我们预先配置的 Cargo 别名（需要步骤 3 中设置的 NDK 符号链接）：
+**编译器检查：**
 ```bash
-cargo abuild
+cargo acheck
 ```
-*注意：这将使用统一的 **API 级别 24** 进行构建，并以 **16KB 内存页面大小对齐** 为目标，从而保证了对 Android 7.0 及以上版本的完美向下兼容性，以及对 Android 15 设备的高效向前兼容性。*
 
-#### 在本地使用 CI 脚本构建 (需要设置 `ANDROID_NDK_ROOT`):
-如果您想运行与我们的 GitHub Actions 运行器完全相同的脚本：
+**调试构建：**
 ```bash
-export ANDROID_NDK_ROOT=/path/to/android-ndk-r27d
+./tools/android/build.sh
+```
+
+**发布构建：**
+```bash
 RELEASE=1 ./tools/android/build.sh
 ```
 
-**构建产物**：`target/aarch64-linux-android/release/libhachimi.so`
+使用 **API 级别 24** 及 **16KB 内存页面大小对齐** 进行构建，完全兼容 Android 7.0 至 Android 15+。
+
+**构建产物：** `build/libmain-arm64-v8a.so` 及 `build/sha256.json`（仅发布构建）
 
 ---
 
-## 常用 Cargo 别名说明
+## 4. Cargo 别名参考
 
-这些别名在 `.cargo/config.toml` 中定义，用以规范开发人员的工作流程：
+定义于 `.cargo/config.toml`，仅用于日常开发——发布产物请使用上述构建脚本。
 
-*   `cargo abuild`: 使用本地 `ndk` 符号链接在 release 模式下编译 Android 版本。
-*   `cargo acheck`: 用于 Android 目标的快速编译器检查。
-*   `cargo xbuild`: 编译 Windows 版本（在 Windows 主机上进行原生构建；在 Linux/macOS 主机上运行 `cargo-xwin` 进行交叉编译）。
-*   `cargo xcheck`: 用于 Windows 目标的快速编译器检查（在 Windows 主机上原生检查；在 Linux/macOS 主机上通过 `cargo-xwin` 交叉检查）。
+| 别名 | 说明 |
+|---|---|
+| `cargo xcheck` | Windows MSVC 目标编译器检查（release 模式） |
+| `cargo xbuild` | 构建 Windows MSVC（不含 `--release`；发布时请使用脚本） |
+| `cargo xclippy` | Windows MSVC 目标 Clippy 检查 |
+| `cargo acheck` | Android ARM64 目标编译器检查（release 模式） |
+| `cargo abuild` | 构建 Android ARM64（不含 `--release`；发布时请使用脚本） |
+| `cargo aclippy` | Android ARM64 目标 Clippy 检查 |

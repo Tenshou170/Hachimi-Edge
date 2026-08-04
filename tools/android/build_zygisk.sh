@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-SONAME=hachimi-edge
+SONAME=hachimi
 MODID=hachimi-edge
 MODNAME=Hachimi-Edge
 AUTHOR=Tenshou170
@@ -37,7 +37,7 @@ VERSION="$(get_toml_value Cargo.toml package version)"
 GIT_COMMIT="$(git rev-parse --short HEAD)"
 VERSION_STR="v$VERSION-$GIT_COMMIT"
 VERSION_CODE="$(version_to_code "$VERSION")"
-if [[ -n "$(git status --porcelain)" ]]
+if [[ -z "$HACHIMI_IGNORE_DIRTY" || "$HACHIMI_IGNORE_DIRTY" != "true" ]] && [[ -n "$(git status --porcelain)" ]]
 then
     VERSION_STR="$VERSION_STR-dirty"
 fi
@@ -73,7 +73,11 @@ copy_lib() {
     fi
 }
 
-BUILD_TYPE="release"
+if [ "$RELEASE" = "1" ]; then
+    BUILD_TYPE="release"
+else
+    BUILD_TYPE="debug"
+fi
 clean
 
 cp -r -v ./tools/android/zygisk-template "$ZYGISK_BUILD_DIR"
