@@ -1,14 +1,10 @@
 use crate::{
-    core::{Hachimi, game::Region, utils::{mul_int, str_visual_len}},
+    core::{Hachimi, game::Region, utils::str_visual_len},
     il2cpp::{
         api::il2cpp_class_from_il2cpp_type,
         ext::{Il2CppStringExt, StringExt},
-        hook::{
-            UnityEngine_CoreModule::{Component, GameObject, RectTransform},
-            UnityEngine_UI::Text,
-            umamusume::TextCommon,
-        },
-        sql::{self, TextDataQuery},
+        hook::{UnityEngine_UI::Text},
+        sql::TextDataQuery,
         symbols::{create_delegate, get_field_from_name, get_field_object_value, get_method_addr},
         types::*,
     },
@@ -38,17 +34,6 @@ pub fn get_info(this: *mut Il2CppObject) -> *mut Il2CppObject {
     get_field_object_value(this, unsafe { INFO_FIELD })
 }
 
-// Ported from kairusds: level text and skill point root for right-offset layout adjustment.
-static mut LEVELTEXT_FIELD: *mut FieldInfo = 0 as _;
-fn get_levelText(this: *mut Il2CppObject) -> *mut Il2CppObject {
-    get_field_object_value(this, unsafe { LEVELTEXT_FIELD })
-}
-
-static mut NEED_SKILL_POINT_ROOT_FIELD: *mut FieldInfo = 0 as _;
-fn get_needSkillPointRoot(this: *mut Il2CppObject) -> *mut Il2CppObject {
-    get_field_object_value(this, unsafe { NEED_SKILL_POINT_ROOT_FIELD })
-}
-
 static mut set_skill_name_text_addr: usize = 0;
 impl_addr_wrapper_fn!(set_skill_name_text, set_skill_name_text_addr, (), this: *mut Il2CppObject);
 
@@ -61,85 +46,31 @@ static mut get_Id_addr: usize = 0;
 impl_addr_wrapper_fn!(get_Id, get_Id_addr, i32, this: *mut Il2CppObject);
 
 fn UpdateItemCommon(this: *mut Il2CppObject, skill_info: *mut Il2CppObject, orig_fn_cb: impl FnOnce()) {
-    let skill_cfg = &Hachimi::instance().localized_data.load().config.skill_formatting;
-    let mut txt_cfg = sql::SkillTextFormatting::default();
-
     let name = get__nameText(this);
     let desc = get__descText(this);
 
     // Name should always exist, but let's be sure.
     if !name.is_null() {
-        let mut name_len = skill_cfg.name_length;
-        let mut name_lines = 1;
-
-        // Uma info, "short ver".
-        if !get_IsDrawDesc(skill_info) {
-            name_len = mul_int(name_len, skill_cfg.name_short_mult);
-            name_lines = skill_cfg.name_short_lines;
-        }
-        // "Draw Skill Pt" is also true on the short ver, even though it doesn't show there.
-        // So, apply only when desc shows.
-        else if get_IsDrawNeedSkillPoint(skill_info) {
-            name_len = mul_int(name_len, skill_cfg.name_sp_mult);
-        }
-        txt_cfg.name = Some(sql::TextFormatting {
-            line_len: name_len,
-            line_count: name_lines,
-            font_size: Text::get_fontSize(name)
-        });
-
-        // Ported from kairusds: adjust name box width so it doesn't overlap
-        // the level text or skill point root when those elements are visible.
-        let name_transform = Component::get_transform(name);
-        let mut right_offset: f32 = 0.0;
-
-        let skill_lvl = get_levelText(this);
-        if !skill_lvl.is_null() && TextCommon::get_IsActiveInHierarchy(skill_lvl) {
-            let lvl_transform = Component::get_transform(skill_lvl);
-            right_offset -= RectTransform::get_offsetMax(lvl_transform).x.abs()
-                + Text::get_preferredWidth(skill_lvl);
-        }
-
-        let skill_pts = get_needSkillPointRoot(this);
-        if !skill_pts.is_null() && GameObject::get_activeSelf(skill_pts) {
-            let pts_transform = GameObject::get_transform(skill_pts);
-            right_offset -= RectTransform::get_rect(pts_transform).width;
-        }
-
-        if right_offset < 0.0 && !name_transform.is_null() {
-            let mut offset_max = RectTransform::get_offsetMax(name_transform);
-            if offset_max.x > right_offset {
-                offset_max.x = right_offset;
-                RectTransform::set_offsetMax(name_transform, offset_max);
-            }
-        }
+        Text::set_horizontalOverflow(name, 0);
+        Text::set_resizeTextForBestFit(name, true);
     }
 
     if get_IsDrawDesc(skill_info) && !desc.is_null() {
-        let desc_len = skill_cfg.desc_length;
-
-        txt_cfg.desc = Some(sql::TextFormatting {
-            line_len: desc_len,
-            line_count: 4,
-            font_size: Text::get_fontSize(desc)
-        });
+        Text::set_horizontalOverflow(desc, 0);
+        Text::set_resizeTextForBestFit(desc, true);
+        Text::set_resizeTextMinSize(desc, 14);
+        Text::set_resizeTextMaxSize(desc, 30);
     }
 
-    TextDataQuery::with_skill_query(&txt_cfg, || {
-        TextDataQuery::with_skill_learning_query(|| {
-            orig_fn_cb();
-        });
+    TextDataQuery::with_skill_learning_query(|| {
+        orig_fn_cb();
     });
 
-    if txt_cfg.is_localized {
-        if !name.is_null() {
-            Text::set_horizontalOverflow(name, 1);
-            if txt_cfg.name.map(|opts| opts.line_count).unwrap_or(1) > 1 {
-                Text::set_verticalOverflow(name, 1);
-            }
-        }
-        if !desc.is_null() {
-            Text::set_horizontalOverflow(desc, 1);
+    if let Some(mult) = Hachimi::instance().localized_data.load().config.skill_list_item_desc_font_size_multiplier {
+        let desc_text = get__descText(this);
+        if !desc_text.is_null() {
+            let font_size = Text::get_fontSize(desc_text);
+            Text::set_fontSize(desc_text, (font_size as f32 * mult).round() as i32);
         }
     }
 }
@@ -218,8 +149,6 @@ pub fn init(umamusume: *const Il2CppImage) {
         _BGBUTTON_FIELD = get_field_from_name(PartsSingleModeSkillListItem, c"_bgButton");
         INFO_FIELD = get_field_from_name(PartsSingleModeSkillListItem, c"_info");
         set_skill_name_text_addr = get_method_addr(PartsSingleModeSkillListItem, c"SetSkillNameText", 0);
-        LEVELTEXT_FIELD = get_field_from_name(PartsSingleModeSkillListItem, c"_levelText");
-        NEED_SKILL_POINT_ROOT_FIELD = get_field_from_name(PartsSingleModeSkillListItem, c"_needSkillPointRoot");
 
         // PartsSingleModeSkillListItem.Info
         get_IsDrawDesc_addr = get_method_addr(Info, c"get_IsDrawDesc", 0);
