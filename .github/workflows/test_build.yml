@@ -13,17 +13,13 @@ on:
       - main
     paths-ignore:
       - 'README.md'
-      - 'README-zh_cn.md'
-      - 'README-zh_tw.md'
+      - 'README-*.md'
       - 'BUILDING.md'
-      - 'BUILDING-zh_cn.md'
-      - 'BUILDING-zh_tw.md'
+      - 'BUILDING-*.md'
       - '.gitignore'
       - 'rustfmt.toml'
       - '.github/**'
-  pull_request:
-    branches:
-      - main
+      - 'assets/locales/**'
   workflow_dispatch:
 permissions:
   contents: write
@@ -52,6 +48,7 @@ jobs:
 
       - name: Attest Android
         uses: actions/attest@v4
+        if: github.event_name != 'pull_request'
         with:
           subject-path: |
             build/*.so
@@ -85,6 +82,7 @@ jobs:
 
       - name: Attest Zygisk Module
         uses: actions/attest@v4
+        if: github.event_name != 'pull_request'
         with:
           subject-path: |
             build/zygisk-*.zip
@@ -191,6 +189,7 @@ jobs:
 
       - name: Attest Windows
         uses: actions/attest@v4
+        if: github.event_name != 'pull_request'
         with:
           subject-path: |
             build/blake3.json
