@@ -783,10 +783,12 @@ unsafe extern "C" fn il2cpp_string_new(text: *const c_char) -> *mut Il2CppString
 }
 
 unsafe extern "C" fn il2cpp_string_chars(s: *mut Il2CppString) -> *mut u16 {
+    if s.is_null() { return std::ptr::null_mut(); }
     il2cpp::api::il2cpp_string_chars(s)
 }
 
 unsafe extern "C" fn il2cpp_string_length(s: *mut Il2CppString) -> i32 {
+    if s.is_null() { return 0; }
     il2cpp::api::il2cpp_string_length(s)
 }
 
@@ -1057,6 +1059,11 @@ pub struct Vtable {
         params: *const Il2CppTypeEnum,
         param_count: usize,
     ) -> *mut c_void,
+    pub il2cpp_get_method_cached: unsafe extern "C" fn(
+        class: *mut Il2CppClass,
+        name: *const c_char,
+        args_count: i32,
+    ) -> *const MethodInfo,
     pub il2cpp_get_method_addr_cached: unsafe extern "C" fn(
         class: *mut Il2CppClass,
         name: *const c_char,
@@ -1215,6 +1222,7 @@ impl Vtable {
         il2cpp_get_method_overload,
         il2cpp_get_method_addr,
         il2cpp_get_method_overload_addr,
+        il2cpp_get_method_cached,
         il2cpp_get_method_addr_cached,
         il2cpp_find_nested_class,
         il2cpp_resolve_icall,
