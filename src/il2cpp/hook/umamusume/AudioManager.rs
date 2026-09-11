@@ -216,6 +216,7 @@ const SUPPRESS_CUE_NAME_PATTERNS: &[&str] = &[
     "_home_",
     "_tc_",
     "_title_",
+    "_factorresearch_",
     "_kakao_",
     "_gacha_",
 ];
