@@ -307,6 +307,7 @@ config_editor:
   msgpack_notifier_connection_timeout_ms: "Таймаут подключения нотификатора (мс)"
   hide_ingame_ui_hotkey_bind: "Клавиша скрытия интерфейса игры"
   race_playback_slider: "Ползунок воспроизведения забега"
+  race_playback_slider_always: "Всегда показывать ползунок воспроизведения забега"
   race_playback_button: "Кнопка паузы забега"
   race_playback_key_enable: "Включить клавишу паузы забега"
   race_playback_key: "Клавиша паузы забега"

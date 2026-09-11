@@ -308,6 +308,7 @@ config_editor:
   msgpack_notifier_connection_timeout_ms: "通知器连接超时（毫秒）"
   hide_ingame_ui_hotkey_bind: "隐藏 UI 快捷键"
   race_playback_slider: "比赛回放进度条"
+  race_playback_slider_always: "总是显示比赛回放进度条"
   race_playback_button: "比赛回放暂停/继续按钮"
   race_playback_key_enable: "启用比赛回放暂停/继续快捷键"
   race_playback_key: "比赛回放暂停/继续快捷键"

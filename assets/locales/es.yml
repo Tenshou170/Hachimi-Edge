@@ -311,6 +311,7 @@ config_editor:
   msgpack_notifier_connection_timeout_ms: "Tiempo de espera de conexión del notificador (ms)"
   hide_ingame_ui_hotkey_bind: "Tecla para ocultar UI"
   race_playback_slider: "Barra de reproducción de la repetición de carreras"
+  race_playback_slider_always: "Mostrar siempre la barra de reproducción de carreras"
   race_playback_button: "Botón de pausa/reanudación de la repetición de carreras"
   race_playback_key_enable: "Activar tecla para pausar/reanudar la repetición de carreras"
   race_playback_key: "Tecla para pausar/reanudar la repetición de carreras"

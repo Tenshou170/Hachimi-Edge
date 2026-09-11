@@ -310,6 +310,7 @@ config_editor:
   msgpack_notifier_connection_timeout_ms: "Tempo limite de conexão do notificador (ms)"
   hide_ingame_ui_hotkey_bind: "Tecla de atalho para ocultar UI"
   race_playback_slider: "Barra de progresso nas corridas"
+  race_playback_slider_always: "Sempre mostrar a barra de progresso nas corridas"
   race_playback_button: "Botão de pause nas corridas"
   race_playback_key_enable: "Atalho para pausar as corridas"
   race_playback_key: "Tecla para pausar as corridas"

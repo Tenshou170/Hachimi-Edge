@@ -309,6 +309,7 @@ config_editor:
   msgpack_notifier_connection_timeout_ms: "Batas waktu koneksi notifikasi (ms)"
   hide_ingame_ui_hotkey_bind: "Tombol pintas sembunyikan UI"
   race_playback_slider: "Slider Pemutaran Balapan"
+  race_playback_slider_always: "Selalu tampilkan Slider Pemutaran Balapan"
   race_playback_button: "Tombol jeda/lanjutkan pemutaran balapan"
   race_playback_key_enable: "Aktifkan tombol pintas jeda/lanjutkan pemutaran balapan"
   race_playback_key: "Tombol pintas jeda/lanjutkan pemutaran balapan"

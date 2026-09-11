@@ -305,6 +305,7 @@ config_editor:
   msgpack_notifier_connection_timeout_ms: "Thời gian chờ kết nối thông báo (ms)"
   hide_ingame_ui_hotkey_bind: "Phím tắt ẩn UI"
   race_playback_slider: "Thanh trượt phát lại cuộc đua"
+  race_playback_slider_always: "Luôn hiển thị thanh trượt phát lại cuộc đua"
   race_playback_button: "Nút tạm dừng/tiếp tục phát lại cuộc đua"
   race_playback_key_enable: "Bật phím tắt tạm dừng/tiếp tục phát lại cuộc đua"
   race_playback_key: "Phím tắt tạm dừng/tiếp tục phát lại cuộc đua"

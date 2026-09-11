@@ -309,6 +309,7 @@ config_editor:
   msgpack_notifier_connection_timeout_ms: "알림 연결 타임아웃 (ms)"
   hide_ingame_ui_hotkey_bind: "UI 숨기기 단축키"
   race_playback_slider: "레이스 다시보기 탐색 바"
+  race_playback_slider_always: "레이스 다시보기 탐색 바 항상 표시"
   race_playback_button: "레이스 다시보기 일시정지/재개 버튼"
   race_playback_key_enable: "레이스 다시보기 일시정지/재개 단축키 사용"
   race_playback_key: "레이스 다시보기 일시정지/재개 단축키"
