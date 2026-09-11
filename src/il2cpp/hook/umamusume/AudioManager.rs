@@ -442,27 +442,57 @@ fn has_active_speech_bubble() -> bool {
     }
 
     use crate::il2cpp::hook::{
-        umamusume::PartsCharaMessageBase,
-        UnityEngine_CoreModule::{GameObject, Object},
+        umamusume::{
+            PartsCharaMessageBase,
+            StoryViewTextControllerLandscape,
+            StoryViewTextControllerSingleMode,
+        },
+        UnityEngine_CoreModule::{Component, GameObject, Object},
     };
 
-    // 1. Check for active PartsCharaMessageBase speech bubble components actively playing
+    // 1. Check for visible PartsCharaMessageBase speech bubble components.
+    // FindObjectsOfType with includeInactive=false already filters out disabled
+    // objects, so any returned instance means the bubble is active and visible.
     let parts_type = PartsCharaMessageBase::type_object();
     if !parts_type.is_null() {
         let objects = Object::FindObjectsOfType(parts_type, false);
         if !objects.this.is_null() && objects.len() > 0 {
             for obj in unsafe { objects.as_slice() } {
-                if !obj.is_null() && PartsCharaMessageBase::get_IsPlaying(*obj) {
+                if !obj.is_null() {
                     return true;
                 }
             }
         }
     }
 
-    // 2. Check for Episode character / story list balloon root
+    // 2. Check for active VN-style text window controllers (Landscape / SingleMode).
+    // These are MonoBehaviours present in story / home-dialogue menus. When one is
+    // active in the hierarchy the dialogue text is already on-screen, making a
+    // caption redundant. We check get_activeSelf on the component's gameObject
+    // rather than a "playing" state because text windows have no such concept —
+    // they are simply enabled or disabled.
+    for type_obj in [
+        StoryViewTextControllerLandscape::type_object(),
+        StoryViewTextControllerSingleMode::type_object(),
+    ] {
+        if type_obj.is_null() { continue; }
+        let objects = Object::FindObjectsOfType(type_obj, false);
+        if objects.this.is_null() || objects.len() == 0 { continue; }
+        for obj in unsafe { objects.as_slice() } {
+            if obj.is_null() { continue; }
+            let go = Component::get_gameObject(*obj);
+            if !go.is_null() && GameObject::get_activeSelf(go) {
+                return true;
+            }
+        }
+    }
+
+    // 3. Check for Episode character / story list balloon root.
+    // Guard with get_activeSelf so we only suppress when the object is actually
+    // visible rather than merely alive somewhere in the hierarchy.
     let balloon_path = "/Gallop.GameSystem/SystemManagerRoot/SystemSingleton/UIManager/GameCanvas/MainCanvas/EpisodeCharacterView(Clone)/ContentsRoot/PartsEpisodeList/MidArea/BalloonRoot".to_il2cpp_string();
     let balloon = GameObject::Find(balloon_path);
-    if !balloon.is_null() {
+    if !balloon.is_null() && GameObject::get_activeSelf(balloon) {
         return true;
     }
 
