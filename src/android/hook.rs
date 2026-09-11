@@ -154,7 +154,7 @@ fn init_internal(env: *mut jni::sys::JNIEnv) -> Result<(), Error> {
             // build laid out the const table in .rodata), so the mprotect range
             // must be derived from the field's own address/size, not the table's.
             let field_addr = std::ptr::addr_of!((*jni_table).RegisterNatives) as usize;
-            let field_size = std::mem::size_of_val(&(*jni_table).RegisterNatives);
+            let field_size = std::mem::size_of::<Option<RegisterNativesFn>>();
 
             let page_size = libc::sysconf(libc::_SC_PAGESIZE) as usize;
             let range_start = field_addr & !(page_size - 1);
