@@ -159,9 +159,9 @@ fn collect_text_components(button: *mut Il2CppObject, config_name: &str) -> Vec<
                 let name_ptr = Object::get_name(t_go);
                 if name_ptr.is_null() { continue; }
                 let name = unsafe { (*name_ptr).as_utf16str().to_string() };
-                if name == "πü╛πü¿πéüπüªτì▓σ╛ù" {
+                if name == "まとめて獲得" {
                     custom_components[0] = *text_obj; // text
-                } else if name == "τ╢Öµë┐σ░éτö¿πéªπâ₧σ¿ÿ" {
+                } else if name == "継承専用ウマ娘" {
                     custom_components[1] = *text_obj; // text2
                 }
             }
