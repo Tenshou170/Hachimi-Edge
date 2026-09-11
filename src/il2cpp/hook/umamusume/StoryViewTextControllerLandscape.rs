@@ -2,10 +2,15 @@ use crate::{
     core::{Hachimi, game::Region},
     il2cpp::{
         hook::UnityEngine_UI::Text,
-        symbols::{get_field_from_name, get_field_object_value, get_method_addr},
+        symbols::{get_field_from_name, get_field_object_value, get_method_addr, get_type_object_for_class},
         types::*
     }
 };
+
+static mut TYPE_OBJECT: *mut Il2CppObject = 0 as _;
+pub fn type_object() -> *mut Il2CppObject {
+    unsafe { TYPE_OBJECT }
+}
 
 use super::TextFrame;
 
@@ -63,6 +68,7 @@ pub fn init(umamusume: *const Il2CppImage) {
     }
 
     unsafe {
+        TYPE_OBJECT = get_type_object_for_class(StoryViewTextControllerLandscape);
         _TEXTFRAME_FIELD = get_field_from_name(StoryViewTextControllerLandscape, c"_textFrame");
     }
 }
