@@ -311,6 +311,7 @@ config_editor:
   msgpack_notifier_connection_timeout_ms: "Notifier connection timeout (ms)"
   hide_ingame_ui_hotkey_bind: "Hide UI hotkey key"
   race_playback_slider: "Race Playback Slider"
+  race_playback_slider_always: "Always show Race Playback Slider"
   race_playback_button: "Race playback pause/resume button"
   race_playback_key_enable: "Enable race playback pause/resume keybind"
   race_playback_key: "Race playback pause/resume keybind"

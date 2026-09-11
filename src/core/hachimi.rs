@@ -1119,6 +1119,8 @@ pub struct Config {
     #[serde(default = "Config::default_true")]
     pub race_playback_slider: bool,
     #[serde(default = "Config::default_true")]
+    pub race_playback_slider_always: bool,
+    #[serde(default = "Config::default_true")]
     pub race_playback_button: bool,
     #[serde(default = "Config::default_true")]
     pub race_playback_key_enable: bool,

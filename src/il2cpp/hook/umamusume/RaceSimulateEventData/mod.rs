@@ -15,11 +15,18 @@ def_field_object_accessors!(get_param, set_param, PARAM_FIELD, Il2CppArray);
 def_field_value_accessors!(get_frameTime, set_frameTime, FRAME_TIME_FIELD, f32);
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if Hachimi::instance().game.region != Region::Japan {
+    if !matches!(Hachimi::instance().game.region, Region::Japan | Region::Global) {
         return;
     }
 
-    get_class_or_return!(umamusume, StandaloneSimulator, RaceSimulateEventData);
+    let namespace = if Hachimi::instance().game.region == Region::Global { c"Gallop" } else { c"StandaloneSimulator" };
+    let RaceSimulateEventData = match crate::il2cpp::symbols::get_class(umamusume, namespace, c"RaceSimulateEventData") {
+        Ok(v) => v,
+        Err(e) => {
+            error!("{}", e);
+            return;
+        }
+    };
 
     unsafe {
         DISTANCE_DATA_FIELD = get_field_from_name(RaceSimulateEventData, c"distanceData");

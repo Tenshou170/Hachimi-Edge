@@ -11,11 +11,18 @@ def_field_object_accessors!(get__simEvDataList, set__simEvDataList, SIM_EV_DATA_
 def_field_object_accessors!(get get__horseResultDataArray, HORSE_RESULT_DATA_ARRAY_FIELD, Il2CppArray);
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if Hachimi::instance().game.region != Region::Japan {
+    if !matches!(Hachimi::instance().game.region, Region::Japan | Region::Global) {
         return;
     }
 
-    get_class_or_return!(umamusume, StandaloneSimulator, RaceSimulateData);
+    let namespace = if Hachimi::instance().game.region == Region::Global { c"Gallop" } else { c"StandaloneSimulator" };
+    let RaceSimulateData = match crate::il2cpp::symbols::get_class(umamusume, namespace, c"RaceSimulateData") {
+        Ok(v) => v,
+        Err(e) => {
+            error!("{}", e);
+            return;
+        }
+    };
 
     unsafe {
         GET_FRAME_DATA_LIST_ADDR = get_method_addr(RaceSimulateData, c"get_FrameDataList", 0);

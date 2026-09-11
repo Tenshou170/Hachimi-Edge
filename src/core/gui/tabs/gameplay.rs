@@ -153,6 +153,9 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
     }
 
     ConfigEditor::list_tile_switch(ui, t!("config_editor.race_playback_slider"), &mut config.race_playback_slider, true);
+    if config.race_playback_slider {
+        ConfigEditor::list_tile_switch(ui, t!("config_editor.race_playback_slider_always"), &mut config.race_playback_slider_always, true);
+    }
     ConfigEditor::list_tile_switch(ui, t!("config_editor.race_playback_button"), &mut config.race_playback_button, true);
     ConfigEditor::list_tile_switch(ui, t!("config_editor.race_playback_key_enable"), &mut config.race_playback_key_enable, true);
 

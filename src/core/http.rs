@@ -30,16 +30,18 @@ pub struct AsyncRequest<T: Send + Sync> {
     pub result: ArcSwap<Option<Result<T, Error>>>
 }
 
+const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+
 pub fn ureq_config() -> ureq::config::Config {
-    ureq_config_with_timeout(None)
+    ureq_config_with_timeout(Some(DEFAULT_CONNECT_TIMEOUT))
 }
 
-pub fn ureq_config_with_timeout(timeout: Option<Duration>) -> ureq::config::Config {
+pub fn ureq_config_with_timeout(connect_timeout: Option<Duration>) -> ureq::config::Config {
     use ureq::config::IpFamily::*;
 
     ureq::config::Config::builder()
         .ip_family(if Hachimi::instance().config.load().ipv4_only { Ipv4Only } else { Any })
-        .timeout_global(timeout)
+        .timeout_connect(connect_timeout)
         .build()
 }
 
