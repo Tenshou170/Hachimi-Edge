@@ -219,7 +219,15 @@ impl template::Context for TemplateContext {
                 SetTextLinespace(self.component, ls as f32);
             }
 
-            "afit" => {
+            "bf" => {
+                let value = args.get(0)?;
+                let template::Token::NumberLit(state) = *value else {
+                    return None;
+                };
+                SetTextFit(self.component, state != 0.0);
+            }
+
+            "bestfit" => {
                 let value = args.get(0)?;
                 let template::Token::NumberLit(state) = *value else {
                     return None;
@@ -248,7 +256,7 @@ pub struct IgnoreATFiltersContext();
 impl template::Context for IgnoreATFiltersContext {
     fn on_filter_eval(&mut self, _name: &str, _args: &[template::Token]) -> Option<String> {
         match _name {
-            "anchor" | "scale" | "ls" | "afit" | "wrap" => Some(String::new()),
+            "anchor" | "scale" | "ls" | "bf" | "bestfit" | "wrap" => Some(String::new()),
             _ => None
         }
     }
