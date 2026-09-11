@@ -38,6 +38,10 @@ fn is_japan() -> bool {
     Hachimi::instance().game.region == Region::Japan
 }
 
+fn is_replay_sim_supported() -> bool {
+    matches!(Hachimi::instance().game.region, Region::Japan | Region::Global)
+}
+
 static WAS_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// Called unconditionally from `GameSystem_Update`, every game-thread frame, on both
@@ -117,7 +121,7 @@ fn read_course_distance(race_manager: *mut Il2CppObject) {
 /// horseIndex == gate - 1 (confirmed live by the race-director-plugin this was ported
 /// from) - see `RaceSimulateHorseResultData`'s doc.
 fn read_predicted_result(horse_manager: *mut Il2CppObject) {
-    if !is_japan() || !RaceHorseManagerReplay::is_replay_manager(horse_manager) {
+    if !is_replay_sim_supported() || !RaceHorseManagerReplay::is_replay_manager(horse_manager) {
         return;
     }
     let reader = RaceHorseManagerReplay::get__reader(horse_manager);
