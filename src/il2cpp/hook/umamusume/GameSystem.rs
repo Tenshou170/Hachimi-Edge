@@ -72,7 +72,11 @@ pub fn on_game_initialized() {
     // GAME_INITIALIZED.store(true, Ordering::Relaxed);
     Hachimi::instance().init_skill_info();
     #[cfg(target_os = "android")]
-    crate::android::utils::set_audio_capture_policy_all();
+    // Defer to the main thread: on_game_initialized() may run on the linker thread
+    // (inside the do_dlopen hook), which on Android 12+ does not have a valid JNI
+    // class-loader context — calling FindClass directly from there causes a SEGV in
+    // LocalReferenceTable::Add on some devices.
+    crate::il2cpp::symbols::Thread::main_thread().schedule(crate::android::utils::set_audio_capture_policy_all);
     #[cfg(target_os = "windows")]
     super::UIManager::apply_ui_scale();
 
