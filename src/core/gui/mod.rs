@@ -129,6 +129,13 @@ pub struct Gui {
     notifications: Vec<Md3Snackbar>,
     next_notification_id: u32,
     windows: Vec<BoxedAppWindow>,
+
+    /// The layer that was most recently clicked/pressed. Re-promoted to the top of
+    /// its [`egui::Order`] tier every frame so the user's last focused window stays
+    /// in front of other windows at the same order level until something else is
+    /// clicked (e.g. an app window stays in front of Race Director HUD panels and
+    /// vice-versa).
+    top_layer: Option<egui::LayerId>,
 }
 
 const PIXELS_PER_POINT_RATIO: f32 = 3.0 / 1080.0;
@@ -403,6 +410,7 @@ impl Gui {
             notifications: Vec::new(),
             next_notification_id: 0,
             windows,
+            top_layer: None,
         };
 
         unsafe {
@@ -728,9 +736,10 @@ impl Gui {
             };
 
             let (_, safe_bottom) = get_safe_insets(ctx);
+            let slider_offset = if is_portrait(ctx) { 72.0 * scale } else { 24.0 * scale };
             egui::Area::new(egui::Id::new("live_slider_area"))
-                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -(24.0 * scale + safe_bottom)))
-                .order(egui::Order::Foreground)
+                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -(slider_offset + safe_bottom)))
+                .order(egui::Order::Middle)
                 .show(ctx, |ui| {
                     egui::Frame::NONE
                         .fill(fill)
@@ -746,7 +755,7 @@ impl Gui {
                             (6.0 * scale) as i8,
                         ))
                         .show(ui, |ui| {
-                            ui.set_width(ctx.content_rect().width() * 0.60);
+                            ui.set_width(ctx.content_rect().width() * if is_portrait(ctx) { 0.78 } else { 0.60 });
 
                             let time_font = egui::FontId::new(
                                 10.5 * scale,
@@ -770,6 +779,7 @@ impl Gui {
                                     MaterialSlider::new(&mut current, 0.0..=total)
                                         .show_value(false)
                                         .show_value_indicator(true)
+                                        .compact()
                                         .width(slider_w),
                                 );
                                 if res.drag_started() {
@@ -833,6 +843,8 @@ impl Gui {
             RACE_SLIDER_SEEK_FAULTED.store(false, atomic::Ordering::Release);
             RACE_SLIDER_MUSIC_TIME.store(0, atomic::Ordering::Release);
             RACE_SLIDER_MUSIC_VALID.store(false, atomic::Ordering::Release);
+            // Reset the fade timer so the slider starts fully visible next time.
+            ctx.data_mut(|d| d.insert_temp(egui::Id::new("race_slider_activity"), std::time::Instant::now()));
             return;
         }
 
@@ -892,12 +904,41 @@ impl Gui {
         };
 
         let (_, safe_bottom) = get_safe_insets(ctx);
+        let slider_offset = if is_portrait(ctx) { 72.0 * scale } else { 24.0 * scale };
+
+        // Fade the slider to 25% opacity after 2s of no interaction/hover,
+        // same as the playback button. Activity resets on drag or hover.
+        const SLIDER_FADE_DELAY: f32 = 2.0;
+        const SLIDER_FADE_DURATION: f32 = 1.0;
+        const SLIDER_DIM_ALPHA: f32 = 0.25;
+        let slider_activity_id = egui::Id::new("race_slider_activity");
+        let slider_last_activity: std::time::Instant = ctx.data(|d| {
+            d.get_temp(slider_activity_id).unwrap_or_else(std::time::Instant::now)
+        });
+        let slider_elapsed = slider_last_activity.elapsed().as_secs_f32();
+        let slider_alpha = if slider_elapsed < SLIDER_FADE_DELAY {
+            1.0_f32
+        } else {
+            let t = ((slider_elapsed - SLIDER_FADE_DELAY) / SLIDER_FADE_DURATION).clamp(0.0, 1.0);
+            1.0 - t * (1.0 - SLIDER_DIM_ALPHA)
+        };
+        // Recompute fill with fade alpha applied.
+        let fill_faded = egui::Color32::from_rgba_unmultiplied(
+            fill.r(), fill.g(), fill.b(),
+            (fill.a() as f32 * slider_alpha) as u8,
+        );
+
         egui::Area::new(egui::Id::new("race_slider_area"))
-            .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -(24.0 * scale + safe_bottom)))
-            .order(egui::Order::Foreground)
+            .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -(slider_offset + safe_bottom)))
+            .order(egui::Order::Middle)
             .show(ctx, |ui| {
+                // Keep repainting during the fade animation.
+                if slider_elapsed >= SLIDER_FADE_DELAY
+                    && slider_elapsed < SLIDER_FADE_DELAY + SLIDER_FADE_DURATION {
+                    ui.ctx().request_repaint();
+                }
                 egui::Frame::NONE
-                    .fill(fill)
+                    .fill(fill_faded)
                     .corner_radius(egui::CornerRadius::same(cr))
                     .shadow(egui::Shadow {
                         blur: (6.0 * scale) as u8,
@@ -910,7 +951,7 @@ impl Gui {
                         (6.0 * scale) as i8,
                     ))
                     .show(ui, |ui| {
-                        ui.set_width(ctx.content_rect().width() * 0.60);
+                        ui.set_width(ctx.content_rect().width() * if is_portrait(ctx) { 0.78 } else { 0.60 });
 
                         let curr_m = (current / 60.0).floor() as i32;
                         let curr_s = (current % 60.0).floor() as i32;
@@ -926,7 +967,7 @@ impl Gui {
                             ui.add(egui::Label::new(
                                 egui::RichText::new(format!("{:02}:{:02}", curr_m, curr_s))
                                     .font(time_font.clone())
-                                    .color(on_surface_variant),
+                                    .color(on_surface_variant.linear_multiply(slider_alpha)),
                             ));
 
                             let label_w = 28.0 * scale;
@@ -936,9 +977,13 @@ impl Gui {
 
                             ui.spacing_mut().slider_width = slider_w;
 
+                            // Dim the slider track/thumb together with the pill background.
+                            ui.multiply_opacity(slider_alpha);
+
                             let slider = MaterialSlider::new(&mut current, 0.0..=total)
                                 .show_value(false)
                                 .show_value_indicator(true)
+                                .compact()
                                 .width(slider_w);
                             let res = if interactable {
                                 ui.add(slider)
@@ -974,10 +1019,15 @@ impl Gui {
                                 RACE_SLIDER_END_REQUESTED.store(true, atomic::Ordering::Release);
                             }
 
+                            // Reset fade timer on any interaction or hover.
+                            if res.hovered() || res.dragged() || res.drag_started() {
+                                ui.ctx().data_mut(|d| d.insert_temp(slider_activity_id, std::time::Instant::now()));
+                            }
+
                             ui.add(egui::Label::new(
                                 egui::RichText::new(format!("{:02}:{:02}", tot_m, tot_s))
                                     .font(time_font)
-                                    .color(on_surface_variant),
+                                    .color(on_surface_variant.linear_multiply(slider_alpha)),
                             ));
                         });
                     });
@@ -997,6 +1047,8 @@ impl Gui {
         use crate::il2cpp::hook::umamusume::{RaceManager, RaceManagerReplayBase};
 
         if !Self::race_playback_button_showing() {
+            // Reset the fade timer so the button starts fully visible next time.
+            ctx.data_mut(|d| d.insert_temp(egui::Id::new("race_playback_btn_activity"), std::time::Instant::now()));
             return;
         }
 
@@ -1017,33 +1069,82 @@ impl Gui {
         let paused = RaceManagerReplayBase::IsPaused(race_manager);
         let interactable = !RaceManagerReplayBase::playback_gated(race_manager);
 
-        let btn_size = 24.0 * scale;
+        let btn_size = 48.0 * scale;
         let margin = 12.0 * scale;
         let btn_pos = egui::Pos2::new(
             game_view.left() + margin,
             game_view.center().y - btn_size / 2.0,
         );
 
-        // fa-play when paused (\u{f04b}), fa-pause while running (\u{f04c})
-        let icon = if paused { "\u{f04b}" } else { "\u{f04c}" };
+        // Material Symbols: play_arrow \u{e037}, pause \u{e034}
+        let icon = if paused { "\u{e037}" } else { "\u{e034}" };
+
+        // Fade the button to 25% opacity after 2s of no hover/interaction,
+        // restoring to full opacity immediately on hover or click.
+        // Activity timestamp is stored in egui temp data so it persists across frames
+        // without needing a field on Gui.
+        const FADE_DELAY_SECS: f32 = 2.0;
+        const FADE_DURATION_SECS: f32 = 1.0;
+        const DIM_ALPHA: f32 = 0.25;
+        let activity_id = egui::Id::new("race_playback_btn_activity");
+        let last_activity: std::time::Instant = ctx.data(|d| {
+            d.get_temp(activity_id).unwrap_or_else(std::time::Instant::now)
+        });
+        let elapsed = last_activity.elapsed().as_secs_f32();
+        let alpha = if elapsed < FADE_DELAY_SECS {
+            1.0_f32
+        } else {
+            let t = ((elapsed - FADE_DELAY_SECS) / FADE_DURATION_SECS).clamp(0.0, 1.0);
+            1.0 - t * (1.0 - DIM_ALPHA)
+        };
 
         egui::Area::new(egui::Id::new("race_playback_button_area"))
             .fixed_pos(btn_pos)
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
+                ui.set_min_size(egui::Vec2::splat(btn_size));
+                ui.set_max_size(egui::Vec2::splat(btn_size));
+
+                // Apply alpha to the whole button via visual override.
+                ui.visuals_mut().widgets.inactive.weak_bg_fill =
+                    ui.visuals().widgets.inactive.weak_bg_fill.linear_multiply(alpha);
+                ui.visuals_mut().widgets.inactive.fg_stroke.color =
+                    ui.visuals().widgets.inactive.fg_stroke.color.linear_multiply(alpha);
+                ui.visuals_mut().widgets.hovered.weak_bg_fill =
+                    ui.visuals().widgets.hovered.weak_bg_fill.linear_multiply(alpha);
+                ui.visuals_mut().widgets.hovered.fg_stroke.color =
+                    ui.visuals().widgets.hovered.fg_stroke.color.linear_multiply(alpha);
+
                 let btn = egui::Button::new(
-                    egui::RichText::new(icon).size(16.0 * scale),
-                ).min_size(egui::Vec2::new(btn_size, btn_size));
+                    egui::RichText::new(icon)
+                        .size(24.0 * scale)
+                        .color(egui::Color32::WHITE.linear_multiply(alpha)),
+                ).min_size(egui::Vec2::splat(btn_size));
 
-                let res = if interactable {
-                    ui.add(btn)
-                } else {
-                    ui.add_enabled(false, btn)
-                };
+                ui.with_layout(
+                    egui::Layout::centered_and_justified(egui::Direction::TopDown),
+                    |ui| {
+                        let res = if interactable {
+                            ui.add(btn)
+                        } else {
+                            ui.add_enabled(false, btn)
+                        };
 
-                if res.clicked() {
-                    Thread::main_thread().schedule(RaceManagerReplayBase::toggle_playback);
-                }
+                        // Reset activity timer on hover or click so button stays visible.
+                        if res.hovered() || res.clicked() {
+                            ctx.data_mut(|d| d.insert_temp(activity_id, std::time::Instant::now()));
+                        }
+
+                        if res.clicked() {
+                            Thread::main_thread().schedule(RaceManagerReplayBase::toggle_playback);
+                        }
+
+                        // Keep repainting during the fade so it animates smoothly.
+                        if elapsed >= FADE_DELAY_SECS && elapsed < FADE_DELAY_SECS + FADE_DURATION_SECS {
+                            ctx.request_repaint();
+                        }
+                    },
+                );
             });
     }
 
@@ -1130,7 +1231,6 @@ impl Gui {
         }
 
         self.process_plugin_windows();
-        self.run_windows();
         self.run_notifications();
 
         if self.splash_visible {
@@ -1236,20 +1336,66 @@ impl Gui {
         if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| race_director_hud::run(&ctx))).is_err() {
             error!("race_director_hud::run PANICKED (caught)");
         }
+        self.run_windows();
+
+        // Persist the last-clicked window's layer focus across frames.
+        // egui's internal move_to_top (via area.rs pointer_pressed_on_area) only marks
+        // a layer for wants_to_be_on_top for the current frame and clears it at end_pass.
+        // Without re-promotion, the HUD panels (or any later-submitted window) would
+        // reclaim the top position on the very next frame. We detect which Order::Middle
+        // layer the pointer just pressed on, save it, and re-promote it every frame until
+        // the user clicks something else.
+        if let Some(pos) = ctx.input(|i| {
+            i.pointer.any_pressed().then(|| i.pointer.interact_pos()).flatten()
+        }) {
+            let pressed_layer = ctx.layer_id_at(pos);
+            // Only track Order::Middle layers (app windows and HUD panels).
+            // Foreground layers (sliders, snackbars) manage themselves and should not
+            // be overridden here.
+            if let Some(layer) = pressed_layer {
+                if layer.order == egui::Order::Middle {
+                    self.top_layer = Some(layer);
+                }
+            }
+        }
+        if let Some(layer) = self.top_layer {
+            // If the layer is no longer visible (window was closed), clear it.
+            if ctx.memory(|m| m.areas().visible_last_frame(&layer)) {
+                ctx.memory_mut(|m| m.areas_mut().move_to_top(layer));
+            } else {
+                self.top_layer = None;
+            }
+        }
+
         #[cfg(target_os = "windows")]
         self.run_free_camera_overlay(&ctx);
-
-        let wants_pointer = self.context.wants_pointer_input()
-            || self.context.is_pointer_over_area()
+        // actively_using_pointer: egui is actively processing a drag/click/keyboard event.
+        let actively_using_pointer = self.context.wants_pointer_input()
             || self.context.wants_keyboard_input();
+
+        // Point-in-layer: which specific overlay area is the pointer directly over.
+        let pointer_layer = self.context.input(|i| i.pointer.interact_pos())
+            .and_then(|pos| self.context.layer_id_at(pos));
+        let over_race_slider = pointer_layer
+            .map(|l| l.id == egui::Id::new("race_slider_area"))
+            .unwrap_or(false);
+        let over_live_slider = pointer_layer
+            .map(|l| l.id == egui::Id::new("live_slider_area"))
+            .unwrap_or(false);
+        let over_playback_btn = pointer_layer
+            .map(|l| l.id == egui::Id::new("race_playback_button_area"))
+            .unwrap_or(false);
+        // over_hud: pointer is over a Middle-order layer that isn't one of the named
+        // overlay areas — i.e. a HUD window panel.
+        let over_hud = race_director_hud::showing()
+            && pointer_layer.map(|l| l.order == egui::Order::Middle).unwrap_or(false)
+            && !over_race_slider && !over_live_slider && !over_playback_btn;
+
         let has_interactive_widgets =
-            IS_LIVE_SLIDER_ACTIVE.load(atomic::Ordering::Relaxed) && wants_pointer;
+            IS_LIVE_SLIDER_ACTIVE.load(atomic::Ordering::Relaxed) && (actively_using_pointer || over_live_slider);
         let race_slider_input = Self::race_slider_showing();
         let race_playback_button_input = Self::race_playback_button_showing();
-        // Unlike the slider/button above, the HUD windows cover real screen area for the
-        // whole race - only claim input while the pointer is actually over/interacting
-        // with one of them, not for the HUD's mere presence.
-        let race_director_input = race_director_hud::showing() && wants_pointer;
+        let race_director_input = race_director_hud::showing();
         #[cfg(target_os = "windows")]
         let free_camera_input_capture = crate::windows::free_camera::wants_windows_input_capture();
         #[cfg(not(target_os = "windows"))]
@@ -1260,12 +1406,24 @@ impl Gui {
             atomic::Ordering::Release,
         );
 
+        // IS_CONSUMING_INPUT: coarse gate — true whenever any interactive egui element
+        // is visible. Tells the Windows wnd_proc / Android input hook to enter the egui
+        // processing path. Fine-grained blocking is handled by WANTS_INPUT below.
         IS_CONSUMING_INPUT.store(
             self.is_consuming_input() || has_interactive_widgets || race_slider_input || race_playback_button_input || race_director_input || free_camera_input_capture,
             atomic::Ordering::Release,
         );
 
-        WANTS_INPUT.store(wants_pointer || race_slider_input || race_playback_button_input || race_director_input || free_camera_input_capture, atomic::Ordering::Release);
+        // WANTS_INPUT: fine gate — only true when the game should NOT also receive this
+        // input. Overlay elements only block game input when the pointer is directly over
+        // them. Sidebar/app windows block when actively processing any pointer/keyboard.
+        let overlay_captured = over_race_slider || over_live_slider || over_playback_btn || over_hud;
+        WANTS_INPUT.store(
+            (self.is_consuming_input() && actively_using_pointer)
+                || overlay_captured
+                || free_camera_input_capture,
+            atomic::Ordering::Release,
+        );
 
         self.context.end_pass()
     }
@@ -2461,7 +2619,6 @@ impl Gui {
     pub fn is_consuming_input(&self) -> bool {
         self.menu_visible
             || !self.windows.is_empty()
-            || IS_LIVE_SLIDER_ACTIVE.load(atomic::Ordering::Acquire)
     }
 
     pub fn is_consuming_input_atomic() -> bool {
