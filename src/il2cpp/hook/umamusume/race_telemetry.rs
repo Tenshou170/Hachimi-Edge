@@ -86,6 +86,21 @@ pub fn collect_frame() {
     if horse_infos.is_null() {
         return;
     }
+
+    // Update gate-open and finished state on the game thread where it's safe to call IL2CPP.
+    // is_start_dash_instance checks whether the pre-race countdown is still running;
+    // once it returns false the gate has opened and the race is properly underway.
+    // IsFinished is polled the same way to dismiss the HUD once the race concludes.
+    if !race_director::is_gate_open() {
+        if !HorseRaceInfo::is_start_dash_instance(race_manager) {
+            race_director::set_gate_open(true);
+        }
+    }
+    if !race_director::is_race_finished() {
+        if HorseRaceInfo::is_finished() {
+            race_director::set_race_finished(true);
+        }
+    }
     let arr: Array<*mut Il2CppObject> = Array::from(horse_infos);
     let course = race_director::course_distance() as f32;
     let target = race_director::followed_gate();

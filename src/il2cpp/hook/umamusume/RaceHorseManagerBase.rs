@@ -22,6 +22,11 @@ extern "C" fn RaceHorseManagerBase_Init(this: *mut Il2CppObject, raceInfo: *mut 
 type RaceHorseManagerBase_ReleaseFn = extern "C" fn(this: *mut Il2CppObject);
 extern "C" fn RaceHorseManagerBase_Release(this: *mut Il2CppObject) {
     RACE_ACTIVE.store(false, Ordering::Release);
+    // Reset input atomics immediately so the end screen is interactive without
+    // waiting for the next render frame. IS_CONSUMING_INPUT / WANTS_INPUT would
+    // otherwise stay true until Gui::run() fires, blocking touches on the result screen.
+    crate::core::gui::IS_CONSUMING_INPUT.store(false, Ordering::Release);
+    crate::core::gui::WANTS_INPUT.store(false, Ordering::Release);
     get_orig_fn!(RaceHorseManagerBase_Release, RaceHorseManagerBase_ReleaseFn)(this);
 }
 

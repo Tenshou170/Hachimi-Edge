@@ -145,7 +145,30 @@ pub fn record_horse(gate: i32, t: HorseTelem, course: f32) {
 }
 
 /// Reset all per-race buffers. Called when race liveness transitions false -> true.
+// ── race liveness sub-states (set by race_telemetry on the game thread) ──────────────────
+// These let showing() filter out the pre-race start-dash window and the post-race
+// finished state without calling IL2CPP methods on the render thread (which caused the
+// crash fixed in the previous commit).
+static RACE_GATE_OPEN: AtomicBool = AtomicBool::new(false);
+static RACE_FINISHED: AtomicBool = AtomicBool::new(false);
+
+pub fn set_gate_open(v: bool) {
+    RACE_GATE_OPEN.store(v, Ordering::Release);
+}
+pub fn is_gate_open() -> bool {
+    RACE_GATE_OPEN.load(Ordering::Acquire)
+}
+
+pub fn set_race_finished(v: bool) {
+    RACE_FINISHED.store(v, Ordering::Release);
+}
+pub fn is_race_finished() -> bool {
+    RACE_FINISHED.load(Ordering::Acquire)
+}
+
 pub fn on_race_start() {
+    RACE_GATE_OPEN.store(false, Ordering::Release);
+    RACE_FINISHED.store(false, Ordering::Release);
     TELEM.lock().unwrap().clear();
     NAME_MAP.lock().unwrap().clear();
     TRAINER_MAP.lock().unwrap().clear();

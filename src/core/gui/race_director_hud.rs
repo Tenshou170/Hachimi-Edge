@@ -24,7 +24,7 @@ use egui_material3::theme::{get_global_color, get_global_corner_radius};
 use crate::core::hachimi::{self, RaceDirectorWindowState};
 use crate::core::race_director::{self, FieldRow};
 use crate::core::Hachimi;
-use crate::il2cpp::hook::umamusume::{HorseRaceInfo, RaceHorseManagerBase};
+use crate::il2cpp::hook::umamusume::RaceHorseManagerBase;
 
 fn style_color(style: i32) -> Color32 {
     match style {
@@ -176,8 +176,9 @@ fn make_window(
 
     // A plain &str title falls back to egui's TextStyle::Heading, which in this app's
     // scaled theme renders far larger than a compact HUD panel calls for - passing an
-    // explicitly-sized RichText overrides that fallback.
-    let title_text = RichText::new(title).size(15.0).strong();
+    // explicitly-sized RichText overrides that fallback. Use the MD3 primary accent color
+    // so the title bar visually matches the rest of the Hachimi UI chrome.
+    let title_text = RichText::new(title).size(15.0).color(get_global_color("primary"));
 
     let mut w = Window::new(title_text)
         .id(egui::Id::new((id, RESET_GEN.load(Ordering::Relaxed))))
@@ -223,10 +224,12 @@ fn persist_geometry(ctx: &Context, rect: Rect, saved: &RaceDirectorWindowState, 
 
 // ── visibility gate ──────────────────────────────────────────────────────────────────────
 pub fn showing() -> bool {
+    // All three checks are atomic reads set on the game thread — safe to call from the
+    // render thread with no IL2CPP involvement.
     Hachimi::instance().config.load().race_director.enabled
         && RaceHorseManagerBase::is_race_active()
-        && !HorseRaceInfo::is_start_dash()
-        && !HorseRaceInfo::is_finished()
+        && race_director::is_gate_open()
+        && !race_director::is_race_finished()
 }
 
 // ── panels ───────────────────────────────────────────────────────────────────────────────
