@@ -148,7 +148,7 @@ pub static IS_LIVE_SCENE: AtomicBool = AtomicBool::new(false);
 pub static IS_LIVE_SLIDER_ACTIVE: AtomicBool = AtomicBool::new(false);
 static LIVE_SLIDER_SCENE_HANDLE: atomic::AtomicI32 = atomic::AtomicI32::new(-1);
 
-static RACE_SLIDER_DRAGGING: AtomicBool = AtomicBool::new(false);
+pub static RACE_SLIDER_DRAGGING: AtomicBool = AtomicBool::new(false);
 static RACE_SLIDER_PENDING: AtomicBool = AtomicBool::new(false);
 static RACE_SLIDER_TARGET_TIME: AtomicU32 = AtomicU32::new(0);
 static RACE_SLIDER_END_REQUESTED: AtomicBool = AtomicBool::new(false);
@@ -804,15 +804,16 @@ impl Gui {
     }
 
     pub fn race_slider_showing() -> bool {
-        use crate::il2cpp::hook::umamusume::{HorseRaceInfo, RaceHorseManagerBase, RaceManager, RaceManagerReplayBase};
+        use crate::il2cpp::hook::umamusume::{RaceHorseManagerBase, RaceManager, RaceManagerReplayBase};
+        use crate::core::race_director;
 
         let config = Hachimi::instance().config.load();
         let is_dragging = RACE_SLIDER_DRAGGING.load(atomic::Ordering::Acquire);
 
         if !config.race_playback_slider
             || !RaceHorseManagerBase::is_race_active()
-            || (HorseRaceInfo::is_start_dash() && !is_dragging)
-            || HorseRaceInfo::is_finished()
+            || (!race_director::is_gate_open() && !is_dragging)
+            || race_director::is_race_finished()
         {
             return false;
         }
@@ -1035,12 +1036,13 @@ impl Gui {
     }
 
     pub fn race_playback_button_showing() -> bool {
-        use crate::il2cpp::hook::umamusume::{HorseRaceInfo, RaceHorseManagerBase};
+        use crate::il2cpp::hook::umamusume::RaceHorseManagerBase;
+        use crate::core::race_director;
 
         Hachimi::instance().config.load().race_playback_button
             && RaceHorseManagerBase::is_race_active()
-            && !HorseRaceInfo::is_start_dash()
-            && !HorseRaceInfo::is_finished()
+            && race_director::is_gate_open()
+            && !race_director::is_race_finished()
     }
 
     fn run_race_playback_button(ctx: &egui::Context) {
@@ -2632,6 +2634,9 @@ impl Gui {
 
         self.menu_visible = val;
         IS_CONSUMING_INPUT.store(val, atomic::Ordering::Relaxed);
+        if !val {
+            WANTS_INPUT.store(false, atomic::Ordering::Relaxed);
+        }
     }
 
     pub fn wants_input_atomic() -> bool {

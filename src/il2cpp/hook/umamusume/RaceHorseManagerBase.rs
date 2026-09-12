@@ -27,6 +27,9 @@ extern "C" fn RaceHorseManagerBase_Release(this: *mut Il2CppObject) {
     // otherwise stay true until Gui::run() fires, blocking touches on the result screen.
     crate::core::gui::IS_CONSUMING_INPUT.store(false, Ordering::Release);
     crate::core::gui::WANTS_INPUT.store(false, Ordering::Release);
+    // Clear the dragging flag so a slider drag in progress at race end doesn't
+    // leave race_slider_showing() stuck returning true on the next render frame.
+    crate::core::gui::RACE_SLIDER_DRAGGING.store(false, Ordering::Release);
     get_orig_fn!(RaceHorseManagerBase_Release, RaceHorseManagerBase_ReleaseFn)(this);
 }
 
