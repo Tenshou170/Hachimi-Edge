@@ -56,6 +56,16 @@ pub fn collect_frame() {
         return;
     }
 
+    // Check finished state before doing any heavier work — the skip button ends the
+    // race visually but Release() may fire much later, so is_race_active() stays true
+    // through the result screen. Poll IsFinished() here (safe: we're on the game thread
+    // and race objects are still alive) so showing() can dismiss the HUD immediately.
+    if !race_director::is_race_finished() && HorseRaceInfo::is_finished() {
+        race_director::set_race_finished(true);
+        crate::core::gui::IS_CONSUMING_INPUT.store(false, std::sync::atomic::Ordering::Release);
+        crate::core::gui::WANTS_INPUT.store(false, std::sync::atomic::Ordering::Release);
+    }
+
     let race_manager = RaceManager::instance();
     if race_manager.is_null() {
         return;
@@ -90,15 +100,9 @@ pub fn collect_frame() {
     // Update gate-open and finished state on the game thread where it's safe to call IL2CPP.
     // is_start_dash_instance checks whether the pre-race countdown is still running;
     // once it returns false the gate has opened and the race is properly underway.
-    // IsFinished is polled the same way to dismiss the HUD once the race concludes.
     if !race_director::is_gate_open() {
         if !HorseRaceInfo::is_start_dash_instance(race_manager) {
             race_director::set_gate_open(true);
-        }
-    }
-    if !race_director::is_race_finished() {
-        if HorseRaceInfo::is_finished() {
-            race_director::set_race_finished(true);
         }
     }
     let arr: Array<*mut Il2CppObject> = Array::from(horse_infos);
