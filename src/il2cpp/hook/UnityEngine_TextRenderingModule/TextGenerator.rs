@@ -157,7 +157,7 @@ extern "C" fn PopulateWithErrors(
     }
 
     // optimized layout bypass block
-    if Hachimi::instance().game.region == Region::Japan && get_path!().contains("PartsCharaMessage") {
+    if Hachimi::instance().game.region == Region::Japan && get_path!().contains("CharaMessage") {
         settings.horizontalOverflow = 0;
         settings.verticalOverflow = 0;
         settings.resizeTextMaxSize = 32;
