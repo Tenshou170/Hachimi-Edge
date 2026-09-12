@@ -25,6 +25,11 @@ pub fn is_keep_screen_on() -> bool {
 }
 
 pub fn set_keep_screen_on(enable: bool) {
+    // No-op if already in the requested state — avoid redundant IL2CPP calls on
+    // every save_and_reload_config (which fires on every Race Director HUD window move).
+    if KEEP_SCREEN_ON.load(Ordering::Relaxed) == enable {
+        return;
+    }
     info!("set_keep_screen_on called (enable={})", enable);
     KEEP_SCREEN_ON.store(enable, Ordering::Relaxed);
 

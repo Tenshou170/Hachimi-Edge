@@ -3369,9 +3369,36 @@ pub fn get_safe_insets(ctx: &egui::Context) -> (f32, f32) {
         }
     }
 
-    let (top_px, bottom_px) = crate::android::utils::get_safe_insets_jni();
-    if top_px > 0.0 || bottom_px > 0.0 {
-        return (top_px / ppp, bottom_px / ppp);
+    // Cache the JNI result so we don't call get_activity() every render frame.
+    // Safe insets only change on orientation change, so a 2-second TTL is ample.
+    static CACHED_INSETS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    static LAST_INSET_FETCH: std::sync::OnceLock<std::sync::Mutex<std::time::Instant>> =
+        std::sync::OnceLock::new();
+    let mutex = LAST_INSET_FETCH.get_or_init(|| {
+        std::sync::Mutex::new(std::time::Instant::now() - std::time::Duration::from_secs(10))
+    });
+    let now = std::time::Instant::now();
+    let needs_refresh = mutex
+        .lock()
+        .map(|t| now.duration_since(*t) > std::time::Duration::from_secs(2))
+        .unwrap_or(true);
+
+    if needs_refresh {
+        let (top_px, bottom_px) = crate::android::utils::get_safe_insets_jni();
+        // Pack two f32s into a u64 for atomic storage.
+        let packed = ((top_px.to_bits() as u64) << 32) | (bottom_px.to_bits() as u64);
+        CACHED_INSETS.store(packed, std::sync::atomic::Ordering::Release);
+        if let Ok(mut t) = mutex.lock() { *t = now; }
+        if top_px > 0.0 || bottom_px > 0.0 {
+            return (top_px / ppp, bottom_px / ppp);
+        }
+    } else {
+        let packed = CACHED_INSETS.load(std::sync::atomic::Ordering::Acquire);
+        let top_px = f32::from_bits((packed >> 32) as u32);
+        let bottom_px = f32::from_bits(packed as u32);
+        if top_px > 0.0 || bottom_px > 0.0 {
+            return (top_px / ppp, bottom_px / ppp);
+        }
     }
 
     (0.0, 0.0)
