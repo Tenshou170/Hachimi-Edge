@@ -222,26 +222,46 @@ pub fn open_app_or_fallback(package_name: &str, activity_class: &str, fallback_u
 }
 
 pub fn get_activity(mut env: JNIEnv<'_>) -> Option<JObject<'_>> {
-    let mut unity_activity = None;
-    if let Ok(unity_player_class) = env.find_class("com/unity3d/player/UnityPlayer") {
-        if let Ok(current_activity_val) = env.get_static_field(unity_player_class, "currentActivity", "Landroid/app/Activity;") {
+    // 1. Try cached UnityPlayer class first (cached in JNI_OnLoad with app class loader)
+    if let Some(unity_player_gref) = super::main::get_unity_player_class() {
+        let unity_player_class: &jni::objects::JClass = unity_player_gref.as_obj().into();
+        if let Ok(current_activity_val) = env.get_static_field(
+            unity_player_class,
+            "currentActivity",
+            "Landroid/app/Activity;",
+        ) {
             if let Ok(current_activity) = current_activity_val.l() {
                 if !current_activity.is_null() {
-                    info!("get_activity: Found UnityPlayer.currentActivity");
-                    unity_activity = Some(current_activity);
+                    debug!("get_activity: Found via cached UnityPlayer.currentActivity");
+                    return Some(current_activity);
+                }
+            }
+        }
+        if env.exception_check().unwrap_or(false) {
+            let _ = env.exception_clear();
+        }
+    }
+
+    // 2. Fallback: find UnityPlayer dynamically (works if Java frames are on stack)
+    if let Ok(unity_player_class) = env.find_class("com/unity3d/player/UnityPlayer") {
+        if let Ok(current_activity_val) = env.get_static_field(
+            unity_player_class,
+            "currentActivity",
+            "Landroid/app/Activity;",
+        ) {
+            if let Ok(current_activity) = current_activity_val.l() {
+                if !current_activity.is_null() {
+                    debug!("get_activity: Found via dynamic UnityPlayer.currentActivity");
+                    return Some(current_activity);
                 }
             }
         }
     }
-
-    if let Some(activity) = unity_activity {
-        return Some(activity);
-    }
-    
     if env.exception_check().unwrap_or(false) {
         let _ = env.exception_clear();
     }
 
+    // 3. Fallback: ActivityThread.mActivities (best effort for non-standard hosts)
     debug!("get_activity: Trying ActivityThread fallback");
     if let Ok(at_class) = env.find_class("android/app/ActivityThread") {
         if env.exception_check().unwrap_or(false) { let _ = env.exception_clear(); }
@@ -251,16 +271,6 @@ pub fn get_activity(mut env: JNIEnv<'_>) -> Option<JObject<'_>> {
             if let Ok(at) = at_val.l() {
                 if !at.is_null() {
                     debug!("get_activity: Got ActivityThread instance");
-                    if let Ok(act_val) = env.call_method(&at, "currentActivity", "()Landroid/app/Activity;", &[]) {
-                        if let Ok(act) = act_val.l() {
-                            if !act.is_null() {
-                                info!("get_activity: Found via currentActivity()");
-                                return Some(act);
-                            }
-                        }
-                    }
-                    if env.exception_check().unwrap_or(false) { let _ = env.exception_clear(); }
-
                     if let Ok(activities_val) = env.get_field(&at, "mActivities", "Landroid/util/ArrayMap;") {
                         if let Ok(activities) = activities_val.l() {
                             if !activities.is_null() {
@@ -293,6 +303,28 @@ pub fn get_activity(mut env: JNIEnv<'_>) -> Option<JObject<'_>> {
     }
     
     warn!("get_activity: Failed to retrieve Activity from any source");
+    None
+}
+
+pub fn get_context<'a>(env: &mut JNIEnv<'a>) -> Option<JObject<'a>> {
+    if let Some(activity) = get_activity(unsafe { env.unsafe_clone() }) {
+        return Some(activity);
+    }
+    if let Ok(at_class) = env.find_class("android/app/ActivityThread") {
+        if let Ok(app_val) = env.call_static_method(
+            &at_class, "currentApplication", "()Landroid/app/Application;", &[]
+        ) {
+            if let Ok(app) = app_val.l() {
+                if !app.is_null() {
+                    debug!("get_context: Found Application via ActivityThread.currentApplication()");
+                    return Some(app);
+                }
+            }
+        }
+    }
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_clear();
+    }
     None
 }
 
@@ -457,55 +489,71 @@ pub fn get_screen_dimensions(mut env: JNIEnv) -> (i32, i32) {
 }
 
 pub fn set_audio_capture_policy_all() {
-    let Some(vm) = java_vm() else {
-        return;
-    };
-    let Ok(mut env) = vm.attach_current_thread() else {
-        return;
-    };
+    std::thread::Builder::new()
+        .name("audio_capture_policy".into())
+        .spawn(|| {
+            let Some(vm) = java_vm() else {
+                return;
+            };
+            let Ok(mut env) = vm.attach_current_thread_as_daemon() else {
+                return;
+            };
 
-    let result = (|| -> jni::errors::Result<()> {
-        let api_level = crate::android::hook::cached_api_level();
-        if api_level < 29 {
-            info!("setAllowedCapturePolicy ignored: API level {} is below 29", api_level);
-            return Ok(());
-        }
+            let api_level = crate::android::hook::cached_api_level();
+            if api_level < 29 {
+                info!("setAllowedCapturePolicy ignored: API level {} is below 29", api_level);
+                return;
+            }
 
-        let activity = get_activity(unsafe { env.unsafe_clone() })
-            .ok_or(jni::errors::Error::JavaException)?;
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            loop {
+                if let Some(ctx) = get_context(&mut env) {
+                    let result = (|| -> jni::errors::Result<()> {
+                        let context_class = env.find_class("android/content/Context")?;
+                        let audio_service_str = env.get_static_field(context_class, "AUDIO_SERVICE", "Ljava/lang/String;")?.l()?;
 
-        let context_class = env.find_class("android/content/Context")?;
-        let audio_service_str = env.get_static_field(context_class, "AUDIO_SERVICE", "Ljava/lang/String;")?.l()?;
+                        let audio_manager = env.call_method(
+                            &ctx, 
+                            "getSystemService", 
+                            "(Ljava/lang/String;)Ljava/lang/Object;", 
+                            &[JValue::from(&audio_service_str)]
+                        )?.l()?;
 
-        let audio_manager = env.call_method(
-            &activity, 
-            "getSystemService", 
-            "(Ljava/lang/String;)Ljava/lang/Object;", 
-            &[JValue::from(&audio_service_str)]
-        )?.l()?;
+                        if audio_manager.is_null() {
+                            return Err(jni::errors::Error::JavaException);
+                        }
 
-        if audio_manager.is_null() {
-            return Err(jni::errors::Error::JavaException);
-        }
+                        let allow_capture_by_all: i32 = 1;
+                        env.call_method(
+                            &audio_manager, 
+                            "setAllowedCapturePolicy", 
+                            "(I)V", 
+                            &[JValue::Int(allow_capture_by_all)]
+                        )?;
 
-        let allow_capture_by_all: i32 = 1;
-        env.call_method(
-            &audio_manager, 
-            "setAllowedCapturePolicy", 
-            "(I)V", 
-            &[JValue::Int(allow_capture_by_all)]
-        )?;
+                        info!("Successfully set AudioManager capture policy to ALLOW_CAPTURE_BY_ALL");
+                        Ok(())
+                    })();
 
-        info!("Successfully set AudioManager capture policy to ALLOW_CAPTURE_BY_ALL");
-        Ok(())
-    })();
+                    match result {
+                        Ok(()) => return,
+                        Err(e) => {
+                            debug!("set_audio_capture_policy_all attempt error: {:?}", e);
+                            if env.exception_check().unwrap_or(false) {
+                                let _ = env.exception_clear();
+                            }
+                        }
+                    }
+                }
 
-    if let Err(e) = result {
-        info!("JNI Audio Error: {:?}", e);
-        if env.exception_check().unwrap_or(false) {
-            let _ = env.exception_clear();
-        }
-    }
+                if std::time::Instant::now() >= deadline {
+                    warn!("set_audio_capture_policy_all: Timed out waiting for Android Context");
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+        })
+        .ok();
 }
 
 pub fn get_game_dir() -> PathBuf {

@@ -1,5 +1,5 @@
 use std::{ffi::CStr, os::raw::c_void};
-use jni::{sys::jint, JavaVM};
+use jni::{objects::GlobalRef, sys::jint, JavaVM};
 use once_cell::sync::OnceCell;
 
 use crate::core::Hachimi;
@@ -13,9 +13,14 @@ const LIBRARY_NAME: &CStr = c"libmain_orig.so";
 const JNI_ONLOAD_NAME: &CStr = c"JNI_OnLoad";
 
 static JAVA_VM: OnceCell<JavaVM> = OnceCell::new();
+static UNITY_PLAYER_CLASS: OnceCell<GlobalRef> = OnceCell::new();
 
 pub(crate) fn java_vm() -> Option<&'static JavaVM> {
     JAVA_VM.get()
+}
+
+pub(crate) fn get_unity_player_class() -> Option<&'static GlobalRef> {
+    UNITY_PLAYER_CLASS.get()
 }
 
 fn resolve_orig_jni_onload() -> Option<JniOnLoadFn> {
@@ -84,7 +89,16 @@ pub extern "C" fn JNI_OnLoad(vm: JavaVM, reserved: *mut c_void) -> jint {
     match JAVA_VM.get() {
         Some(stored_vm) => {
             match stored_vm.get_env() {
-                Ok(env) => {
+                Ok(mut env) => {
+                    if let Ok(local_class) = env.find_class("com/unity3d/player/UnityPlayer") {
+                        if let Ok(global_ref) = env.new_global_ref(local_class) {
+                            let _ = UNITY_PLAYER_CLASS.set(global_ref);
+                            info!("JNI_OnLoad: Cached UnityPlayer class reference");
+                        }
+                    }
+                    if env.exception_check().unwrap_or(false) {
+                        let _ = env.exception_clear();
+                    }
                     hook::init(env.get_raw());
                     info!("JNI_OnLoad: Hooks initialized successfully");
                 }

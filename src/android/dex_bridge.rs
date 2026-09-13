@@ -5,7 +5,7 @@ use std::{
 };
 
 use jni::{
-    objects::{GlobalRef, JClass, JMap, JObject, JValue},
+    objects::{GlobalRef, JClass, JObject, JValue},
     JNIEnv,
 };
 use once_cell::sync::Lazy;
@@ -30,83 +30,8 @@ struct DexEntry {
 static NEXT_HANDLE: AtomicU64 = AtomicU64::new(1);
 static DEX_REGISTRY: Lazy<Mutex<HashMap<u64, DexEntry>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
-fn get_activity(mut env: JNIEnv<'_>) -> Option<JObject<'_>> {
-    // Try UnityPlayer.currentActivity first
-    match env.find_class("com/unity3d/player/UnityPlayer") {
-        Ok(unity_player_class) => {
-            match env.get_static_field(unity_player_class, "currentActivity", "Landroid/app/Activity;") {
-                Ok(val) => {
-                    if let Ok(current_activity) = val.l() {
-                        if !current_activity.is_null() {
-                            log::debug!("dex_bridge: get_activity found via UnityPlayer.currentActivity");
-                            return Some(current_activity);
-                        }
-                    }
-                }
-                Err(e) => {
-                    log::debug!("dex_bridge: get_activity failed to get UnityPlayer.currentActivity: {:?}", e);
-                }
-            }
-        }
-        Err(e) => {
-            log::debug!("dex_bridge: get_activity failed to find UnityPlayer class: {:?}", e);
-        }
-    }
-
-    log::debug!("dex_bridge: get_activity trying ActivityThread fallback");
-    
-    // Try ActivityThread.currentActivityThread() fallback
-    match env.find_class("android/app/ActivityThread") {
-        Ok(activity_thread_class) => {
-            match env.call_static_method(
-                activity_thread_class,
-                "currentActivityThread",
-                "()Landroid/app/ActivityThread;",
-                &[],
-            ) {
-                Ok(val) => {
-                    if let Ok(activity_thread) = val.l() {
-                        if !activity_thread.is_null() {
-                            match env.get_field(activity_thread, "mActivities", "Landroid/util/ArrayMap;") {
-                                Ok(activities_val) => {
-                                    if let Ok(activities) = activities_val.l() {
-                                        if !activities.is_null() {
-                                            if let Ok(activities_map) = JMap::from_env(&mut env, &activities) {
-                                                if let Ok(mut iter) = activities_map.iter(&mut env) {
-                                                    while let Ok(Some((_, activity_record))) = iter.next(&mut env) {
-                                                        if let Ok(activity_val) = env.get_field(activity_record, "activity", "Landroid/app/Activity;") {
-                                                            if let Ok(activity) = activity_val.l() {
-                                                                if !activity.is_null() {
-                                                                    log::debug!("dex_bridge: get_activity found via mActivities");
-                                                                    return Some(activity);
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    log::debug!("dex_bridge: get_activity failed to get mActivities: {:?}", e);
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    log::debug!("dex_bridge: get_activity failed to call currentActivityThread: {:?}", e);
-                }
-            }
-        }
-        Err(e) => {
-            log::debug!("dex_bridge: get_activity failed to find ActivityThread class: {:?}", e);
-        }
-    }
-
-    log::warn!("dex_bridge: get_activity failed to retrieve Activity from any source");
-    None
+fn get_activity(env: JNIEnv<'_>) -> Option<JObject<'_>> {
+    crate::android::utils::get_activity(env)
 }
 
 fn load_class_from_dex(env: &mut JNIEnv, dex_bytes: &[u8], class_name: &str) -> Option<(GlobalRef, GlobalRef)> {
