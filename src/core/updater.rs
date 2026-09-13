@@ -52,7 +52,7 @@ impl Updater {
             }
         };
 
-        if latest.is_different_version() {
+        if latest.is_newer_version() {
             #[cfg(target_os = "windows")]
             {
                 let installer_asset = latest.assets.iter().find(|asset| asset.name == "hachimi_installer.exe");
@@ -238,9 +238,31 @@ pub struct Release {
 }
 
 impl Release {
-    pub fn is_different_version(&self) -> bool {
-        self.tag_name != format!("v{}", env!("CARGO_PKG_VERSION"))
+    /// Returns true only when the latest GitHub release is strictly newer than
+    /// the current build's version. Builds that are ahead of the latest release
+    /// (e.g. local builds on a higher version number) do not trigger the prompt.
+    /// Unparseable tag names are treated as "not newer" so malformed tags never
+    /// show a spurious update dialog.
+    pub fn is_newer_version(&self) -> bool {
+        let Some(latest) = parse_semver(&self.tag_name) else {
+            return false;
+        };
+        let Some(current) = parse_semver(env!("CARGO_PKG_VERSION")) else {
+            return false;
+        };
+        latest > current
     }
+}
+
+/// Parse a semver string of the form `[v]MAJOR.MINOR.PATCH` into a comparable tuple.
+fn parse_semver(s: &str) -> Option<(u32, u32, u32)> {
+    let s = s.strip_prefix('v').unwrap_or(s);
+    let mut parts = s.split('.');
+    Some((
+        parts.next()?.parse().ok()?,
+        parts.next()?.parse().ok()?,
+        parts.next()?.parse().ok()?,
+    ))
 }
 
 #[cfg(target_os = "windows")]
