@@ -437,6 +437,7 @@ fn has_active_speech_bubble() -> bool {
     if current_view_id == ViewId::CharacterNoteMain as i32
         || current_view_id == ViewId::RouletteDerby as i32
         || current_view_id == ViewId::CharacterCardLimitBreakCut as i32
+        || current_view_id == ViewId::IdleSingleModePlayCut as i32
     {
         return false;
     }
