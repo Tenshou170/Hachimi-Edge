@@ -1360,6 +1360,18 @@ impl Gui {
                 }
             }
         }
+        // Also update top_layer on scroll so that scrolling a window brings it to
+        // the front — otherwise the HUD panels keep stealing focus and the scroll
+        // events go to the wrong layer.
+        if ctx.input(|i| i.smooth_scroll_delta != egui::Vec2::ZERO || i.raw_scroll_delta != egui::Vec2::ZERO) {
+            if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
+                if let Some(layer) = ctx.layer_id_at(pos) {
+                    if layer.order == egui::Order::Middle {
+                        self.top_layer = Some(layer);
+                    }
+                }
+            }
+        }
         if let Some(layer) = self.top_layer {
             // If the layer is no longer visible (window was closed), clear it.
             if ctx.memory(|m| m.areas().visible_last_frame(&layer)) {
@@ -1393,8 +1405,7 @@ impl Gui {
             && pointer_layer.map(|l| l.order == egui::Order::Middle).unwrap_or(false)
             && !over_race_slider && !over_live_slider && !over_playback_btn;
 
-        let has_interactive_widgets =
-            IS_LIVE_SLIDER_ACTIVE.load(atomic::Ordering::Relaxed) && (actively_using_pointer || over_live_slider);
+        let live_slider_active = IS_LIVE_SLIDER_ACTIVE.load(atomic::Ordering::Relaxed);
         let race_slider_input = Self::race_slider_showing();
         let race_playback_button_input = Self::race_playback_button_showing();
         let race_director_input = race_director_hud::showing();
@@ -1412,7 +1423,7 @@ impl Gui {
         // is visible. Tells the Windows wnd_proc / Android input hook to enter the egui
         // processing path. Fine-grained blocking is handled by WANTS_INPUT below.
         IS_CONSUMING_INPUT.store(
-            self.is_consuming_input() || has_interactive_widgets || race_slider_input || race_playback_button_input || race_director_input || free_camera_input_capture,
+            self.is_consuming_input() || live_slider_active || race_slider_input || race_playback_button_input || race_director_input || free_camera_input_capture,
             atomic::Ordering::Release,
         );
 
