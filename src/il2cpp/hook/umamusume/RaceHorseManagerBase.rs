@@ -22,14 +22,11 @@ extern "C" fn RaceHorseManagerBase_Init(this: *mut Il2CppObject, raceInfo: *mut 
 type RaceHorseManagerBase_ReleaseFn = extern "C" fn(this: *mut Il2CppObject);
 extern "C" fn RaceHorseManagerBase_Release(this: *mut Il2CppObject) {
     RACE_ACTIVE.store(false, Ordering::Release);
-    // Reset input atomics immediately so the end screen is interactive without
-    // waiting for the next render frame. IS_CONSUMING_INPUT / WANTS_INPUT would
-    // otherwise stay true until Gui::run() fires, blocking touches on the result screen.
-    crate::core::gui::IS_CONSUMING_INPUT.store(false, Ordering::Release);
-    crate::core::gui::WANTS_INPUT.store(false, Ordering::Release);
-    // Clear the dragging flag so a slider drag in progress at race end doesn't
-    // leave race_slider_showing() stuck returning true on the next render frame.
-    crate::core::gui::RACE_SLIDER_DRAGGING.store(false, Ordering::Release);
+    crate::core::race_director::set_race_finished(true);
+    crate::core::race_director::set_gate_open(false);
+    // Reset race slider state and input atomics immediately so the end screen is interactive
+    // without waiting for the next render frame.
+    crate::core::gui::reset_race_slider();
     get_orig_fn!(RaceHorseManagerBase_Release, RaceHorseManagerBase_ReleaseFn)(this);
 }
 

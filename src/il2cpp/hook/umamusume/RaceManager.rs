@@ -21,6 +21,17 @@ def_method_wrapper_fn!(get_RaceInfo, GET_RACE_INFO_ADDR, *mut Il2CppObject, this
 def_method_wrapper_fn!(get_RaceSound, GET_RACE_SOUND_ADDR, *mut Il2CppObject, this: *mut Il2CppObject);
 def_method_wrapper_fn!(get_RaceView, GET_RACE_VIEW_ADDR, *mut Il2CppObject, this: *mut Il2CppObject);
 def_method_wrapper_fn!(get_RaceMainView, GET_RACEMAINVIEW_ADDR, *mut Il2CppObject, this: *mut Il2CppObject);
+def_method_wrapper_fn!(get_IsSkipToRaceEndCutIn, GET_IS_SKIP_TO_RACE_END_CUT_IN_ADDR, bool, this: *mut Il2CppObject);
+def_method_wrapper_fn!(get_IsAfterRaceEndCutIn, GET_IS_AFTER_RACE_END_CUT_IN_ADDR, bool, this: *mut Il2CppObject);
+
+pub fn is_race_finished(race_manager: *mut Il2CppObject) -> bool {
+    if race_manager.is_null() { return true; }
+    if get_IsSkipToRaceEndCutIn(race_manager) || get_IsAfterRaceEndCutIn(race_manager) {
+        return true;
+    }
+    let state = super::RaceManagerReplayBase::get_State(race_manager);
+    state >= 5
+}
 
 pub fn init(umamusume: *const Il2CppImage) {
     get_class_or_return!(umamusume, Gallop, RaceManager);
@@ -32,5 +43,7 @@ pub fn init(umamusume: *const Il2CppImage) {
         GET_RACE_SOUND_ADDR = get_method_addr(RaceManager, c"get_RaceSound", 0);
         GET_RACE_VIEW_ADDR = get_method_addr(RaceManager, c"get_RaceView", 0);
         GET_RACEMAINVIEW_ADDR = get_method_addr(RaceManager, c"get_RaceMainView", 0);
+        GET_IS_SKIP_TO_RACE_END_CUT_IN_ADDR = get_method_addr(RaceManager, c"get_IsSkipToRaceEndCutIn", 0);
+        GET_IS_AFTER_RACE_END_CUT_IN_ADDR = get_method_addr(RaceManager, c"get_IsAfterRaceEndCutIn", 0);
     }
 }

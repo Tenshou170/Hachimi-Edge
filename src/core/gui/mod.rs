@@ -160,6 +160,16 @@ static RACE_SLIDER_SEEK_FAULTED: AtomicBool = AtomicBool::new(false);
 pub static RACE_SLIDER_MUSIC_TIME: AtomicU32 = AtomicU32::new(0);
 pub static RACE_SLIDER_MUSIC_VALID: AtomicBool = AtomicBool::new(false);
 
+pub fn reset_race_slider() {
+    IS_CONSUMING_INPUT.store(false, atomic::Ordering::Release);
+    WANTS_INPUT.store(false, atomic::Ordering::Release);
+    RACE_SLIDER_DRAGGING.store(false, atomic::Ordering::Release);
+    RACE_SLIDER_PENDING.store(false, atomic::Ordering::Release);
+    RACE_SLIDER_END_REQUESTED.store(false, atomic::Ordering::Release);
+    RACE_SLIDER_PAUSE_DEPTH.store(0, atomic::Ordering::Release);
+    RACE_SLIDER_SEEK_FAULTED.store(false, atomic::Ordering::Release);
+}
+
 pub fn race_slider_drain() {
     use crate::il2cpp::hook::umamusume::{AudioManager, RaceManager, RaceManagerReplayBase};
 
@@ -167,8 +177,10 @@ pub fn race_slider_drain() {
     let seek_pending = RACE_SLIDER_PENDING.swap(false, atomic::Ordering::AcqRel);
 
     let race_manager = RaceManager::instance();
-    if race_manager.is_null() {
+    if race_manager.is_null() || RaceManager::is_race_finished(race_manager) {
         RACE_SLIDER_PAUSE_DEPTH.swap(0, atomic::Ordering::AcqRel);
+        RACE_SLIDER_DRAGGING.store(false, atomic::Ordering::Release);
+        RACE_SLIDER_SEEK_FAULTED.store(false, atomic::Ordering::Release);
         return;
     }
 
@@ -820,9 +832,13 @@ impl Gui {
             return false;
         }
 
+        let race_manager = RaceManager::instance();
+        if race_manager.is_null() || RaceManager::is_race_finished(race_manager) {
+            return false;
+        }
+
         if !config.race_playback_slider_always && !is_dragging {
-            let race_manager = RaceManager::instance();
-            if race_manager.is_null() || !RaceManagerReplayBase::IsPaused(race_manager) {
+            if !RaceManagerReplayBase::IsPaused(race_manager) {
                 return false;
             }
         }
@@ -853,7 +869,7 @@ impl Gui {
         }
 
         let race_manager = RaceManager::instance();
-        if race_manager.is_null() { return; }
+        if race_manager.is_null() || RaceManager::is_race_finished(race_manager) { return; }
 
         let horse_manager = RaceManager::get__horseManager(race_manager);
         if horse_manager.is_null() { return; }
@@ -998,7 +1014,7 @@ impl Gui {
 
                             if res.drag_started() {
                                 let race_manager = RaceManager::instance();
-                                if race_manager.is_null() { return; }
+                                if race_manager.is_null() || RaceManager::is_race_finished(race_manager) { return; }
                                 let start_time = RaceSimulateReader::replay_cur_time(race_manager).unwrap_or(0.0);
 
                                 RACE_SLIDER_DRAG_START_TIME.store(start_time.to_bits(), atomic::Ordering::Release);
@@ -1040,13 +1056,19 @@ impl Gui {
     }
 
     pub fn race_playback_button_showing() -> bool {
-        use crate::il2cpp::hook::umamusume::RaceHorseManagerBase;
+        use crate::il2cpp::hook::umamusume::{RaceHorseManagerBase, RaceManager};
         use crate::core::race_director;
 
-        Hachimi::instance().config.load().race_playback_button
-            && RaceHorseManagerBase::is_race_active()
-            && race_director::is_gate_open()
-            && !race_director::is_race_finished()
+        if !Hachimi::instance().config.load().race_playback_button
+            || !RaceHorseManagerBase::is_race_active()
+            || !race_director::is_gate_open()
+            || race_director::is_race_finished()
+        {
+            return false;
+        }
+
+        let race_manager = RaceManager::instance();
+        !race_manager.is_null() && !RaceManager::is_race_finished(race_manager)
     }
 
     fn run_race_playback_button(ctx: &egui::Context) {
