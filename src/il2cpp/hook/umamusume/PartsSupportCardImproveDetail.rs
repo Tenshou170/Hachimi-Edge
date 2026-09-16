@@ -1,7 +1,10 @@
 use crate::{
     core::{Hachimi, game::Region},
     il2cpp::{
-        hook::UnityEngine_UI::Text,
+        hook::{
+            UnityEngine_CoreModule::{Component, GameObject, Object},
+            UnityEngine_UI::Text,
+        },
         symbols::{get_field_from_name, get_method_addr},
         types::*,
         utils,
@@ -19,14 +22,20 @@ extern "C" fn Setup(this: *mut Il2CppObject, workSupportCard: *mut Il2CppObject,
     get_orig_fn!(Setup, SetupFn)(this, workSupportCard, buttonAction, hash, enableObtain);
 
     let title = get_titleNameText(this);
-    if !title.is_null() {
-        Text::set_best_fit_downscale(title);
-        utils::adjust_transform_size(title, MAX_WIDTH, MAX_HEIGHT);
+    if !title.is_null() && Object::op_Implicit(title) {
+        let go = Component::get_gameObject(title);
+        if !go.is_null() && Object::op_Implicit(go) && GameObject::get_activeSelf(go) {
+            Text::set_best_fit_downscale(title);
+            utils::adjust_transform_size(title, MAX_WIDTH, MAX_HEIGHT);
+        }
     }
     let title_as_bonus = get_textUniqueBonusName(this);
-    if !title_as_bonus.is_null() {
-        Text::set_best_fit_downscale(title_as_bonus);
-        utils::adjust_transform_size(title_as_bonus, MAX_WIDTH, MAX_HEIGHT);
+    if !title_as_bonus.is_null() && Object::op_Implicit(title_as_bonus) {
+        let go = Component::get_gameObject(title_as_bonus);
+        if !go.is_null() && Object::op_Implicit(go) && GameObject::get_activeSelf(go) {
+            Text::set_best_fit_downscale(title_as_bonus);
+            utils::adjust_transform_size(title_as_bonus, MAX_WIDTH, MAX_HEIGHT);
+        }
     }
 }
 

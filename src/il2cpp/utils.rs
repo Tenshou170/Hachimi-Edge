@@ -1,6 +1,6 @@
 use std::{io::Write, path::{Path, PathBuf}};
 
-use crate::{core::utils::{get_file_modified_time, load_rgba_png_file}, il2cpp::{ext::{Il2CppObjectExt, Il2CppStringExt}, hook::UnityEngine_CoreModule::{Component, RectTransform}, types::*}};
+use crate::{core::utils::{get_file_modified_time, load_rgba_png_file}, il2cpp::{ext::{Il2CppObjectExt, Il2CppStringExt}, hook::UnityEngine_CoreModule::{Component, Object, RectTransform}, types::*}};
 
 use super::{
     hook::{mscorlib, UnityEngine_CoreModule::{Texture, Texture2D},
@@ -152,7 +152,13 @@ pub fn replace_texture_with_diff_ex<P1: AsRef<Path>, P2: AsRef<Path>>(
 /// Changes the "active area" of the GameObject a Component is part of.
 /// Numbers <=0 skip that axis.
 pub fn adjust_transform_size(component: *mut Il2CppObject, width: f32, height: f32) {
+    if component.is_null() || !Object::op_Implicit(component) {
+        return;
+    }
     let transform = Component::get_transform(component);
+    if transform.is_null() || !Object::op_Implicit(transform) {
+        return;
+    }
     if unsafe { (*transform).klass() } == RectTransform::class() {
         if width > 0.0 {
             RectTransform::SetSizeWithCurrentAnchors(transform, RectTransform::Axis::Horizontal, width);

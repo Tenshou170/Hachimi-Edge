@@ -1,6 +1,10 @@
 use crate::{
     core::{utils::{wrap_text, wrap_text_il2cpp}, Hachimi},
-    il2cpp::{ext::{Il2CppStringExt, StringExt}, symbols::get_method_addr, types::*}
+    il2cpp::{
+        ext::{Il2CppStringExt, StringExt},
+        hook::UnityEngine_TextRenderingModule::TextGenerator::IgnoreTGFiltersContext,
+        symbols::get_method_addr, types::*,
+    },
 };
 
 const LINE_WIDTH: i32 = 24;
@@ -16,7 +20,7 @@ extern "C" fn Play(
     let text = unsafe { (*jikkyou_text).as_utf16str() };
 
     if text.as_slice().contains(&36) { // 36 = dollar sign ($)
-        let processed = Hachimi::instance().template_parser.eval(&text.to_string());
+        let processed = Hachimi::instance().template_parser.eval_with_context(&text.to_string(), &mut IgnoreTGFiltersContext());
         let final_text = if let Some(wrapped) = wrap_text(&processed, LINE_WIDTH) {
             wrapped.join("\n")
         }

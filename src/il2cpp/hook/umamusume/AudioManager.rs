@@ -232,7 +232,7 @@ const EXCEPT_NPC_ALLOW_VOICE_IDS: &[i32] = &[95005, 95006, 70000];
 const SUPPRESS_TRAINING_CUE_ID_BELOW: i32 = 29;
 const SUPPRESS_TRAINING_CUE_ID_EXTRA: &[i32] = &[39];
 const EXCEPT_TRAINING_ALLOW_CUE_IDS: &[i32] = &[8, 9, 12, 13];
-const EXCEPT_TRAINING_ALLOW_VOICE_ID_RANGES: &[(i32, i32)] = &[(2030, 2037)];
+const EXCEPT_TRAINING_ALLOW_VOICE_ID_RANGES: &[(i32, i32)] = &[(2030, 2037), (20030, 20039)];
 const EXCEPT_TRAINING_ALLOW_VOICE_ID_MIN: &[i32] = &[93000];
 const EXCEPT_TRAINING_SCENE_CHECK_VOICE_IDS: &[i32] = &[20025];
 const EXCEPT_TRAINING_SCENE_ALLOWED_VIEW_IDS: &[i32] = &[ViewId::ChampionsLobby as i32];
@@ -242,6 +242,7 @@ const EXCEPT_VIEW_IDS: &[i32] = &[
     ViewId::CharacterNoteMain as i32, // 5212: Archive — Voices
     ViewId::RouletteDerby as i32,     // 8103: Prize Derby / Event Roulette
     ViewId::CharacterCardLimitBreakCut as i32, // 5213: Limit Break / Potential
+    ViewId::IdleSingleModePlayCut as i32, // 6600: Independent Training Play Cut
 ];
 
 /// Returns true if captions should be suppressed for the given ViewId.
@@ -252,6 +253,7 @@ fn is_view_id_suppressed(view_id: i32) -> bool {
     if view_id == ViewId::CharacterNoteMain as i32
         || view_id == ViewId::RouletteDerby as i32
         || view_id == ViewId::CharacterCardLimitBreakCut as i32
+        || view_id == ViewId::IdleSingleModePlayCut as i32
     {
         return false;
     }
