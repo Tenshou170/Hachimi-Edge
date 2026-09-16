@@ -47,26 +47,29 @@ static WAS_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// Called unconditionally from `GameSystem_Update`, every game-thread frame, on both
 /// platforms. Cheap no-op outside an active race.
 pub fn collect_frame() {
-    if !Hachimi::instance().config.load().race_director.enabled {
-        return;
-    }
-
     if !RaceHorseManagerBase::is_race_active() {
         WAS_ACTIVE.store(false, Ordering::Relaxed);
         return;
     }
 
+    let race_manager = RaceManager::instance();
+
     // Check finished state before doing any heavier work — the skip button ends the
     // race visually but Release() may fire much later, so is_race_active() stays true
-    // through the result screen. Poll IsFinished() here (safe: we're on the game thread
-    // and race objects are still alive) so showing() can dismiss the HUD immediately.
-    if !race_director::is_race_finished() && HorseRaceInfo::is_finished() {
+    // through the result screen. Poll IsFinished() and RaceManager::is_race_finished()
+    // here (safe: we're on the game thread and race objects are still alive) so
+    // showing() can dismiss the HUD and playback slider immediately.
+    if !race_director::is_race_finished()
+        && (HorseRaceInfo::is_finished() || (!race_manager.is_null() && RaceManager::is_race_finished(race_manager)))
+    {
         race_director::set_race_finished(true);
-        crate::core::gui::IS_CONSUMING_INPUT.store(false, std::sync::atomic::Ordering::Release);
-        crate::core::gui::WANTS_INPUT.store(false, std::sync::atomic::Ordering::Release);
+        crate::core::gui::reset_race_slider();
     }
 
-    let race_manager = RaceManager::instance();
+    if !Hachimi::instance().config.load().race_director.enabled {
+        return;
+    }
+
     if race_manager.is_null() {
         return;
     }
