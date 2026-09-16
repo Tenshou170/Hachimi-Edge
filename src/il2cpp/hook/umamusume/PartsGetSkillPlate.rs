@@ -1,5 +1,5 @@
 use crate::il2cpp::{
-    hook::{UnityEngine_CoreModule::Behaviour, UnityEngine_UI::Text},
+    hook::{UnityEngine_CoreModule::{Behaviour, Object}, UnityEngine_UI::Text},
     symbols::{get_field_from_name, get_field_object_value, get_method_addr},
     types::*,
     utils,
@@ -30,10 +30,13 @@ extern "C" fn SetUpCharacterLimitBreakSkill(
 ) {
     get_orig_fn!(SetUpCharacterLimitBreakSkill, SetUpCharacterLimitBreakSkillFn)(this, cardRairtyData, nextCardRairtyData, atlas);
 
+    if this.is_null() || !Object::op_Implicit(this) {
+        return;
+    }
     let text = get_nameText(this);
-    if !text.is_null() {
+    if !text.is_null() && Object::op_Implicit(text) {
         let fitter = get_nameContentsSizeFitter(this);
-        if !fitter.is_null() {
+        if !fitter.is_null() && Object::op_Implicit(fitter) {
             Behaviour::set_enabled(fitter, false);
         }
         utils::adjust_transform_size(text, SKILL_TEXT_MAX_WIDTH, SKILL_TEXT_MAX_HEIGHT);
