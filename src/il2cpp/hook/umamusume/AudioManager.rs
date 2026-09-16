@@ -441,6 +441,7 @@ fn has_active_speech_bubble() -> bool {
         || current_view_id == ViewId::CharacterCardLimitBreakCut as i32
         || current_view_id == ViewId::IdleSingleModePlayCut as i32
         || current_view_id == ViewId::SingleModeResult as i32
+        || (ViewId::SingleModeStart as i32..=ViewId::SingleModeScenarioRamenFinalCheckPointTop as i32).contains(&current_view_id)
     {
         return false;
     }
@@ -449,44 +450,49 @@ fn has_active_speech_bubble() -> bool {
         umamusume::{
             PartsCharaMessageBase,
             StoryViewTextControllerLandscape,
-            StoryViewTextControllerSingleMode,
+            TextFrame,
         },
         UnityEngine_CoreModule::{Component, GameObject, Object},
+        UnityEngine_UI::Text,
     };
 
-    // 1. Check for visible PartsCharaMessageBase speech bubble components.
-    // FindObjectsOfType with includeInactive=false already filters out disabled
-    // objects, so any returned instance means the bubble is active and visible.
+    // 1. Check for visible PartsCharaMessageBase speech bubble components actively open or playing.
     let parts_type = PartsCharaMessageBase::type_object();
     if !parts_type.is_null() {
         let objects = Object::FindObjectsOfType(parts_type, false);
         if !objects.this.is_null() && objects.len() > 0 {
             for obj in unsafe { objects.as_slice() } {
-                if !obj.is_null() {
+                if !obj.is_null() && PartsCharaMessageBase::is_active_or_playing(*obj) {
                     return true;
                 }
             }
         }
     }
 
-    // 2. Check for active VN-style text window controllers (Landscape / SingleMode).
-    // These are MonoBehaviours present in story / home-dialogue menus. When one is
-    // active in the hierarchy the dialogue text is already on-screen, making a
-    // caption redundant. We check get_activeSelf on the component's gameObject
-    // rather than a "playing" state because text windows have no such concept —
-    // they are simply enabled or disabled.
-    for type_obj in [
-        StoryViewTextControllerLandscape::type_object(),
-        StoryViewTextControllerSingleMode::type_object(),
-    ] {
-        if type_obj.is_null() { continue; }
-        let objects = Object::FindObjectsOfType(type_obj, false);
-        if objects.this.is_null() || objects.len() == 0 { continue; }
-        for obj in unsafe { objects.as_slice() } {
-            if obj.is_null() { continue; }
-            let go = Component::get_gameObject(*obj);
-            if !go.is_null() && GameObject::get_activeSelf(go) {
-                return true;
+    // 2. Check for active VN-style text window controllers (Landscape) actively displaying text.
+    let landscape_type = StoryViewTextControllerLandscape::type_object();
+    if !landscape_type.is_null() {
+        let objects = Object::FindObjectsOfType(landscape_type, false);
+        if !objects.this.is_null() && objects.len() > 0 {
+            for obj in unsafe { objects.as_slice() } {
+                if !obj.is_null() {
+                    let go = Component::get_gameObject(*obj);
+                    if !go.is_null() && GameObject::get_activeSelf(go) {
+                        let tf = StoryViewTextControllerLandscape::get__textFrame(*obj);
+                        if !tf.is_null() {
+                            let tf_go = Component::get_gameObject(tf);
+                            if !tf_go.is_null() && GameObject::get_activeSelf(tf_go) {
+                                let text_label = TextFrame::get_TextLabel(tf);
+                                if !text_label.is_null() {
+                                    let text = Text::get_text(text_label);
+                                    if !text.is_null() && unsafe { (*text).length } > 0 {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
