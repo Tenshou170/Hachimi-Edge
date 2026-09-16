@@ -4,7 +4,6 @@ use std::num::NonZeroU32;
 use std::os::raw::c_char;
 use std::os::raw::{c_uint, c_void};
 use std::sync::Arc;
-use std::cell::OnceCell;
 use glow::HasContext;
 
 use crate::core::{Error, Gui, Hachimi};
@@ -33,14 +32,30 @@ fn eglQuerySurface(display: EGLDisplay, surface: EGLSurface, attribute: EGLint, 
     orig_fn(display, surface, attribute, value)
 }
 
+static mut EGLGETCURRENTCONTEXT_ADDR: usize = 0;
+type EGLGetCurrentContextFn = extern "C" fn() -> *mut c_void;
+fn eglGetCurrentContext() -> *mut c_void {
+    let addr = unsafe { EGLGETCURRENTCONTEXT_ADDR };
+    if addr == 0 {
+        return std::ptr::null_mut();
+    }
+    let orig_fn: EGLGetCurrentContextFn = unsafe { std::mem::transmute(addr) };
+    orig_fn()
+}
+
 // Performance critical, store the trampoline addr directly
 static mut EGLSWAPBUFFERS_ADDR: usize = 0;
 type EGLSwapBuffersFn = extern "C" fn(display: EGLDisplay, surface: EGLSurface) -> EGLBoolean;
 extern "C" fn eglSwapBuffers(display: EGLDisplay, surface: EGLSurface) -> EGLBoolean {
     let orig_fn: EGLSwapBuffersFn = unsafe { std::mem::transmute(EGLSWAPBUFFERS_ADDR) };
+    let current_context = eglGetCurrentContext();
+    if unsafe { EGLGETCURRENTCONTEXT_ADDR } != 0 && current_context.is_null() {
+        return orig_fn(display, surface);
+    }
+
     let mut gui = Gui::instance_or_init("android.menu_open_key").lock().unwrap();
     // Big fat state destroyer, initialize it as soon as possible
-    let painter = match init_painter() {
+    let painter = match init_painter(current_context) {
         Ok(v) => v,
         Err(e) => {
             error!("{}", e);
@@ -113,22 +128,30 @@ extern "C" fn eglSwapBuffers(display: EGLDisplay, surface: EGLSurface) -> EGLBoo
     orig_fn(display, surface)
 }
 
-static mut PAINTER: OnceCell<egui_glow::Painter> = OnceCell::new();
+static LAST_EGL_CONTEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static mut PAINTER: Option<egui_glow::Painter> = None;
 
-fn init_painter() -> Result<&'static mut egui_glow::Painter, Error> {
-    if let Some(painter) = unsafe { PAINTER.get_mut() } {
+fn init_painter(context: *mut c_void) -> Result<&'static mut egui_glow::Painter, Error> {
+    let ctx_usize = context as usize;
+    let last = LAST_EGL_CONTEXT.load(std::sync::atomic::Ordering::Acquire);
+    if last != ctx_usize {
+        unsafe {
+            PAINTER = None;
+        }
+        LAST_EGL_CONTEXT.store(ctx_usize, std::sync::atomic::Ordering::Release);
+    }
+
+    if let Some(painter) = unsafe { PAINTER.as_mut() } {
         return Ok(painter);
     }
 
     let gl = init_gl();
     let painter = egui_glow::Painter::new(Arc::new(gl), "", None, false)?;
     unsafe {
-        PAINTER.set(painter).unwrap_unchecked();
+        PAINTER = Some(painter);
+        info!("Painter initialized for EGLContext {:#x}", ctx_usize);
+        Ok(PAINTER.as_mut().unwrap())
     }
-
-    info!("Painter initialized");
-
-    Ok(unsafe { PAINTER.get_mut().unwrap_unchecked() })
 }
 
 impl From<egui_glow::PainterError> for Error {
@@ -166,6 +189,13 @@ fn init_internal() -> Result<(), Error> {
     let query_surface_addr = unsafe { libc::dlsym(egl_handle, c"eglQuerySurface".as_ptr()) };
     if query_surface_addr.is_null() {
         return Err(Error::HookingError("eglQuerySurface not found in libEGL.so".to_owned()));
+    }
+
+    let get_context_addr = unsafe { libc::dlsym(egl_handle, c"eglGetCurrentContext".as_ptr()) };
+    if !get_context_addr.is_null() {
+        unsafe {
+            EGLGETCURRENTCONTEXT_ADDR = get_context_addr as usize;
+        }
     }
 
     unsafe {
