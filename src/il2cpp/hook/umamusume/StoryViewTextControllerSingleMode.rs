@@ -24,8 +24,11 @@ extern "C" fn SetFontSize(this: *mut Il2CppObject, font_size: i32) {
     get_orig_fn!(SetFontSize, SetFontSizeFn)(this, font_size);
 
     if let Some(mult) = Hachimi::instance().localized_data.load().config.text_frame_font_size_multiplier {
+        if this.is_null() { return; }
         let text_frame = get__textFrame(this);
+        if text_frame.is_null() { return; }
         let text_label = TextFrame::get_TextLabel(text_frame);
+        if text_label.is_null() { return; }
         let font_size = Text::get_fontSize(text_label);
         Text::set_fontSize(text_label, (font_size as f32 * mult).round() as i32);
     }

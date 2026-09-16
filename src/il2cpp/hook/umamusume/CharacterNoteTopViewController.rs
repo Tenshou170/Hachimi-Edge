@@ -30,7 +30,13 @@ extern "C" fn InitializeView(this: *mut Il2CppObject) -> *mut Il2CppObject {
 }
 
 fn apply_gallery_button_config(button: *mut Il2CppObject, config: &UITextConfig) {
+    if button.is_null() {
+        return;
+    }
     let target_text = ButtonCommon::get_TargetText(button);
+    if target_text.is_null() {
+        return;
+    }
 
     if let Some(text) = config.text.as_ref() {
         let game_object = Component::get_gameObject(button);

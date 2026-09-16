@@ -12,7 +12,7 @@ extern "C" fn SetupAndOpen(
 ) {
     let force_allow_dynamic_camera = Hachimi::instance().config.load().force_allow_dynamic_camera;
     let mut orig_race_type = None;
-    if force_allow_dynamic_camera {
+    if force_allow_dynamic_camera && !race_info.is_null() {
         orig_race_type = Some(RaceInfo::get_RaceType(race_info));
         RaceInfo::set_RaceType(race_info, 16); // spoof LoH race
     }
@@ -22,7 +22,9 @@ extern "C" fn SetupAndOpen(
     );
 
     if let Some(race_type) = orig_race_type {
-        RaceInfo::set_RaceType(race_info, race_type);
+        if !race_info.is_null() {
+            RaceInfo::set_RaceType(race_info, race_type);
+        }
     }
 }
 

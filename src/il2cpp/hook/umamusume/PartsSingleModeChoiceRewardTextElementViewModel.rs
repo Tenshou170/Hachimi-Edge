@@ -12,6 +12,9 @@ type GetParameterValueTextFn =
     extern "C" fn(this: *mut Il2CppObject, param: i32) -> *mut Il2CppString;
 extern "C" fn GetParameterValueText(this: *mut Il2CppObject, param: i32) -> *mut Il2CppString {
     let mut text = get_orig_fn!(GetParameterValueText, GetParameterValueTextFn)(this, param);
+    if text.is_null() {
+        return text;
+    }
     let utf_str = unsafe { (*text).as_utf16str() };
     if utf_str.as_slice().contains(&36) {
         text = Hachimi::instance()

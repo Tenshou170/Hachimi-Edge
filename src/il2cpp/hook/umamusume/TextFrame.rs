@@ -26,6 +26,9 @@ extern "C" fn Initialize(this: *mut Il2CppObject) {
     }
 
     let text_label = get_TextLabel(this);
+    if text_label.is_null() {
+        return;
+    }
     let localized_data = Hachimi::instance().localized_data.load();
 
     if let Some(mult) = localized_data.config.text_frame_line_spacing_multiplier {
