@@ -56,6 +56,21 @@ pub fn seek_sync(target_time: f32) -> bool {
             RaceEventPlayer::ChangeLastEventIndexByTime(event_player, target_time);
         }
 
+        let horse_manager = RaceManager::get__horseManager(race_manager);
+        if !horse_manager.is_null() && RaceHorseManagerReplay::is_replay_manager(horse_manager) {
+            let horse_infos = RaceHorseManagerBase::GetHorseRaceInfos(horse_manager);
+            if !horse_infos.is_null() {
+                let horse_arr: Array<*mut Il2CppObject> = Array::from(horse_infos);
+                let horse_infos_slice = unsafe { horse_arr.as_slice() };
+                for horse_info in horse_infos_slice.iter() {
+                    if !horse_info.is_null() && HorseRaceInfo::get__phase(*horse_info) == 4 {
+                        HorseRaceInfo::set__phase(*horse_info, 3);
+                    }
+                }
+            }
+        }
+        crate::core::race_director::set_race_finished(false);
+
         race_seek_stage(2); // race_time
         ForceSetRaceTime(race_manager, target_time, true);
         race_seek_stage(3); // horses

@@ -133,6 +133,10 @@ impl AppWindow for LicenseWindow {
 
         open
     }
+
+    fn window_id(&self) -> Option<egui::Id> {
+        Some(self.id)
+    }
 }
 
 

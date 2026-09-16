@@ -108,4 +108,8 @@ impl AppWindow for SetKeybindWindow {
 
         true
     }
+
+    fn window_id(&self) -> Option<egui::Id> {
+        Some(self.id)
+    }
 }

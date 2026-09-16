@@ -203,6 +203,10 @@ impl AppWindow for RepoSwitcherWindow {
         open &= open2;
         open
     }
+
+    fn window_id(&self) -> Option<egui::Id> {
+        Some(self.id)
+    }
 }
 
 pub struct AddRepoWindow {
@@ -404,5 +408,9 @@ impl AppWindow for AddRepoWindow {
 
         open &= open2;
         open
+    }
+
+    fn window_id(&self) -> Option<egui::Id> {
+        Some(self.id)
     }
 }

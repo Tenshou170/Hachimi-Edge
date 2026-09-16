@@ -57,11 +57,22 @@ impl D3D11Painter {
     /// Call this in the ResizeBuffers hook, with orig_fn calling the original function
     pub fn resize_buffers(&mut self, orig_fn: impl FnOnce() -> HRESULT) -> HRESULT {
         self.render_target = None;
-        
+        if let Ok(device) = self.get_device() {
+            if let Ok(ctx) = Self::get_device_context(&device) {
+                unsafe {
+                    ctx.OMSetRenderTargets(None, None);
+                    ctx.ClearState();
+                    ctx.Flush();
+                }
+            }
+        }
+
         // Has to be called after dropping the render target!
         let res = orig_fn();
         if res.is_ok() {
             self.init_render_target();
+        } else {
+            error!("IDXGISwapChain::ResizeBuffers failed: {:?}", res);
         }
 
         res

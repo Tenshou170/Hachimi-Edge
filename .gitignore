@@ -52,3 +52,7 @@ Thumbs.db
 /*.log
 /*.txt
 /*.bak
+
+# Dumps, for obvious reasons
+/dump.cs
+/*.cs

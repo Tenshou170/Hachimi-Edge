@@ -621,6 +621,7 @@ pub fn get_enum_options(class_name: &std::ffi::CStr) -> Vec<String> {
 pub trait AppWindow {
     fn run(&mut self, ctx: &egui::Context) -> bool;
     fn plugin_window_id(&self) -> Option<i32> { None }
+    fn window_id(&self) -> Option<egui::Id> { None }
 }
 pub type BoxedWindow = Box<dyn AppWindow + Send>;
 

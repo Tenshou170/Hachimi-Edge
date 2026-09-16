@@ -446,6 +446,10 @@ impl AppWindow for FirstTimeSetupWindow {
 
         open_res
     }
+
+    fn window_id(&self) -> Option<egui::Id> {
+        Some(self.id.with(self.current_page))
+    }
 }
 
 

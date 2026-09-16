@@ -136,6 +136,7 @@ pub struct Gui {
     /// clicked (e.g. an app window stays in front of Race Director HUD panels and
     /// vice-versa).
     top_layer: Option<egui::LayerId>,
+    pending_top_window_id: Option<egui::Id>,
 }
 
 const PIXELS_PER_POINT_RATIO: f32 = 3.0 / 1080.0;
@@ -411,6 +412,7 @@ impl Gui {
             next_notification_id: 0,
             windows,
             top_layer: None,
+            pending_top_window_id: None,
         };
 
         unsafe {
@@ -844,6 +846,7 @@ impl Gui {
             RACE_SLIDER_SEEK_FAULTED.store(false, atomic::Ordering::Release);
             RACE_SLIDER_MUSIC_TIME.store(0, atomic::Ordering::Release);
             RACE_SLIDER_MUSIC_VALID.store(false, atomic::Ordering::Release);
+            RACE_SLIDER_TARGET_TIME.store(0, atomic::Ordering::Release);
             // Reset the fade timer so the slider starts fully visible next time.
             ctx.data_mut(|d| d.insert_temp(egui::Id::new("race_slider_activity"), std::time::Instant::now()));
             return;
@@ -862,6 +865,7 @@ impl Gui {
 
         let total = RaceSimulateReader::GetLastFrameTime(reader);
         if total <= 0.0 { return; }
+        let max_time = (total - 0.5).max(0.0);
 
         let cut_in_playing = RaceManagerReplayBase::get_IsPlayingCutIn(race_manager);
         let interactable = !cut_in_playing;
@@ -879,8 +883,8 @@ impl Gui {
         if !current.is_finite() || current < 0.0 {
             current = 0.0;
         }
-        if current > total {
-            current = total;
+        if current > max_time {
+            current = max_time;
         }
 
         let scale = get_scale(ctx);
@@ -981,7 +985,7 @@ impl Gui {
                             // Dim the slider track/thumb together with the pill background.
                             ui.multiply_opacity(slider_alpha);
 
-                            let slider = MaterialSlider::new(&mut current, 0.0..=total)
+                            let slider = MaterialSlider::new(&mut current, 0.0..=max_time)
                                 .show_value(false)
                                 .show_value_indicator(true)
                                 .compact()
@@ -1388,8 +1392,10 @@ impl Gui {
             || self.context.wants_keyboard_input();
 
         // Point-in-layer: which specific overlay area is the pointer directly over.
-        let pointer_layer = self.context.input(|i| i.pointer.interact_pos())
-            .and_then(|pos| self.context.layer_id_at(pos));
+        let pointer_pos = self.context.input(|i| {
+            i.pointer.hover_pos().or_else(|| i.pointer.interact_pos()).or_else(|| i.pointer.latest_pos())
+        });
+        let pointer_layer = pointer_pos.and_then(|pos| self.context.layer_id_at(pos));
         let over_race_slider = pointer_layer
             .map(|l| l.id == egui::Id::new("race_slider_area"))
             .unwrap_or(false);
@@ -1404,6 +1410,11 @@ impl Gui {
         let over_hud = race_director_hud::showing()
             && pointer_layer.map(|l| l.order == egui::Order::Middle).unwrap_or(false)
             && !over_race_slider && !over_live_slider && !over_playback_btn;
+
+        let is_hovering_window = pointer_layer.map(|l| l.order == egui::Order::Middle).unwrap_or(false);
+        let has_scroll = self.context.input(|i| {
+            i.smooth_scroll_delta != egui::Vec2::ZERO || i.raw_scroll_delta != egui::Vec2::ZERO
+        });
 
         let live_slider_active = IS_LIVE_SLIDER_ACTIVE.load(atomic::Ordering::Relaxed);
         let race_slider_input = Self::race_slider_showing();
@@ -1429,10 +1440,12 @@ impl Gui {
 
         // WANTS_INPUT: fine gate — only true when the game should NOT also receive this
         // input. Overlay elements only block game input when the pointer is directly over
-        // them. Sidebar/app windows block when actively processing any pointer/keyboard.
+        // them. Sidebar/app windows block when actively processing any pointer/keyboard,
+        // or hovering/scrolling within a window.
         let overlay_captured = over_race_slider || over_live_slider || over_playback_btn || over_hud;
+        let window_captured = self.is_consuming_input() && (actively_using_pointer || is_hovering_window || has_scroll);
         WANTS_INPUT.store(
-            (self.is_consuming_input() && actively_using_pointer)
+            window_captured
                 || overlay_captured
                 || free_camera_input_capture,
             atomic::Ordering::Release,
@@ -2600,6 +2613,12 @@ impl Gui {
 
     fn run_windows(&mut self) {
         self.windows.retain_mut(|w| w.run(&self.context));
+        if let Some(wid) = self.pending_top_window_id.take() {
+            let salt = get_scale_salt(&self.context);
+            let layer = egui::LayerId::new(egui::Order::Middle, wid.with(salt.to_bits()));
+            self.context.memory_mut(|m| m.areas_mut().move_to_top(layer));
+            self.top_layer = Some(layer);
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -2688,8 +2707,10 @@ impl Gui {
         self.notifications.retain(|n| n.id != id);
     }
 
-    pub fn show_window(&mut self, AppWindow: BoxedAppWindow) {
-        self.windows.push(AppWindow);
+    pub fn show_window(&mut self, app_window: BoxedAppWindow) {
+        self.top_layer = None;
+        self.pending_top_window_id = app_window.window_id();
+        self.windows.push(app_window);
     }
 }
 
@@ -2797,6 +2818,10 @@ impl AppWindow for ConfigEditor {
         }
 
         open
+    }
+
+    fn window_id(&self) -> Option<egui::Id> {
+        Some(self.id)
     }
 }
 
