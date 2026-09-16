@@ -11,7 +11,13 @@ const LANDSCAPE_SIZE: Size = (730.0, 45.0);
 
 type SetNameLabelFn = extern "C" fn(this: *mut Il2CppObject, name: *mut Il2CppString);
 extern "C" fn SetNameLabel(this: *mut Il2CppObject, name: *mut Il2CppString) {
+    if this.is_null() {
+        return get_orig_fn!(SetNameLabel, SetNameLabelFn)(this, name);
+    }
     let cls = unsafe { (*this).klass() };
+    if cls.is_null() {
+        return get_orig_fn!(SetNameLabel, SetNameLabelFn)(this, name);
+    }
     let text_frame: *mut Il2CppObject;
     let size: &Size;
 
@@ -26,9 +32,11 @@ extern "C" fn SetNameLabel(this: *mut Il2CppObject, name: *mut Il2CppString) {
     };
 
     let name_label = TextFrame::get_NameLabel(text_frame);
-    utils::adjust_transform_size(name_label, size.0, size.1);
-    Text::set_best_fit_downscale(name_label);
-    Text::set_horizontalOverflow(name_label, TextOverflow_Disallow);
+    if !name_label.is_null() {
+        utils::adjust_transform_size(name_label, size.0, size.1);
+        Text::set_best_fit_downscale(name_label);
+        Text::set_horizontalOverflow(name_label, TextOverflow_Disallow);
+    }
     get_orig_fn!(SetNameLabel, SetNameLabelFn)(this, name);
 }
 

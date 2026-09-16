@@ -5,6 +5,9 @@ use crate::{core::Hachimi, il2cpp::{ext::{Il2CppStringExt, StringExt}, symbols::
 type GetMovieFilePathFn = extern "C" fn(this: *mut Il2CppObject, movie_file: *mut Il2CppString) -> *mut Il2CppString;
 extern "C" fn GetMovieFilePath(this: *mut Il2CppObject, movie_file: *mut Il2CppString) -> *mut Il2CppString {
     let orig_fn = get_orig_fn!(GetMovieFilePath, GetMovieFilePathFn);
+    if movie_file.is_null() {
+        return orig_fn(this, movie_file);
+    }
 
     let movie_file_str = unsafe { (*movie_file).as_utf16str().to_string() };
     let mut rel_replace_path = Path::new("movies").join(movie_file_str.to_ascii_lowercase());
