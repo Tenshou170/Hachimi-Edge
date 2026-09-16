@@ -15,7 +15,7 @@ def_field_value_accessors!(get get__curOrder, CUR_ORDER_FIELD, i32);
 def_field_value_accessors!(get get__lastSpeed, LAST_SPEED_FIELD, f32);
 def_field_value_accessors!(get get__distance, DISTANCE_FIELD, f32);
 def_field_value_accessors!(get get__isHpEmptyOnRace, IS_HP_EMPTY_ON_RACE_FIELD, bool);
-def_field_value_accessors!(get get__phase, PHASE_FIELD, i32);
+def_field_value_accessors!(get__phase, set__phase, PHASE_FIELD, i32);
 def_field_value_accessors!(get get__isBadStart, IS_BAD_START_FIELD, bool);
 def_field_value_accessors!(get get__isCompeteFight, IS_COMPETE_FIGHT_FIELD, bool);
 def_field_value_accessors!(get get__isCompeteTop, IS_COMPETE_TOP_FIELD, bool);

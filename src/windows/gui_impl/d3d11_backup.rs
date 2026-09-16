@@ -5,9 +5,9 @@ use windows::Win32::{
         Direct3D::D3D_PRIMITIVE_TOPOLOGY,
         Direct3D11::{
             ID3D11BlendState, ID3D11Buffer, ID3D11ClassInstance, ID3D11DepthStencilState,
-            ID3D11DeviceContext, ID3D11GeometryShader, ID3D11InputLayout, ID3D11PixelShader,
-            ID3D11RasterizerState, ID3D11SamplerState, ID3D11ShaderResourceView,
-            ID3D11VertexShader, D3D11_VIEWPORT,
+            ID3D11DepthStencilView, ID3D11DeviceContext, ID3D11GeometryShader, ID3D11InputLayout,
+            ID3D11PixelShader, ID3D11RasterizerState, ID3D11RenderTargetView, ID3D11SamplerState,
+            ID3D11ShaderResourceView, ID3D11VertexShader, D3D11_VIEWPORT,
             D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE,
         },
         Dxgi::Common::DXGI_FORMAT,
@@ -30,6 +30,9 @@ pub struct BackupState {
 
     depth_stencil_state: Option<ID3D11DepthStencilState>,
     stencil_ref: u32,
+
+    render_targets: [Option<ID3D11RenderTargetView>; 8],
+    depth_stencil_view: Option<ID3D11DepthStencilView>,
 
     pixel_shader_resource: Option<ID3D11ShaderResourceView>,
 
@@ -78,6 +81,7 @@ impl BackupState {
             Some(&mut self.blend_mask),
         );
         ctx.OMGetDepthStencilState(Some(&mut self.depth_stencil_state), Some(&mut self.stencil_ref));
+        ctx.OMGetRenderTargets(Some(&mut self.render_targets), Some(&mut self.depth_stencil_view));
 
         // Pixel Shader parameters
         let mut pixel_shader_resources = [None];
@@ -151,6 +155,11 @@ impl BackupState {
         if let Some(depth_stencil_state) = self.depth_stencil_state.take() {
             ctx.OMSetDepthStencilState(&depth_stencil_state, self.stencil_ref);
         }
+        ctx.OMSetRenderTargets(Some(&self.render_targets), self.depth_stencil_view.as_ref());
+        for rt in &mut self.render_targets {
+            *rt = None;
+        }
+        self.depth_stencil_view = None;
 
         // Pixel Shader parameters
         ctx.PSSetShaderResources(0, Some(&[self.pixel_shader_resource.take()]));

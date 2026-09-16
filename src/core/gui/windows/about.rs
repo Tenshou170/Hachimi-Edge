@@ -111,4 +111,8 @@ impl AppWindow for AboutWindow {
 
         open
     }
+
+    fn window_id(&self) -> Option<egui::Id> {
+        Some(self.id)
+    }
 }

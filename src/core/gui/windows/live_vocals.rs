@@ -126,6 +126,10 @@ impl AppWindow for LiveVocalsSwapWindow {
         open &= open2;
         open
     }
+
+    fn window_id(&self) -> Option<egui::Id> {
+        Some(self.id)
+    }
 }
 
 

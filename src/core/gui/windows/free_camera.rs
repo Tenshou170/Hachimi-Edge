@@ -211,6 +211,10 @@ impl AppWindow for FreeCameraWindow {
         open &= open2;
         open
     }
+
+    fn window_id(&self) -> Option<egui::Id> {
+        Some(self.id)
+    }
 }
 
 impl FreeCameraWindow {

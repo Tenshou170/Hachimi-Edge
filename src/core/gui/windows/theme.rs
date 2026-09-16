@@ -415,4 +415,8 @@ impl AppWindow for ThemeEditorWindow {
 
         open & open2
     }
+
+    fn window_id(&self) -> Option<egui::Id> {
+        Some(self.id)
+    }
 }
