@@ -109,6 +109,28 @@ extern "system" fn JNINativeInterface_RegisterNatives(
 }
 
 
+fn get_page_protection(addr: usize) -> Option<c_int> {
+    use std::io::BufRead;
+    let file = std::fs::File::open("/proc/self/maps").ok()?;
+    let reader = std::io::BufReader::new(file);
+    for line in reader.lines().map_while(Result::ok) {
+        let mut parts = line.split_whitespace();
+        let range = parts.next()?;
+        let perms = parts.next()?;
+        let mut addrs = range.split('-');
+        let start = usize::from_str_radix(addrs.next()?, 16).ok()?;
+        let end = usize::from_str_radix(addrs.next()?, 16).ok()?;
+        if addr >= start && addr < end {
+            let mut prot = 0;
+            if perms.contains('r') { prot |= libc::PROT_READ; }
+            if perms.contains('w') { prot |= libc::PROT_WRITE; }
+            if perms.contains('x') { prot |= libc::PROT_EXEC; }
+            return Some(prot);
+        }
+    }
+    None
+}
+
 fn init_internal(env: *mut jni::sys::JNIEnv) -> Result<(), Error> {
     let api_level = utils::get_device_api_level(env);
     CACHED_API_LEVEL.store(api_level, Ordering::Release);
@@ -156,34 +178,47 @@ fn init_internal(env: *mut jni::sys::JNIEnv) -> Result<(), Error> {
             let field_addr = std::ptr::addr_of!((*jni_table).RegisterNatives) as usize;
             let field_size = std::mem::size_of::<Option<RegisterNativesFn>>();
 
-            let page_size = libc::sysconf(libc::_SC_PAGESIZE) as usize;
-            let range_start = field_addr & !(page_size - 1);
-            let range_end = (field_addr + field_size + page_size - 1) & !(page_size - 1);
-            let range_len = range_end - range_start;
+            let orig_prot = get_page_protection(field_addr);
+            let is_already_writable = orig_prot.map(|p| (p & libc::PROT_WRITE) != 0).unwrap_or(false);
 
-            let ret = libc::mprotect(
-                range_start as *mut c_void,
-                range_len,
-                libc::PROT_READ | libc::PROT_WRITE,
-            );
-            if ret != 0 {
-                let errno = std::io::Error::last_os_error();
-                warn!(
-                    "mprotect(RW) on JNI vtable page(s) failed ({}); \
-                     RegisterNatives hook skipped — nativeInjectEvent won't be intercepted",
-                    errno
+            if is_already_writable {
+                // Table is already on a writable page (common in modern ART on Android 15+ / 17).
+                // Do NOT call mprotect, which would strip write permissions on co-located ART heap structures.
+                (*jni_table).RegisterNatives = Some(JNINativeInterface_RegisterNatives);
+            } else {
+                let page_size = libc::sysconf(libc::_SC_PAGESIZE) as usize;
+                let range_start = field_addr & !(page_size - 1);
+                let range_end = (field_addr + field_size + page_size - 1) & !(page_size - 1);
+                let range_len = range_end - range_start;
+
+                let prot_to_set = orig_prot.unwrap_or(libc::PROT_READ) | libc::PROT_WRITE;
+                let ret = libc::mprotect(
+                    range_start as *mut c_void,
+                    range_len,
+                    prot_to_set,
                 );
+                if ret != 0 {
+                    let errno = std::io::Error::last_os_error();
+                    warn!(
+                        "mprotect(RW) on JNI vtable page(s) failed ({}); \
+                         RegisterNatives hook skipped — nativeInjectEvent won't be intercepted",
+                        errno
+                    );
 
-                ORIG_REGISTER_NATIVES.store(0, Ordering::Release);
-                return Ok(());
-            }
+                    ORIG_REGISTER_NATIVES.store(0, Ordering::Release);
+                    return Ok(());
+                }
 
-            (*jni_table).RegisterNatives = Some(JNINativeInterface_RegisterNatives);
+                (*jni_table).RegisterNatives = Some(JNINativeInterface_RegisterNatives);
 
-            let ret = libc::mprotect(range_start as *mut c_void, range_len, libc::PROT_READ);
-            if ret != 0 {
-                let errno = std::io::Error::last_os_error();
-                warn!("mprotect(RO) restore on JNI vtable page(s) failed ({})", errno);
+                // Restore only the original protection if we knew it was non-writable.
+                if let Some(prot) = orig_prot {
+                    let ret = libc::mprotect(range_start as *mut c_void, range_len, prot);
+                    if ret != 0 {
+                        let errno = std::io::Error::last_os_error();
+                        warn!("mprotect restore on JNI vtable page(s) failed ({})", errno);
+                    }
+                }
             }
         }
     }
