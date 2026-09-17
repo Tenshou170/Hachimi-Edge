@@ -434,6 +434,24 @@ fn lookup_cst_entry(chara_id: i32, cue_id: i32, cue_sheet: &str, cue_name: &str)
 }
 
 fn has_active_speech_bubble() -> bool {
+    use crate::il2cpp::hook::{
+        umamusume::{
+            PartsCharaMessageBase,
+            StoryViewTextControllerLandscape,
+            StoryViewTextControllerSingleMode,
+            TextFrame,
+        },
+        UnityEngine_CoreModule::{Component, GameObject, Object},
+        UnityEngine_UI::Text,
+    };
+
+    // 0. If execution is currently inside PartsCharaMessageBase::PlayVoiceInternal,
+    // a character speech bubble is explicitly initiating and presenting this voice.
+    // Suppress captions immediately, without needing to wait for animation or UI state.
+    if PartsCharaMessageBase::is_in_play_voice_internal() {
+        return true;
+    }
+
     let current_view_id = get_current_view_id();
     // Views where captions must always be permitted:
     if current_view_id == ViewId::CharacterNoteMain as i32
@@ -445,16 +463,6 @@ fn has_active_speech_bubble() -> bool {
     {
         return false;
     }
-
-    use crate::il2cpp::hook::{
-        umamusume::{
-            PartsCharaMessageBase,
-            StoryViewTextControllerLandscape,
-            TextFrame,
-        },
-        UnityEngine_CoreModule::{Component, GameObject, Object},
-        UnityEngine_UI::Text,
-    };
 
     // 1. Check for visible PartsCharaMessageBase speech bubble components actively open or playing.
     let parts_type = PartsCharaMessageBase::type_object();
@@ -469,16 +477,19 @@ fn has_active_speech_bubble() -> bool {
         }
     }
 
-    // 2. Check for active VN-style text window controllers (Landscape) actively displaying text.
-    let landscape_type = StoryViewTextControllerLandscape::type_object();
-    if !landscape_type.is_null() {
-        let objects = Object::FindObjectsOfType(landscape_type, false);
+    // 2. Check for active VN-style text window controllers (Landscape / SingleMode) actively displaying text.
+    for (type_obj, get_tf) in [
+        (StoryViewTextControllerLandscape::type_object(), StoryViewTextControllerLandscape::get__textFrame as fn(*mut Il2CppObject) -> *mut Il2CppObject),
+        (StoryViewTextControllerSingleMode::type_object(), StoryViewTextControllerSingleMode::get__textFrame as fn(*mut Il2CppObject) -> *mut Il2CppObject),
+    ] {
+        if type_obj.is_null() { continue; }
+        let objects = Object::FindObjectsOfType(type_obj, false);
         if !objects.this.is_null() && objects.len() > 0 {
             for obj in unsafe { objects.as_slice() } {
                 if !obj.is_null() {
                     let go = Component::get_gameObject(*obj);
                     if !go.is_null() && GameObject::get_activeSelf(go) {
-                        let tf = StoryViewTextControllerLandscape::get__textFrame(*obj);
+                        let tf = get_tf(*obj);
                         if !tf.is_null() {
                             let tf_go = Component::get_gameObject(tf);
                             if !tf_go.is_null() && GameObject::get_activeSelf(tf_go) {
