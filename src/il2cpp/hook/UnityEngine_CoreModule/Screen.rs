@@ -174,6 +174,10 @@ pub fn get_safeArea() -> Option<Rect_t> {
         if GET_SAFEAREA_METHOD.is_null() {
             return None;
         }
+        // Disable GC for the duration of the invoke. get_safeArea() is called from
+        // the render/GL thread (not the IL2CPP-managed thread), so a GC Stop-the-World
+        // that fires concurrently will cause IL2CPP to abort() the process.
+        crate::il2cpp::api::il2cpp_gc_disable();
         let mut exc: *mut crate::il2cpp::types::Il2CppException = std::ptr::null_mut();
         let result_obj = crate::il2cpp::api::il2cpp_runtime_invoke(
             GET_SAFEAREA_METHOD,
@@ -181,6 +185,7 @@ pub fn get_safeArea() -> Option<Rect_t> {
             std::ptr::null_mut(),
             &mut exc,
         );
+        crate::il2cpp::api::il2cpp_gc_enable();
         if !exc.is_null() || result_obj.is_null() {
             return None;
         }
