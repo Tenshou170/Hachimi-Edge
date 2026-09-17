@@ -434,6 +434,24 @@ fn lookup_cst_entry(chara_id: i32, cue_id: i32, cue_sheet: &str, cue_name: &str)
 }
 
 fn has_active_speech_bubble() -> bool {
+    use crate::il2cpp::hook::{
+        umamusume::{
+            PartsCharaMessageBase,
+            StoryViewTextControllerLandscape,
+            StoryViewTextControllerSingleMode,
+            TextFrame,
+        },
+        UnityEngine_CoreModule::{Component, GameObject, Object},
+        UnityEngine_UI::Text,
+    };
+
+    // 0. If execution is currently inside PartsCharaMessageBase::PlayVoiceInternal,
+    // a character speech bubble is explicitly initiating and presenting this voice.
+    // Suppress captions immediately, without needing to wait for animation or UI state.
+    if PartsCharaMessageBase::is_in_play_voice_internal() {
+        return true;
+    }
+
     let current_view_id = get_current_view_id();
     // Views where captions must always be permitted:
     if current_view_id == ViewId::CharacterNoteMain as i32
@@ -441,52 +459,51 @@ fn has_active_speech_bubble() -> bool {
         || current_view_id == ViewId::CharacterCardLimitBreakCut as i32
         || current_view_id == ViewId::IdleSingleModePlayCut as i32
         || current_view_id == ViewId::SingleModeResult as i32
+        || (ViewId::SingleModeStart as i32..=ViewId::SingleModeScenarioRamenFinalCheckPointTop as i32).contains(&current_view_id)
     {
         return false;
     }
 
-    use crate::il2cpp::hook::{
-        umamusume::{
-            PartsCharaMessageBase,
-            StoryViewTextControllerLandscape,
-            StoryViewTextControllerSingleMode,
-        },
-        UnityEngine_CoreModule::{Component, GameObject, Object},
-    };
-
-    // 1. Check for visible PartsCharaMessageBase speech bubble components.
-    // FindObjectsOfType with includeInactive=false already filters out disabled
-    // objects, so any returned instance means the bubble is active and visible.
+    // 1. Check for visible PartsCharaMessageBase speech bubble components actively open or playing.
     let parts_type = PartsCharaMessageBase::type_object();
     if !parts_type.is_null() {
         let objects = Object::FindObjectsOfType(parts_type, false);
         if !objects.this.is_null() && objects.len() > 0 {
             for obj in unsafe { objects.as_slice() } {
-                if !obj.is_null() {
+                if !obj.is_null() && PartsCharaMessageBase::is_active_or_playing(*obj) {
                     return true;
                 }
             }
         }
     }
 
-    // 2. Check for active VN-style text window controllers (Landscape / SingleMode).
-    // These are MonoBehaviours present in story / home-dialogue menus. When one is
-    // active in the hierarchy the dialogue text is already on-screen, making a
-    // caption redundant. We check get_activeSelf on the component's gameObject
-    // rather than a "playing" state because text windows have no such concept —
-    // they are simply enabled or disabled.
-    for type_obj in [
-        StoryViewTextControllerLandscape::type_object(),
-        StoryViewTextControllerSingleMode::type_object(),
+    // 2. Check for active VN-style text window controllers (Landscape / SingleMode) actively displaying text.
+    for (type_obj, get_tf) in [
+        (StoryViewTextControllerLandscape::type_object(), StoryViewTextControllerLandscape::get__textFrame as fn(*mut Il2CppObject) -> *mut Il2CppObject),
+        (StoryViewTextControllerSingleMode::type_object(), StoryViewTextControllerSingleMode::get__textFrame as fn(*mut Il2CppObject) -> *mut Il2CppObject),
     ] {
         if type_obj.is_null() { continue; }
         let objects = Object::FindObjectsOfType(type_obj, false);
-        if objects.this.is_null() || objects.len() == 0 { continue; }
-        for obj in unsafe { objects.as_slice() } {
-            if obj.is_null() { continue; }
-            let go = Component::get_gameObject(*obj);
-            if !go.is_null() && GameObject::get_activeSelf(go) {
-                return true;
+        if !objects.this.is_null() && objects.len() > 0 {
+            for obj in unsafe { objects.as_slice() } {
+                if !obj.is_null() {
+                    let go = Component::get_gameObject(*obj);
+                    if !go.is_null() && GameObject::get_activeSelf(go) {
+                        let tf = get_tf(*obj);
+                        if !tf.is_null() {
+                            let tf_go = Component::get_gameObject(tf);
+                            if !tf_go.is_null() && GameObject::get_activeSelf(tf_go) {
+                                let text_label = TextFrame::get_TextLabel(tf);
+                                if !text_label.is_null() {
+                                    let text = Text::get_text(text_label);
+                                    if !text.is_null() && unsafe { (*text).length } > 0 {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
