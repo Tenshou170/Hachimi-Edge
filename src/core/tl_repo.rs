@@ -5,10 +5,11 @@ use std::{
     collections::HashSet,
     path::{Path, PathBuf},
     sync::{
-        atomic::{self, AtomicBool, AtomicUsize},
+        atomic::{self, AtomicBool, AtomicU64, AtomicUsize},
         mpsc, Arc, Mutex,
     },
     thread,
+    time::Duration,
 };
 
 use arc_swap::ArcSwap;
@@ -243,6 +244,7 @@ struct ModUpdateInfo {
 #[derive(Default)]
 pub struct Updater {
     update_check_mutex: Mutex<()>,
+    run_mutex: Mutex<()>,
     new_update: ArcSwap<Option<UpdateInfo>>,
     progress: ArcSwap<Option<UpdateProgress>>,
     /// True during `run_internal` (actual file download), false during the
@@ -251,6 +253,8 @@ pub struct Updater {
     skipped_etag: Mutex<Option<String>>,
     new_mod_update: ArcSwap<Option<ModUpdateInfo>>,
     mod_progress: ArcSwap<Option<UpdateProgress>>,
+    last_progress_ms: AtomicU64,
+    last_mod_progress_ms: AtomicU64,
 }
 
 const LOCALIZED_DATA_DIR: &str = "localized_data";
@@ -285,6 +289,90 @@ impl DownloadJob {
             buffer: vec![0u8; CHUNK_SIZE],
         }
     }
+}
+
+// 60fps time-based throttle for progress bar updates
+fn store_progress(
+    progress: &ArcSwap<Option<UpdateProgress>>,
+    last_progress_ms: &AtomicU64,
+    current: usize,
+    total: usize,
+) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+
+    let last = last_progress_ms.load(atomic::Ordering::Relaxed);
+    if current == total || now.saturating_sub(last) >= 16 {
+        last_progress_ms.store(now, atomic::Ordering::Relaxed);
+        progress.store(Arc::new(Some(UpdateProgress::new(current, total))));
+    }
+}
+
+/// RAII guard that ensures a temporary ZIP file is cleaned up, even if the function returns early via `?` or panics
+struct ZipCleanupGuard<'a>(&'a Path);
+impl Drop for ZipCleanupGuard<'_> {
+    fn drop(&mut self) {
+        if self.0.exists() {
+            if let Err(e) = fs::remove_file(self.0) {
+                error!("Failed to clean up temporary ZIP file '{}': {}", self.0.display(), e);
+            }
+        }
+    }
+}
+
+fn check_available_disk_space(_path: &Path, required_bytes: u64) -> Result<(), Error> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::ffi::OsStrExt;
+
+        let wide: Vec<u16> = _path.as_os_str().encode_wide().chain(std::iter::once(0u16)).collect();
+        let mut free_bytes: u64 = 0;
+
+        extern "system" {
+            fn GetDiskFreeSpaceExW(
+                lpDirectoryName: *const u16,
+                lpTotalNumberOfBytes: *mut u64,
+                lpTotalNumberOfFreeBytes: *mut u64,
+                lpFreeBytesAvailableToCaller: *mut u64,
+            ) -> i32;
+        }
+
+        let result = unsafe {
+            GetDiskFreeSpaceExW(
+                wide.as_ptr(),
+                &mut free_bytes,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+
+        if result != 0 && free_bytes < required_bytes {
+            return Err(Error::OutOfDiskSpace);
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let path_bytes = _path.as_os_str().as_bytes();
+        if let Ok(c_path) = CString::new(path_bytes) {
+            unsafe {
+                let mut stat: libc::statvfs = std::mem::zeroed();
+                if libc::statvfs(c_path.as_ptr(), &mut stat) == 0 {
+                    let free_bytes = stat.f_bavail as u64 * stat.f_frsize as u64;
+                    if free_bytes < required_bytes {
+                        return Err(Error::OutOfDiskSpace);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 impl Updater {
@@ -934,10 +1022,15 @@ impl Updater {
     }
 
     fn run_internal(self: Arc<Self>) -> Result<(), Error> {
+        let Ok(_run_guard) = self.run_mutex.try_lock() else {
+            info!("Update already in progress, skipping.");
+            return Ok(());
+        };
         let Some(update_info) = (**self.new_update.load()).clone() else {
             return Ok(());
         };
         self.new_update.store(Arc::new(None));
+        self.last_progress_ms.store(0, atomic::Ordering::Relaxed);
 
         self.progress
             .store(Arc::new(Some(UpdateProgress::new(0, update_info.size))));
@@ -958,6 +1051,9 @@ impl Updater {
         let localized_data_dir = hachimi
             .get_active_tl_dir()
             .expect("Active TL repo directory not set.");
+
+        let disk_check_path = localized_data_dir.parent().unwrap_or(Path::new("."));
+        check_available_disk_space(disk_check_path, update_info.size as u64)?;
 
         if update_info.is_new_repo {
             Self::create_dir(&localized_data_dir, true)?;
@@ -1313,10 +1409,15 @@ impl Updater {
     }
 
     fn run_mod_internal(self: Arc<Self>) -> Result<(), Error> {
+        let Ok(_run_guard) = self.run_mutex.try_lock() else {
+            info!("Update already in progress, skipping.");
+            return Ok(());
+        };
         let Some(mod_info) = (**self.new_mod_update.load()).clone() else {
             return Ok(());
         };
         self.new_mod_update.store(Arc::new(None));
+        self.last_mod_progress_ms.store(0, atomic::Ordering::Relaxed);
 
         // Reuse UpdateInfo/download machinery via a temporary UpdateInfo
         let update_info = UpdateInfo {
@@ -1355,6 +1456,10 @@ impl Updater {
                 .map(|p| hachimi.get_data_path(p))
                 .unwrap_or_else(|| hachimi.get_data_path(LOCALIZED_DATA_DIR))
         });
+
+        let disk_check_path = localized_data_dir.parent().unwrap_or(Path::new("."));
+        check_available_disk_space(disk_check_path, update_info.size as u64)?;
+
         Self::create_dir(&localized_data_dir, false)?;
 
         let cached_files = Arc::new(Mutex::new(update_info.cached_files.clone()));
@@ -1459,32 +1564,92 @@ impl Updater {
                             if let Some(parent) = Path::new(&file_path).parent() {
                                 Self::create_dir(parent, false)?;
                             }
-                            let mut file = fs::File::create(&file_path)?;
-                            let res = job.agent.get(&url).call()?;
 
-                            http::download_file_buffered(res, &mut file, &mut job.buffer, |bytes| {
-                                job.hasher.update(bytes);
-                                let prev_size = current_bytes_clone.fetch_add(bytes.len(), atomic::Ordering::Relaxed);
-                                updater.mod_progress.store(Arc::new(Some(UpdateProgress::new(
-                                    prev_size + bytes.len(),
-                                    total_size,
-                                ))));
-                            })?;
+                            let mut last_err = None;
+                            for attempt in 0..3 {
+                                if stop_signal_clone.load(atomic::Ordering::Relaxed) {
+                                    break;
+                                }
 
-                            let hash = job.hasher.finalize().to_hex().to_string();
-                            if hash != repo_file.hash {
+                                job.hasher.reset();
+                                let mut file = fs::File::create(&file_path)?;
+                                let mut req = job.agent.get(&url);
+                                if attempt > 0 {
+                                    req = req.header("Cache-Control", "no-cache").header("Pragma", "no-cache");
+                                }
+
+                                let res = match req.call() {
+                                    Ok(r) => r,
+                                    Err(e) => {
+                                        last_err = Some(Error::from(e));
+                                        let _ = fs::remove_file(&file_path);
+                                        thread::sleep(Duration::from_millis(200 * (attempt + 1) as u64));
+                                        continue;
+                                    }
+                                };
+
+                                let mut downloaded_bytes_this_attempt = 0usize;
+                                let download_res = http::download_file_buffered(
+                                    res,
+                                    &mut file,
+                                    &mut job.buffer,
+                                    |bytes| {
+                                        job.hasher.update(bytes);
+                                        downloaded_bytes_this_attempt += bytes.len();
+                                        let prev_size = current_bytes_clone
+                                            .fetch_add(bytes.len(), atomic::Ordering::Relaxed);
+                                        store_progress(
+                                            &updater.mod_progress,
+                                            &updater.last_mod_progress_ms,
+                                            prev_size + bytes.len(),
+                                            total_size,
+                                        );
+                                    },
+                                );
+
+                                if let Err(e) = download_res {
+                                    current_bytes_clone.fetch_sub(downloaded_bytes_this_attempt, atomic::Ordering::Relaxed);
+                                    last_err = Some(e);
+                                    let _ = fs::remove_file(&file_path);
+                                    thread::sleep(Duration::from_millis(200 * (attempt + 1) as u64));
+                                    continue;
+                                }
+
+                                let _ = file.flush();
+                                let _ = file.sync_data();
+                                drop(file);
+
+                                let hash = job.hasher.finalize().to_hex().to_string();
+                                if hash == repo_file.hash {
+                                    job.hasher.reset();
+                                    return Ok(hash);
+                                }
+
+                                current_bytes_clone.fetch_sub(downloaded_bytes_this_attempt, atomic::Ordering::Relaxed);
                                 let path_str = file_path.to_string_lossy().to_string();
-                                Self::log_corrupted_download(&file_path, &url, &repo_file.hash, &hash);
+                                warn!(
+                                    "Mod download hash mismatch on attempt {} for '{}': expected {} got {}",
+                                    attempt + 1,
+                                    file_path.display(),
+                                    repo_file.hash,
+                                    hash
+                                );
                                 let _ = fs::remove_file(&file_path);
-                                return Err(Error::FileHashMismatch(path_str));
+                                last_err = Some(Error::FileHashMismatch(path_str));
+                                thread::sleep(Duration::from_millis(200 * (attempt + 1) as u64));
                             }
-                            job.hasher.reset();
-                            Ok(hash)
-                        })();
 
-                        if execute_result.is_err() {
-                            let _ = fs::remove_file(&file_path);
-                        }
+                            if let Some(err) = last_err {
+                                if let Error::FileHashMismatch(ref path_str) = err {
+                                    Self::log_corrupted_download(&file_path, &url, &repo_file.hash, "mismatch_after_retries");
+                                    let _ = fs::remove_file(&file_path);
+                                    return Err(Error::FileHashMismatch(path_str.clone()));
+                                }
+                                Err(err)
+                            } else {
+                                Err(Error::FileHashMismatch(file_path.to_string_lossy().to_string()))
+                            }
+                        })();
 
                         match execute_result {
                             Ok(hash) => {
@@ -1530,11 +1695,12 @@ impl Updater {
     ) -> Result<usize, Error> {
         info!("Starting mod ZIP download for {} files, will use ZIP archive", update_info.files.len());
         let zip_path = localized_data_dir.join(".tmp_mod.zip");
+        let _zip_cleanup = ZipCleanupGuard(&zip_path);
         #[allow(unused_assignments)]
         let mut error_count = 0;
 
         {
-            let total_size_header = ureq::agent()
+            let total_size_header = ureq::Agent::new_with_config(ureq_config())
                 .head(&update_info.zip_url)
                 .call()
                 .ok()
@@ -1556,10 +1722,8 @@ impl Updater {
 
             let progress_bar = Arc::new(move |bytes_read: usize| {
                 let prev_size = downloaded_clone.fetch_add(bytes_read, atomic::Ordering::Relaxed);
-                self_clone.mod_progress.store(Arc::new(Some(UpdateProgress::new(
-                    prev_size + bytes_read,
-                    progress_total,
-                ))));
+                let current = prev_size + bytes_read;
+                store_progress(&self_clone.mod_progress, &self_clone.last_mod_progress_ms, current, progress_total);
             });
 
             http::download_file_parallel(
@@ -1690,7 +1854,7 @@ impl Updater {
                                         }
                                         hasher.update(data);
                                         let prev = current_bytes_clone.fetch_add(n, atomic::Ordering::Relaxed);
-                                        updater.mod_progress.store(Arc::new(Some(UpdateProgress::new(prev + n, total_size))));
+                                        store_progress(&updater.mod_progress, &updater.last_mod_progress_ms, prev + n, total_size);
                                     }
                                     Err(_) => {
                                         let _ = fs::remove_file(&tmp_path);
@@ -1699,6 +1863,10 @@ impl Updater {
                                     }
                                 }
                             }
+
+                            let _ = out_file.flush();
+                            let _ = out_file.sync_data();
+                            drop(out_file);
 
                             let hash = hasher.finalize().to_hex().to_string();
                             if hash != repo_file.hash {
@@ -1809,37 +1977,92 @@ impl Updater {
                             if let Some(parent) = Path::new(&file_path).parent() {
                                 Self::create_dir(parent, false)?;
                             }
-                            let mut file = fs::File::create(&file_path)?;
-                            let res = job.agent.get(&url).call()?;
 
-                            http::download_file_buffered(
-                                res,
-                                &mut file,
-                                &mut job.buffer,
-                                |bytes| {
-                                    job.hasher.update(bytes);
-                                    let prev_size = current_bytes_clone
-                                        .fetch_add(bytes.len(), atomic::Ordering::Relaxed);
-                                    updater.progress.store(Arc::new(Some(UpdateProgress::new(
-                                        prev_size + bytes.len(),
-                                        total_size,
-                                    ))));
-                                },
-                            )?;
+                            let mut last_err = None;
+                            for attempt in 0..3 {
+                                if stop_signal_clone.load(atomic::Ordering::Relaxed) {
+                                    break;
+                                }
 
-                            let hash = job.hasher.finalize().to_hex().to_string();
-                            if hash != repo_file.hash {
+                                job.hasher.reset();
+                                let mut file = fs::File::create(&file_path)?;
+                                let mut req = job.agent.get(&url);
+                                if attempt > 0 {
+                                    req = req.header("Cache-Control", "no-cache").header("Pragma", "no-cache");
+                                }
+
+                                let res = match req.call() {
+                                    Ok(r) => r,
+                                    Err(e) => {
+                                        last_err = Some(Error::from(e));
+                                        Self::cleanup_partial_file(&file_path);
+                                        thread::sleep(Duration::from_millis(200 * (attempt + 1) as u64));
+                                        continue;
+                                    }
+                                };
+
+                                let mut downloaded_bytes_this_attempt = 0usize;
+                                let download_res = http::download_file_buffered(
+                                    res,
+                                    &mut file,
+                                    &mut job.buffer,
+                                    |bytes| {
+                                        job.hasher.update(bytes);
+                                        downloaded_bytes_this_attempt += bytes.len();
+                                        let prev_size = current_bytes_clone
+                                            .fetch_add(bytes.len(), atomic::Ordering::Relaxed);
+                                        store_progress(
+                                            &updater.progress,
+                                            &updater.last_progress_ms,
+                                            prev_size + bytes.len(),
+                                            total_size,
+                                        );
+                                    },
+                                );
+
+                                if let Err(e) = download_res {
+                                    current_bytes_clone.fetch_sub(downloaded_bytes_this_attempt, atomic::Ordering::Relaxed);
+                                    last_err = Some(e);
+                                    Self::cleanup_partial_file(&file_path);
+                                    thread::sleep(Duration::from_millis(200 * (attempt + 1) as u64));
+                                    continue;
+                                }
+
+                                let _ = file.flush();
+                                let _ = file.sync_data();
+                                drop(file);
+
+                                let hash = job.hasher.finalize().to_hex().to_string();
+                                if hash == repo_file.hash {
+                                    job.hasher.reset();
+                                    return Ok(hash);
+                                }
+
+                                current_bytes_clone.fetch_sub(downloaded_bytes_this_attempt, atomic::Ordering::Relaxed);
                                 let path_str = file_path.to_string_lossy().to_string();
-                                Self::log_corrupted_download(&file_path, &url, &repo_file.hash, &hash);
-                                return Err(Error::FileHashMismatch(path_str));
+                                warn!(
+                                    "Download hash mismatch on attempt {} for '{}': expected {} got {}",
+                                    attempt + 1,
+                                    file_path.display(),
+                                    repo_file.hash,
+                                    hash
+                                );
+                                Self::cleanup_partial_file(&file_path);
+                                last_err = Some(Error::FileHashMismatch(path_str));
+                                thread::sleep(Duration::from_millis(200 * (attempt + 1) as u64));
                             }
-                            job.hasher.reset();
-                            Ok(hash)
-                        })();
 
-                        if execute_result.is_err() {
-                            Self::cleanup_partial_file(&file_path);
-                        }
+                            if let Some(err) = last_err {
+                                if let Error::FileHashMismatch(ref path_str) = err {
+                                    Self::log_corrupted_download(&file_path, &url, &repo_file.hash, "mismatch_after_retries");
+                                    Self::cleanup_partial_file(&file_path);
+                                    return Err(Error::FileHashMismatch(path_str.clone()));
+                                }
+                                Err(err)
+                            } else {
+                                Err(Error::FileHashMismatch(file_path.to_string_lossy().to_string()))
+                            }
+                        })();
 
                         match execute_result {
                             Ok(hash) => {
@@ -1892,13 +2115,14 @@ impl Updater {
         cached_files: Arc<Mutex<FnvHashMap<String, String>>>,
     ) -> Result<usize, Error> {
         let zip_path = localized_data_dir.join(".tmp.zip");
+        let _zip_cleanup = ZipCleanupGuard(&zip_path);
         let extraction_in_progress: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
         // idk compiler going monkey mode unless i add this
         #[allow(unused_assignments)]
         let mut error_count = 0;
 
         {
-            let total_size_header = ureq::agent()
+            let total_size_header = ureq::Agent::new_with_config(ureq_config())
                 .head(&update_info.zip_url)
                 .call()
                 .ok()
@@ -1930,9 +2154,7 @@ impl Updater {
             let progress_bar = Arc::new(move |bytes_read: usize| {
                 let prev_size = downloaded_clone.fetch_add(bytes_read, atomic::Ordering::Relaxed);
                 let current = prev_size + bytes_read;
-                self_clone
-                    .progress
-                    .store(Arc::new(Some(UpdateProgress::new(current, progress_total))));
+                store_progress(&self_clone.progress, &self_clone.last_progress_ms, current, progress_total);
             });
 
             http::download_file_parallel(
@@ -2071,7 +2293,7 @@ impl Updater {
                                         }
                                         hasher.update(data_slice);
                                         let prev_size = current_bytes_clone.fetch_add(read_bytes, atomic::Ordering::Relaxed);
-                                        updater.progress.store(Arc::new(Some(UpdateProgress::new(prev_size + read_bytes, total_size))));
+                                        store_progress(&updater.progress, &updater.last_progress_ms, prev_size + read_bytes, total_size);
                                     }
                                     Err(_) => {
                                         let _ = fs::remove_file(&tmp_path);
@@ -2080,6 +2302,10 @@ impl Updater {
                                     }
                                 }
                             }
+
+                            let _ = out_file.flush();
+                            let _ = out_file.sync_data();
+                            drop(out_file);
 
                             let hash = hasher.finalize().to_hex().to_string();
                             if hash != repo_file.hash {
