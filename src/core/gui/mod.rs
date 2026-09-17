@@ -1857,11 +1857,16 @@ impl Gui {
                                         if let Err(e) = hachimi.save_and_reload_config(new_config) {
                                             error!("{}", e);
                                         }
-                                        if let Err(e) = if discord_rpc {
-                                            crate::windows::discord::start_rpc()
-                                        } else {
-                                            crate::windows::discord::stop_rpc()
-                                        } {
+                                        if discord_rpc {
+                                            std::thread::Builder::new()
+                                                .name("discord_rpc_toggle".into())
+                                                .spawn(|| {
+                                                    if let Err(e) = crate::windows::discord::start_rpc() {
+                                                        warn!("Failed to start Discord RPC: {}", e);
+                                                    }
+                                                })
+                                                .ok();
+                                        } else if let Err(e) = crate::windows::discord::stop_rpc() {
                                             error!("{}", e);
                                         }
                                     }

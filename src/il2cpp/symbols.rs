@@ -593,6 +593,44 @@ impl Thread {
     pub fn as_raw(&self) -> *mut Il2CppThread {
         self.0
     }
+
+    pub fn attach_current() -> Option<Thread> {
+        let domain = unsafe { DOMAIN };
+        if domain.is_null() {
+            return None;
+        }
+        let thread = il2cpp_thread_attach(domain);
+        if thread.is_null() {
+            None
+        } else {
+            Some(Thread(thread))
+        }
+    }
+
+    pub fn detach(self) {
+        if !self.0.is_null() {
+            il2cpp_thread_detach(self.0);
+        }
+    }
+}
+
+pub fn attach_current_thread() -> Option<*mut Il2CppThread> {
+    let domain = unsafe { DOMAIN };
+    if domain.is_null() {
+        return None;
+    }
+    let thread = il2cpp_thread_attach(domain);
+    if thread.is_null() {
+        None
+    } else {
+        Some(thread)
+    }
+}
+
+pub fn detach_current_thread(thread: *mut Il2CppThread) {
+    if !thread.is_null() {
+        il2cpp_thread_detach(thread);
+    }
 }
 
 // Delegate creation

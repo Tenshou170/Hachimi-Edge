@@ -12,9 +12,11 @@ static DISCORD_CLIENT: Lazy<Mutex<Option<DiscordIpcClient>>> = Lazy::new(|| {
 });
 
 pub fn start_rpc() -> Result<(), Error> {
-    let mut client_guard = DISCORD_CLIENT.lock().unwrap_or_else(|e| e.into_inner());
-    if client_guard.is_some() {
-        return Ok(());
+    {
+        let client_guard = DISCORD_CLIENT.lock().unwrap_or_else(|e| e.into_inner());
+        if client_guard.is_some() {
+            return Ok(());
+        }
     }
 
     // Choose appropriate Discord App ID based on detected release.
@@ -31,7 +33,25 @@ pub fn start_rpc() -> Result<(), Error> {
     };
 
     let mut client = DiscordIpcClient::new(client_id);
-    client.connect().map_err(|e| Error::DiscordRpcError(e.to_string()))?;
+
+    // Connect with timeout to prevent hanging forever on broken pipes (e.g. Proton discord bridge)
+    let (tx, rx) = std::sync::mpsc::channel();
+    let thread_spawn = std::thread::Builder::new()
+        .name("discord_ipc_conn".into())
+        .spawn(move || {
+            let res = client.connect().map(|_| client);
+            let _ = tx.send(res);
+        });
+
+    if let Err(e) = thread_spawn {
+        return Err(Error::DiscordRpcError(e.to_string()));
+    }
+
+    let mut client = match rx.recv_timeout(std::time::Duration::from_secs(3)) {
+        Ok(Ok(c)) => c,
+        Ok(Err(e)) => return Err(Error::DiscordRpcError(e.to_string())),
+        Err(_) => return Err(Error::DiscordRpcError("Discord IPC connection timed out".to_string())),
+    };
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -45,6 +65,8 @@ pub fn start_rpc() -> Result<(), Error> {
 
     client.set_activity(activity)
         .map_err(|e| Error::DiscordRpcError(e.to_string()))?;
+
+    let mut client_guard = DISCORD_CLIENT.lock().unwrap_or_else(|e| e.into_inner());
     *client_guard = Some(client);
     info!("Rich presence set");
     Ok(())

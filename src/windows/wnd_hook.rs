@@ -804,9 +804,11 @@ unsafe fn init_hwnd(hwnd: HWND) {
             }
         }
 
-        info!("Adding CBT hook");
-        if let Ok(hhook) = SetWindowsHookExW(WH_CBT, Some(cbt_proc), None, GetCurrentThreadId()) {
-            HCBTHOOK = hhook;
+        if hachimi.config.load().windows.block_minimize_in_full_screen {
+            info!("Adding CBT hook");
+            if let Ok(hhook) = SetWindowsHookExW(WH_CBT, Some(cbt_proc), None, GetCurrentThreadId()) {
+                HCBTHOOK = hhook;
+            }
         }
 
         // Apply always on top
@@ -814,14 +816,19 @@ unsafe fn init_hwnd(hwnd: HWND) {
             _ = utils::set_window_topmost(hwnd, true);
         }
 
-        if Hachimi::instance().game.region != Region::Global {
+        if Hachimi::instance().game.region != Region::Global && hachimi.config.load().windows.freeform_window {
             apply_freeform_window_config();
         }
 
         if hachimi.discord_rpc.load(atomic::Ordering::Relaxed) {
-            if let Err(e) = discord::start_rpc() {
-                error!("{}", e);
-            }
+            std::thread::Builder::new()
+                .name("discord_rpc_start".into())
+                .spawn(|| {
+                    if let Err(e) = discord::start_rpc() {
+                        warn!("Failed to start Discord RPC: {}", e);
+                    }
+                })
+                .ok();
         }
 
         smtc::init(hwnd);

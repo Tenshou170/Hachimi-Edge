@@ -626,9 +626,13 @@ impl Hachimi {
             std::thread::Builder::new()
                 .name("chara_data_loader".into())
                 .spawn(|| {
+                    let thread = crate::il2cpp::symbols::attach_current_thread();
                     let data = CharacterData::load_from_db();
                     Hachimi::instance().chara_data.store(Arc::new(data));
                     info!("Character database loaded successfully.");
+                    if let Some(t) = thread {
+                        crate::il2cpp::symbols::detach_current_thread(t);
+                    }
                 })
                 .ok();
         }
@@ -639,9 +643,13 @@ impl Hachimi {
             std::thread::Builder::new()
                 .name("skill_info_loader".into())
                 .spawn(|| {
+                    let thread = crate::il2cpp::symbols::attach_current_thread();
                     let data = SkillInfo::load_from_db();
                     Hachimi::instance().skill_info.store(Arc::new(data));
                     info!("Skill info loaded successfully.");
+                    if let Some(t) = thread {
+                        crate::il2cpp::symbols::detach_current_thread(t);
+                    }
                 })
                 .ok();
         }
