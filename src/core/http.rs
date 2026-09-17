@@ -40,6 +40,7 @@ pub fn ureq_config_with_timeout(connect_timeout: Option<Duration>) -> ureq::conf
     use ureq::config::IpFamily::*;
 
     ureq::config::Config::builder()
+        .user_agent(format!("Hachimi/{} (Linux; Android)", env!("CARGO_PKG_VERSION")))
         .ip_family(if Hachimi::instance().config.load().ipv4_only { Ipv4Only } else { Any })
         .timeout_connect(connect_timeout)
         .build()
@@ -302,6 +303,8 @@ pub fn download_file_buffered(res: http::Response<ureq::Body>, file: &mut std::f
             return Err(Error::OutOfDiskSpace);
         }
     }
+
+    file.flush()?;
 
     Ok(())
 }
