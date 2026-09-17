@@ -55,7 +55,12 @@ impl AppWindow for FirstTimeSetupWindow {
             { self.config.android.menu_open_key = raw; }
         }
 
-        new_window(ctx, self.id.with(self.current_page), t!("first_time_setup.title"))
+        let mut window = new_window(ctx, self.id.with(self.current_page), t!("first_time_setup.title"));
+        if self.current_page == 2 {
+            window = window.fixed_size(subwindow_size(ctx));
+        }
+
+        window
             .open(&mut open)
             .show(ctx, |ui| {
                 let allow_next = match self.current_page {
@@ -276,117 +281,118 @@ impl AppWindow for FirstTimeSetupWindow {
                                 ui.label(t!("first_time_setup.common_settings_content"));
                                 ui.add_space(8.0);
 
-                                // 1. Target FPS
-                                ConfigEditor::list_tile_option_slider(
-                                    ui,
-                                    &t!("config_editor.target_fps"),
-                                    &mut self.config.target_fps,
-                                    30..=240,
-                                );
+                                let scale = get_scale(ui.ctx());
+                                let avail_w = ui.available_width();
 
-                                // 2. Menu Open Keybind Tile
-                                #[cfg(target_os = "windows")]
-                                let key_label = crate::windows::utils::vk_to_display_label(self.config.windows.menu_open_key);
-                                #[cfg(target_os = "android")]
-                                let key_label = crate::android::gui_impl::keymap::keycode_display_label(self.config.android.menu_open_key);
-
-                                let surface_container_highest = get_global_color("surfaceContainerHighest");
-                                let secondary_container = get_global_color("secondaryContainer");
-                                let on_secondary_container = get_global_color("onSecondaryContainer");
-                                let on_surface = get_global_color("onSurface");
-
-                                egui::Frame::NONE
-                                    .fill(surface_container_highest)
-                                    .corner_radius(8.0)
-                                    .inner_margin(egui::Margin::symmetric(16, 12))
+                                egui::ScrollArea::vertical()
+                                    .id_salt("setup_common_settings_scroll")
+                                    .auto_shrink([false, false])
                                     .show(ui, |ui| {
-                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                            // Bind button on the far right
-                                            if ui.add(MaterialButton::outlined(t!("config_editor.menu_open_key_set"))).clicked() {
-                                                let keybind_slot = self.pending_keybind.clone();
-                                                std::thread::spawn(move || {
-                                                    let Some(gui_mutex) = Gui::instance() else { return };
-                                                    let mut gui = gui_mutex.lock().unwrap_or_else(|e| e.into_inner());
-                                                    gui.show_window(Box::new(SetKeybindWindow::new(move |result| {
-                                                        let Some(raw) = result else { return };
-                                                        let hachimi = Hachimi::instance();
-                                                        let mut new_config = hachimi.config.load().as_ref().clone();
-                                                        #[cfg(target_os = "windows")]
-                                                        { new_config.windows.menu_open_key = raw; }
-                                                        #[cfg(target_os = "android")]
-                                                        { new_config.android.menu_open_key = raw; }
-                                                        save_and_reload_config(new_config);
-                                                        *keybind_slot.lock().unwrap() = Some(raw);
-                                                    })));
-                                                });
-                                            }
+                                        ui.set_width(avail_w);
 
-                                            // Label + chip fill the rest of the row (left side)
-                                            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                                                ui.label(
-                                                    egui::RichText::new(t!("config_editor.menu_open_key"))
-                                                        .color(on_surface),
-                                                );
-                                                ui.add_space(8.0);
+                                        // 1. Target FPS
+                                        ConfigEditor::list_tile_option_slider(
+                                            ui,
+                                            &t!("config_editor.target_fps"),
+                                            &mut self.config.target_fps,
+                                            30..=240,
+                                        );
 
-                                                let key_galley = ui.painter().layout_no_wrap(
-                                                    key_label.clone(),
-                                                    ui.style().text_styles[&egui::TextStyle::Body].clone(),
-                                                    on_secondary_container,
-                                                );
-                                                let key_text_size = key_galley.size();
+                                        // 2. Menu Open Keybind — label top, chip + bind button bottom
+                                        //    (matches Config Editor general tab layout)
+                                        #[cfg(target_os = "windows")]
+                                        let key_label = crate::windows::utils::vk_to_display_label(self.config.windows.menu_open_key);
+                                        #[cfg(target_os = "android")]
+                                        let key_label = crate::android::gui_impl::keymap::keycode_display_label(self.config.android.menu_open_key);
 
-                                                let (chip_rect, _) = ui.allocate_exact_size(
-                                                    egui::vec2(key_text_size.x + 16.0, 24.0),
-                                                    egui::Sense::hover(),
-                                                );
-                                                ui.painter().rect_filled(chip_rect, 6.0, secondary_container);
-                                                ui.painter().text(
-                                                    chip_rect.center(),
-                                                    egui::Align2::CENTER_CENTER,
-                                                    key_label,
-                                                    ui.style().text_styles[&egui::TextStyle::Body].clone(),
-                                                    on_secondary_container,
-                                                );
+                                        let secondary_container    = get_global_color("secondaryContainer");
+                                        let on_secondary_container = get_global_color("onSecondaryContainer");
+
+                                        let key_galley = ui.painter().layout_no_wrap(
+                                            key_label.to_string(),
+                                            ui.style().text_styles[&egui::TextStyle::Body].clone(),
+                                            egui::Color32::WHITE,
+                                        );
+                                        let chip_w = key_galley.size().x + 16.0;
+
+                                        // Top line: setting name
+                                        ui.add(egui::Label::new(t!("config_editor.menu_open_key")).wrap());
+                                        // Bottom line: chip left, "Set" button right
+                                        ui.horizontal(|ui| {
+                                            ui.spacing_mut().item_spacing.x = 8.0;
+                                            let (chip_rect, _) = ui.allocate_exact_size(
+                                                egui::vec2(chip_w, 28.0),
+                                                egui::Sense::hover(),
+                                            );
+                                            ui.painter().rect_filled(chip_rect, 6.0, secondary_container);
+                                            ui.painter().text(
+                                                chip_rect.center(),
+                                                egui::Align2::CENTER_CENTER,
+                                                key_label,
+                                                ui.style().text_styles[&egui::TextStyle::Body].clone(),
+                                                on_secondary_container,
+                                            );
+                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                if ui.add(MaterialButton::outlined(t!("config_editor.menu_open_key_set"))).clicked() {
+                                                    let keybind_slot = self.pending_keybind.clone();
+                                                    std::thread::spawn(move || {
+                                                        let Some(gui_mutex) = Gui::instance() else { return };
+                                                        let mut gui = gui_mutex.lock().unwrap_or_else(|e| e.into_inner());
+                                                        gui.show_window(Box::new(SetKeybindWindow::new(move |result| {
+                                                            let Some(raw) = result else { return };
+                                                            let hachimi = Hachimi::instance();
+                                                            let mut new_config = hachimi.config.load().as_ref().clone();
+                                                            #[cfg(target_os = "windows")]
+                                                            { new_config.windows.menu_open_key = raw; }
+                                                            #[cfg(target_os = "android")]
+                                                            { new_config.android.menu_open_key = raw; }
+                                                            save_and_reload_config(new_config);
+                                                            *keybind_slot.lock().unwrap() = Some(raw);
+                                                        })));
+                                                    });
+                                                }
                                             });
                                         });
+                                        ConfigEditor::space(ui, scale * 8.0);
+
+                                        // 3. Captions / Subtitles Toggle
+                                        ConfigEditor::list_tile_switch(
+                                            ui,
+                                            t!("config_editor.captions"),
+                                            &mut self.config.caption.caption_enable,
+                                            true,
+                                        );
+
+                                        // 4. Disable Skill Name Translation
+                                        ConfigEditor::list_tile_switch(
+                                            ui,
+                                            t!("config_editor.disable_skill_name_translation"),
+                                            &mut self.config.disable_skill_name_translation,
+                                            true,
+                                        );
+
+                                        // 5. Disable Tap Effect
+                                        ConfigEditor::list_tile_switch(
+                                            ui,
+                                            t!("config_editor.disable_tap_effect"),
+                                            &mut self.config.disable_tap_effect,
+                                            true,
+                                        );
+
+                                        // 6. Discord RPC (Windows only)
+                                        #[cfg(target_os = "windows")]
+                                        {
+                                            ConfigEditor::list_tile_switch(
+                                                ui,
+                                                t!("config_editor.discord_rpc"),
+                                                &mut self.config.windows.discord_rpc,
+                                                true,
+                                            );
+                                        }
+
+                                        let ime_pad = ime_scroll_padding(ui.ctx());
+                                        if ime_pad > 0.0 { ui.add_space(ime_pad); }
                                     });
-                                ConfigEditor::space(ui, 4.0);
-
-                                // 3. Captions / Subtitles Toggle
-                                ConfigEditor::list_tile_switch(
-                                    ui,
-                                    t!("config_editor.captions"),
-                                    &mut self.config.caption.caption_enable,
-                                    true,
-                                );
-
-                                // 4. Disable Skill Name Translation
-                                ConfigEditor::list_tile_switch(
-                                    ui,
-                                    t!("config_editor.disable_skill_name_translation"),
-                                    &mut self.config.disable_skill_name_translation,
-                                    true,
-                                );
-
-                                // 5. Disable Tap Effect
-                                ConfigEditor::list_tile_switch(
-                                    ui,
-                                    t!("config_editor.disable_tap_effect"),
-                                    &mut self.config.disable_tap_effect,
-                                    true,
-                                );
-
-                                // 6. Discord RPC (Windows only)
-                                #[cfg(target_os = "windows")]
-                                {
-                                    ConfigEditor::list_tile_switch(
-                                        ui,
-                                        t!("config_editor.discord_rpc"),
-                                        &mut self.config.windows.discord_rpc,
-                                        true,
-                                    );
-                                }
                             }
                             3 => {
                                 ui.add(egui::Label::new(
