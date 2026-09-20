@@ -15,6 +15,10 @@ def_method_wrapper_fn!(GetPlayerHorseIndex, GET_PLAYER_HORSE_INDEX_ADDR, i32, th
 
 type RaceHorseManagerBase_InitFn = extern "C" fn(this: *mut Il2CppObject, raceInfo: *mut Il2CppObject);
 extern "C" fn RaceHorseManagerBase_Init(this: *mut Il2CppObject, raceInfo: *mut Il2CppObject) {
+    // Reset all race-director telemetry atomics before marking the race active so
+    // collect_frame() never sees stale GATE_OPEN/RACE_FINISHED from the prior race.
+    // Called unconditionally — independent of race_director.enabled in config.
+    crate::core::race_director::on_race_start();
     RACE_ACTIVE.store(true, Ordering::Release);
     get_orig_fn!(RaceHorseManagerBase_Init, RaceHorseManagerBase_InitFn)(this, raceInfo);
 }

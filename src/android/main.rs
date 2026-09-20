@@ -4,7 +4,7 @@ use once_cell::sync::OnceCell;
 
 use crate::core::Hachimi;
 
-use super::{hook, plugin_loader};
+use super::{game_impl, hook, plugin_loader};
 
 #[allow(non_camel_case_types)]
 type JniOnLoadFn = extern "C" fn(vm: JavaVM, reserved: *mut c_void) -> jint;
@@ -99,6 +99,7 @@ pub extern "C" fn JNI_OnLoad(vm: JavaVM, reserved: *mut c_void) -> jint {
                     if env.exception_check().unwrap_or(false) {
                         let _ = env.exception_clear();
                     }
+                    game_impl::check_internal_files_marker(&mut env);
                     hook::init(env.get_raw());
                     info!("JNI_OnLoad: Hooks initialized successfully");
                 }

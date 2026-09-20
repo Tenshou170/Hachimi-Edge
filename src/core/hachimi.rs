@@ -32,9 +32,7 @@ pub const REPO_PATH: &str = "Tenshou170/Hachimi-Edge";
 pub const GITHUB_API: &str = "https://api.github.com/repos";
 pub const CODEBERG_API: &str = "https://codeberg.org/api/v1/repos";
 pub const WEBSITE_URL: &str = "https://hachimi.noccu.art";
-pub const UMAPATCHER_PACKAGE_NAME: &str = "dev.LeadRDRK.UmaPatcherEdge";
-pub const UMAPATCHER_INSTALL_URL: &str =
-    "https://github.com/Tenshou170/UmaPatcher-Edge/releases/latest";
+pub const UMAPATCHER_UPDATER_DEEPLINK: &str = "umapatcher-edge://update-hachimi";
 
 pub static CONFIG_LOAD_ERROR: AtomicBool = AtomicBool::new(false);
 
@@ -100,6 +98,10 @@ pub struct Hachimi {
 
     /// -1 = default
     pub target_fps: AtomicI32,
+
+    /// Windows only: FPS cap when window loses focus. -1 = disabled.
+    #[cfg(target_os = "windows")]
+    pub target_fps_unfocused: AtomicI32,
 
     #[cfg(target_os = "windows")]
     pub vsync_count: AtomicI32,
@@ -193,6 +195,9 @@ impl Hachimi {
             template_parser: template::Parser::new(&template_filters::LIST),
 
             target_fps: AtomicI32::new(config.target_fps.map(|v| v.clamp(30, 240)).unwrap_or(-1)),
+
+            #[cfg(target_os = "windows")]
+            target_fps_unfocused: AtomicI32::new(config.windows.target_fps_unfocused.map(|v| v.clamp(10, 240)).unwrap_or(-1)),
 
             #[cfg(target_os = "windows")]
             vsync_count: AtomicI32::new(config.windows.vsync_count),
@@ -377,6 +382,10 @@ impl Hachimi {
                 new_config.target_fps.map(|v| v.clamp(30, 240)).unwrap_or(-1),
                 std::sync::atomic::Ordering::Relaxed,
             );
+            self.target_fps_unfocused.store(
+                new_config.windows.target_fps_unfocused.map(|v| v.clamp(10, 240)).unwrap_or(-1),
+                std::sync::atomic::Ordering::Relaxed,
+            );
             self.window_always_on_top.store(
                 new_config.windows.window_always_on_top,
                 std::sync::atomic::Ordering::Relaxed,
@@ -419,6 +428,10 @@ impl Hachimi {
         {
             self.target_fps.store(
                 config.target_fps.map(|v| v.clamp(30, 240)).unwrap_or(-1),
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            self.target_fps_unfocused.store(
+                config.windows.target_fps_unfocused.map(|v| v.clamp(10, 240)).unwrap_or(-1),
                 std::sync::atomic::Ordering::Relaxed,
             );
             self.window_always_on_top.store(

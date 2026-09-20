@@ -1,7 +1,7 @@
 use crate::{
     core::{Hachimi, captions, live_utils::AudioPlayback},
     il2cpp::{
-        ext::{Il2CppObjectExt, Il2CppStringExt, StringExt},
+        ext::{Il2CppObjectExt, Il2CppStringExt},
         symbols::{self, get_field_from_name, get_method_addr, SingletonLike},
         types::*,
     },
@@ -434,26 +434,16 @@ fn lookup_cst_entry(chara_id: i32, cue_id: i32, cue_sheet: &str, cue_name: &str)
 }
 
 fn has_active_speech_bubble() -> bool {
-    use crate::il2cpp::hook::{
-        umamusume::{
-            PartsCharaMessageBase,
-            StoryViewTextControllerLandscape,
-            StoryViewTextControllerSingleMode,
-            TextFrame,
-        },
-        UnityEngine_CoreModule::{Component, GameObject, Object},
-        UnityEngine_UI::Text,
-    };
+    use crate::il2cpp::hook::umamusume::PartsCharaMessageBase;
 
-    // 0. If execution is currently inside PartsCharaMessageBase::PlayVoiceInternal,
-    // a character speech bubble is explicitly initiating and presenting this voice.
-    // Suppress captions immediately, without needing to wait for animation or UI state.
+    // If execution is currently inside PartsCharaMessageBase::PlayVoiceInternal,
+    // a speech bubble is explicitly initiating this voice line — suppress immediately.
     if PartsCharaMessageBase::is_in_play_voice_internal() {
         return true;
     }
 
     let current_view_id = get_current_view_id();
-    // Views where captions must always be permitted:
+    // Views where captions must always be permitted regardless of bubble state:
     if current_view_id == ViewId::CharacterNoteMain as i32
         || current_view_id == ViewId::RouletteDerby as i32
         || current_view_id == ViewId::CharacterCardLimitBreakCut as i32
@@ -464,60 +454,10 @@ fn has_active_speech_bubble() -> bool {
         return false;
     }
 
-    // 1. Check for visible PartsCharaMessageBase speech bubble components actively open or playing.
-    let parts_type = PartsCharaMessageBase::type_object();
-    if !parts_type.is_null() {
-        let objects = Object::FindObjectsOfType(parts_type, false);
-        if !objects.this.is_null() && objects.len() > 0 {
-            for obj in unsafe { objects.as_slice() } {
-                if !obj.is_null() && PartsCharaMessageBase::is_active_or_playing(*obj) {
-                    return true;
-                }
-            }
-        }
-    }
-
-    // 2. Check for active VN-style text window controllers (Landscape / SingleMode) actively displaying text.
-    for (type_obj, get_tf) in [
-        (StoryViewTextControllerLandscape::type_object(), StoryViewTextControllerLandscape::get__textFrame as fn(*mut Il2CppObject) -> *mut Il2CppObject),
-        (StoryViewTextControllerSingleMode::type_object(), StoryViewTextControllerSingleMode::get__textFrame as fn(*mut Il2CppObject) -> *mut Il2CppObject),
-    ] {
-        if type_obj.is_null() { continue; }
-        let objects = Object::FindObjectsOfType(type_obj, false);
-        if !objects.this.is_null() && objects.len() > 0 {
-            for obj in unsafe { objects.as_slice() } {
-                if !obj.is_null() {
-                    let go = Component::get_gameObject(*obj);
-                    if !go.is_null() && GameObject::get_activeSelf(go) {
-                        let tf = get_tf(*obj);
-                        if !tf.is_null() {
-                            let tf_go = Component::get_gameObject(tf);
-                            if !tf_go.is_null() && GameObject::get_activeSelf(tf_go) {
-                                let text_label = TextFrame::get_TextLabel(tf);
-                                if !text_label.is_null() {
-                                    let text = Text::get_text(text_label);
-                                    if !text.is_null() && unsafe { (*text).length } > 0 {
-                                        return true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // 3. Check for Episode character / story list balloon root.
-    // Guard with get_activeSelf so we only suppress when the object is actually
-    // visible rather than merely alive somewhere in the hierarchy.
-    let balloon_path = "/Gallop.GameSystem/SystemManagerRoot/SystemSingleton/UIManager/GameCanvas/MainCanvas/EpisodeCharacterView(Clone)/ContentsRoot/PartsEpisodeList/MidArea/BalloonRoot".to_il2cpp_string();
-    let balloon = GameObject::Find(balloon_path);
-    if !balloon.is_null() && GameObject::get_activeSelf(balloon) {
-        return true;
-    }
-
-    false
+    // O(1) check: ACTIVE_BUBBLE_COUNT is incremented by PartsCharaMessageBase::Open()
+    // and decremented by Close() via virtual hooks on the base class, covering all
+    // 26+ subclasses without any Unity object scanning.
+    PartsCharaMessageBase::active_bubble_count() > 0
 }
 
 // private AudioPlayback PlayInternal(SoundGroup group, RequestCueInfo cueInfo, PlayParameters playParam, AutoStopType stopType) { }

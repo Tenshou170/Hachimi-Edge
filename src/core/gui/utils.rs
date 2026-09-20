@@ -228,6 +228,42 @@ pub fn dialog_window_size(ctx: &egui::Context) -> egui::Vec2 {
     }
 }
 
+/// Truncates a window title with `…` if it would overflow the title bar width.
+/// `max_width` is the full window max-width; the title bar budget is that minus
+/// the close/collapse button area (~56 dp).
+pub fn fit_window_title(ctx: &egui::Context, title: egui::WidgetText, max_width: f32, scale: f32) -> egui::WidgetText {
+    let budget = max_width - 56.0 * scale;
+    if budget <= 0.0 {
+        return title;
+    }
+    let text = title.text().to_owned();
+    let heading_size = ctx.style().text_styles.get(&egui::TextStyle::Heading).map_or(20.0, |font| font.size);
+    let color = ctx.style().visuals.text_color();
+    let measure = |s: &str| {
+        let font_id = egui::FontId::proportional(heading_size);
+        ctx.fonts_mut(|fonts| fonts.layout_no_wrap(s.to_string(), font_id, color).size().x)
+    };
+    if measure(text.as_str()) <= budget {
+        return title;
+    }
+    let mut fitted = String::new();
+    for ch in text.chars() {
+        fitted.push(ch);
+        fitted.push('\u{2026}');
+        if measure(fitted.as_str()) > budget {
+            fitted.pop();
+            fitted.pop();
+            break;
+        }
+        fitted.pop();
+    }
+    if fitted.is_empty() {
+        return title;
+    }
+    fitted.push('\u{2026}');
+    fitted.into()
+}
+
 pub fn new_window<'a>(
     ctx: &egui::Context,
     id: egui::Id,
@@ -269,6 +305,8 @@ pub fn new_window<'a>(
         .corner_radius(egui::CornerRadius::same(
             cr.unwrap_or(8.0).max(8.0) as u8,
         ));
+
+    let title = fit_window_title(ctx, title.into(), size.x, scale);
 
     egui::Window::new(title)
         .id(id.with(salt.to_bits()))
