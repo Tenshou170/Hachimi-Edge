@@ -1,13 +1,7 @@
-use std::ptr::null_mut;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
 use crate::il2cpp::{
-    hook::{
-        UnityEngine_CoreModule::{Component, GameObject},
-        UnityEngine_UI::Text,
-        UnityEngine_UIModule::CanvasGroup,
-    },
-    symbols::{get_field_from_name, get_field_object_value, get_method_addr, get_type_object_for_class},
+    symbols::{get_method_addr, get_type_object_for_class},
     types::*,
 };
 
@@ -21,6 +15,9 @@ pub fn type_object() -> *mut Il2CppObject {
     unsafe { TYPE_OBJECT }
 }
 
+// ── PlayVoiceInternal guard ───────────────────────────────────────────────────────────────
+// When PlayVoiceInternal is executing, a speech bubble is actively initiating a voice line.
+// We can suppress captions immediately at that point without waiting for Open() to fire.
 static IN_PLAY_VOICE_INTERNAL: AtomicBool = AtomicBool::new(false);
 
 pub fn is_in_play_voice_internal() -> bool {
@@ -40,62 +37,36 @@ impl Drop for InPlayVoiceGuard {
     }
 }
 
-static mut GET_ISPLAYING_ADDR: usize = 0;
-pub fn get_IsPlaying(this: *mut Il2CppObject) -> bool {
-    let addr = unsafe { GET_ISPLAYING_ADDR };
-    if addr == 0 || this.is_null() { return false; }
-    let orig_fn: extern "C" fn(*mut Il2CppObject) -> bool =
-        unsafe { std::mem::transmute(addr) };
-    orig_fn(this)
+// ── Open / Close bubble counter ───────────────────────────────────────────────────────────
+// Hooks PartsCharaMessageBase::Open() (Slot 13) and Close() (Slot 14) — both virtual, so
+// all 26+ subclasses (PartsHomeCharaMessage, PartsDailyRaceTopCharaMessage, etc.) are
+// covered by a single pair of hooks on the base class.
+//
+// The counter is used by AudioManager::has_active_speech_bubble() instead of the old
+// Object::FindObjectsOfType() scan, making the check O(1) and reliable across all views.
+static ACTIVE_BUBBLE_COUNT: AtomicI32 = AtomicI32::new(0);
+
+pub fn active_bubble_count() -> i32 {
+    ACTIVE_BUBBLE_COUNT.load(Ordering::Acquire)
 }
 
-static mut IS_OPEN_ADDR: usize = 0;
-pub fn IsOpen(this: *mut Il2CppObject) -> bool {
-    let addr = unsafe { IS_OPEN_ADDR };
-    if addr == 0 || this.is_null() { return false; }
-    let orig_fn: extern "C" fn(*mut Il2CppObject) -> bool =
-        unsafe { std::mem::transmute(addr) };
-    orig_fn(this)
+type PartsCharaMessageBase_OpenFn = extern "C" fn(this: *mut Il2CppObject);
+extern "C" fn PartsCharaMessageBase_Open(this: *mut Il2CppObject) {
+    ACTIVE_BUBBLE_COUNT.fetch_add(1, Ordering::AcqRel);
+    get_orig_fn!(PartsCharaMessageBase_Open, PartsCharaMessageBase_OpenFn)(this);
 }
 
-static mut MESSAGE_TEXT_FIELD: *mut FieldInfo = 0 as _;
-static mut CANVAS_GROUP_FIELD: *mut FieldInfo = 0 as _;
-
-pub fn get_message_text(this: *mut Il2CppObject) -> *mut Il2CppObject {
-    if this.is_null() { return null_mut(); }
-    get_field_object_value(this, unsafe { MESSAGE_TEXT_FIELD })
+type PartsCharaMessageBase_CloseFn = extern "C" fn(this: *mut Il2CppObject);
+extern "C" fn PartsCharaMessageBase_Close(this: *mut Il2CppObject) {
+    // Saturate at 0 — if Close fires without a matching Open (e.g. on first scene load)
+    // we must not go negative.
+    ACTIVE_BUBBLE_COUNT.fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+        Some(if v > 0 { v - 1 } else { 0 })
+    }).ok();
+    get_orig_fn!(PartsCharaMessageBase_Close, PartsCharaMessageBase_CloseFn)(this);
 }
 
-pub fn get_canvas_group(this: *mut Il2CppObject) -> *mut Il2CppObject {
-    if this.is_null() { return null_mut(); }
-    get_field_object_value(this, unsafe { CANVAS_GROUP_FIELD })
-}
-
-pub fn is_active_or_playing(this: *mut Il2CppObject) -> bool {
-    if this.is_null() { return false; }
-    if is_in_play_voice_internal() {
-        return true;
-    }
-    if IsOpen(this) || get_IsPlaying(this) {
-        return true;
-    }
-    let cg = get_canvas_group(this);
-    if !cg.is_null() && CanvasGroup::get_alpha(cg) > 0.01 {
-        return true;
-    }
-    let mt = get_message_text(this);
-    if !mt.is_null() {
-        let go = Component::get_gameObject(mt);
-        if !go.is_null() && GameObject::get_activeSelf(go) {
-            let text = Text::get_text(mt);
-            if !text.is_null() && unsafe { (*text).length } > 0 {
-                return true;
-            }
-        }
-    }
-    false
-}
-
+// ── PlayVoiceInternal hook ────────────────────────────────────────────────────────────────
 type PlayVoiceInternalFn = extern "C" fn(this: *mut Il2CppObject, system_text: *mut Il2CppObject, use_smooth_face_blend: bool);
 extern "C" fn PlayVoiceInternal(this: *mut Il2CppObject, system_text: *mut Il2CppObject, use_smooth_face_blend: bool) {
     let _guard = InPlayVoiceGuard::new();
@@ -108,12 +79,15 @@ pub fn init(umamusume: *const Il2CppImage) {
     unsafe {
         CLASS = PartsCharaMessageBase;
         TYPE_OBJECT = get_type_object_for_class(PartsCharaMessageBase);
-        GET_ISPLAYING_ADDR = get_method_addr(PartsCharaMessageBase, c"get_IsPlaying", 0);
-        IS_OPEN_ADDR = get_method_addr(PartsCharaMessageBase, c"IsOpen", 0);
-        MESSAGE_TEXT_FIELD = get_field_from_name(PartsCharaMessageBase, c"_messageText");
-        CANVAS_GROUP_FIELD = get_field_from_name(PartsCharaMessageBase, c"_canvasGroup");
     }
 
     let play_voice_internal_addr = get_method_addr(PartsCharaMessageBase, c"PlayVoiceInternal", 2);
     new_hook!(play_voice_internal_addr, PlayVoiceInternal);
+
+    // Hook the virtual Open/Close pair on the base class — covers all subclasses.
+    let open_addr = get_method_addr(PartsCharaMessageBase, c"Open", 0);
+    new_hook!(open_addr, PartsCharaMessageBase_Open);
+
+    let close_addr = get_method_addr(PartsCharaMessageBase, c"Close", 0);
+    new_hook!(close_addr, PartsCharaMessageBase_Close);
 }

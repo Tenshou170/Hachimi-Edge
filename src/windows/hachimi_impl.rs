@@ -188,6 +188,9 @@ pub struct Config {
     pub block_minimize_in_full_screen: bool,
     #[serde(default)]
     pub window_always_on_top: bool,
+    #[serde(default)]
+    pub target_fps_unfocused: Option<i32>,
+
     #[serde(default = "Config::default_true")]
     pub discord_rpc: bool,
     #[serde(default)]
