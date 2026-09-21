@@ -828,6 +828,7 @@ impl Gui {
             || !RaceHorseManagerBase::is_race_active()
             || (!race_director::is_gate_open() && !is_dragging)
             || race_director::is_race_finished()
+            || race_director::is_story_race()
         {
             return false;
         }
@@ -1063,6 +1064,7 @@ impl Gui {
             || !RaceHorseManagerBase::is_race_active()
             || !race_director::is_gate_open()
             || race_director::is_race_finished()
+            || race_director::is_story_race()
         {
             return false;
         }

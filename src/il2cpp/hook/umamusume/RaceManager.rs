@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use crate::il2cpp::{
     symbols::{get_field_from_name, get_method_addr, SingletonLike},
     types::*
@@ -24,13 +26,21 @@ def_method_wrapper_fn!(get_RaceMainView, GET_RACEMAINVIEW_ADDR, *mut Il2CppObjec
 def_method_wrapper_fn!(get_IsSkipToRaceEndCutIn, GET_IS_SKIP_TO_RACE_END_CUT_IN_ADDR, bool, this: *mut Il2CppObject);
 def_method_wrapper_fn!(get_IsAfterRaceEndCutIn, GET_IS_AFTER_RACE_END_CUT_IN_ADDR, bool, this: *mut Il2CppObject);
 
+static WAS_FINISHED: AtomicBool = AtomicBool::new(false);
+
 pub fn is_race_finished(race_manager: *mut Il2CppObject) -> bool {
     if race_manager.is_null() { return true; }
-    if get_IsSkipToRaceEndCutIn(race_manager) || get_IsAfterRaceEndCutIn(race_manager) {
-        return true;
+    let skip_cutin = get_IsSkipToRaceEndCutIn(race_manager);
+    let after_cutin = get_IsAfterRaceEndCutIn(race_manager);
+    let finished = skip_cutin || after_cutin;
+    if finished {
+        if !WAS_FINISHED.swap(true, Ordering::Relaxed) {
+            info!("RaceManager::is_race_finished: true (skip_cutin={skip_cutin}, after_cutin={after_cutin})");
+        }
+    } else {
+        WAS_FINISHED.store(false, Ordering::Relaxed);
     }
-    let state = super::RaceManagerReplayBase::get_State(race_manager);
-    state >= 5
+    finished
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
