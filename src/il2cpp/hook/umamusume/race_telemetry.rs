@@ -59,11 +59,25 @@ pub fn collect_frame() {
     // through the result screen. Poll IsFinished() and RaceManager::is_race_finished()
     // here (safe: we're on the game thread and race objects are still alive) so
     // showing() can dismiss the HUD and playback slider immediately.
+    //
+    // race_manager can go null for a single transient frame mid-race, so it's guarded
+    // rather than treated as "race over" - this sets a one-way latch, so a false positive
+    // here would kill the feature for the rest of the race.
     if !race_director::is_race_finished()
         && (HorseRaceInfo::is_finished() || (!race_manager.is_null() && RaceManager::is_race_finished(race_manager)))
     {
         race_director::set_race_finished(true);
         crate::core::gui::reset_race_slider();
+    }
+
+    // Runs ahead of the race_director.enabled gate below since race_slider_showing()/
+    // race_playback_button_showing() also depend on is_story_race() regardless of
+    // whether Race Director itself is enabled. One-shot per race via story_race_known().
+    if !race_manager.is_null()
+        && !race_director::story_race_known()
+        && std::panic::catch_unwind(move || read_story_race_flag(race_manager)).is_err()
+    {
+        error!("race_telemetry: read_story_race_flag PANICKED (caught)");
     }
 
     if !Hachimi::instance().config.load().race_director.enabled {
@@ -80,19 +94,24 @@ pub fn collect_frame() {
 
     if !WAS_ACTIVE.swap(true, Ordering::Relaxed) {
         race_director::on_race_start();
-        // Each isolated behind its own catch_unwind: these two run exactly once, at the
-        // exact moment a race starts, and are the least battle-tested part of this
-        // feature (RaceInfo's RaceCourseSet/Distance field chain and the whole
-        // predicted-result/MasterSkillData chain have no proven-working precedent
-        // elsewhere in this codebase, unlike the per-horse field reads below). Isolating
-        // them means a fault in one doesn't also take out the other, and pins down
-        // exactly which one is at fault in the log if either panics.
+        // Each isolated behind its own catch_unwind: these run exactly once, at the exact
+        // moment a race starts, and are the least battle-tested part of this feature.
+        // Isolating them means a fault in one doesn't take out the other.
+        //
+        // read_story_race_flag() isn't called here - on_race_start() just reset
+        // story_race_known(), so the check above picks it up again next frame.
         if std::panic::catch_unwind(move || read_course_distance(race_manager)).is_err() {
             error!("race_telemetry: read_course_distance PANICKED (caught)");
         }
         if std::panic::catch_unwind(move || read_predicted_result(horse_manager)).is_err() {
             error!("race_telemetry: read_predicted_result PANICKED (caught)");
         }
+    }
+
+    // Story races have a different enough object model that per-horse telemetry isn't
+    // safe to read here - skip it entirely, not just the HUD.
+    if race_director::is_story_race() {
+        return;
     }
 
     let horse_infos = RaceHorseManagerBase::GetHorseRaceInfos(horse_manager);
@@ -138,6 +157,14 @@ fn read_course_distance(race_manager: *mut Il2CppObject) {
     let race_info = RaceManager::get_RaceInfo(race_manager);
     let dist = RaceInfo::course_distance(race_info);
     race_director::set_course_distance(dist);
+}
+
+fn read_story_race_flag(race_manager: *mut Il2CppObject) {
+    let race_info = RaceManager::get_RaceInfo(race_manager);
+    if race_info.is_null() {
+        return;
+    }
+    race_director::set_story_race(RaceInfo::get_IsStoryRace(race_info));
 }
 
 /// horseIndex == gate - 1 (confirmed live by the race-director-plugin this was ported

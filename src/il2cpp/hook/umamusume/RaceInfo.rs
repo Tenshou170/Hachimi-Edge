@@ -9,6 +9,10 @@ impl_addr_wrapper_fn!(set_RaceType, SET_RACETYPE_ADDR, (), this: *mut Il2CppObje
 static mut GET_COURSE_DISTANCE_ADDR: usize = 0;
 impl_addr_wrapper_fn!(get_CourseDistance, GET_COURSE_DISTANCE_ADDR, i32, this: *mut Il2CppObject);
 
+// Detects story-mode races, which several race-overlay features disable themselves for
+static mut GET_IS_STORY_RACE_ADDR: usize = 0;
+impl_addr_wrapper_fn!(get_IsStoryRace, GET_IS_STORY_RACE_ADDR, bool, this: *mut Il2CppObject);
+
 def_field_object_accessors!(get get__raceCourseSet, RACE_COURSE_SET_FIELD, Il2CppObject);
 def_field_value_accessors!(get get__courseSetDistance, COURSE_SET_DISTANCE_FIELD, i32);
 
@@ -19,6 +23,7 @@ pub fn init(umamusume: *const Il2CppImage) {
         GET_RACETYPE_ADDR = get_method_addr(RaceInfo, c"get_RaceType", 0);
         SET_RACETYPE_ADDR = get_method_addr(RaceInfo, c"set_RaceType", 1);
         GET_COURSE_DISTANCE_ADDR = get_method_addr(RaceInfo, c"get_CourseDistance", 0);
+        GET_IS_STORY_RACE_ADDR = get_method_addr(RaceInfo, c"get_IsStoryRace", 0);
         RACE_COURSE_SET_FIELD = get_field_from_name(RaceInfo, c"<RaceCourseSet>k__BackingField");
     }
 

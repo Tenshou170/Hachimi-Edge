@@ -151,6 +151,12 @@ pub fn record_horse(gate: i32, t: HorseTelem, course: f32) {
 // crash fixed in the previous commit).
 static RACE_GATE_OPEN: AtomicBool = AtomicBool::new(false);
 static RACE_FINISHED: AtomicBool = AtomicBool::new(false);
+// Story races misbehave for several race-overlay features; read once per race via
+// RaceInfo.get_IsStoryRace() in race_telemetry::collect_frame().
+static IS_STORY_RACE: AtomicBool = AtomicBool::new(false);
+// Whether set_story_race() has run yet this race - lets it be computed exactly once,
+// independent of config.race_director.enabled.
+static STORY_RACE_KNOWN: AtomicBool = AtomicBool::new(false);
 
 pub fn set_gate_open(v: bool) {
     RACE_GATE_OPEN.store(v, Ordering::Release);
@@ -166,9 +172,22 @@ pub fn is_race_finished() -> bool {
     RACE_FINISHED.load(Ordering::Acquire)
 }
 
+pub fn set_story_race(v: bool) {
+    IS_STORY_RACE.store(v, Ordering::Release);
+    STORY_RACE_KNOWN.store(true, Ordering::Release);
+}
+pub fn is_story_race() -> bool {
+    IS_STORY_RACE.load(Ordering::Acquire)
+}
+pub fn story_race_known() -> bool {
+    STORY_RACE_KNOWN.load(Ordering::Acquire)
+}
+
 pub fn on_race_start() {
     RACE_GATE_OPEN.store(false, Ordering::Release);
     RACE_FINISHED.store(false, Ordering::Release);
+    IS_STORY_RACE.store(false, Ordering::Release);
+    STORY_RACE_KNOWN.store(false, Ordering::Release);
     TELEM.lock().unwrap().clear();
     NAME_MAP.lock().unwrap().clear();
     TRAINER_MAP.lock().unwrap().clear();

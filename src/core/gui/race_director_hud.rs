@@ -224,12 +224,13 @@ fn persist_geometry(ctx: &Context, rect: Rect, saved: &RaceDirectorWindowState, 
 
 // ── visibility gate ──────────────────────────────────────────────────────────────────────
 pub fn showing() -> bool {
-    // All three checks are atomic reads set on the game thread — safe to call from the
-    // render thread with no IL2CPP involvement.
+    // All checks are atomic reads set on the game thread — safe to call from the render
+    // thread with no IL2CPP involvement.
     Hachimi::instance().config.load().race_director.enabled
         && RaceHorseManagerBase::is_race_active()
         && race_director::is_gate_open()
         && !race_director::is_race_finished()
+        && !race_director::is_story_race()
 }
 
 // ── panels ───────────────────────────────────────────────────────────────────────────────

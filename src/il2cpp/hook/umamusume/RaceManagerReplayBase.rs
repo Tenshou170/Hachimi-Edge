@@ -218,12 +218,14 @@ pub fn toggle_playback() {
     }
 }
 
-def_method_wrapper_fn!(get_State, GET_STATE_ADDR, i32, this: *mut Il2CppObject);
-
 type RaceManagerReplayBase_OnClickSkipButtonFn = extern "C" fn(this: *mut Il2CppObject);
 extern "C" fn RaceManagerReplayBase_OnClickSkipButton(this: *mut Il2CppObject) {
-    crate::core::race_director::set_race_finished(true);
-    crate::core::gui::reset_race_slider();
+    // Also fires when skipping the pre-race intro, not just skip-to-end - only treat it
+    // as "race finished" if the gate has already opened.
+    if crate::core::race_director::is_gate_open() {
+        crate::core::race_director::set_race_finished(true);
+        crate::core::gui::reset_race_slider();
+    }
     get_orig_fn!(RaceManagerReplayBase_OnClickSkipButton, RaceManagerReplayBase_OnClickSkipButtonFn)(this);
 }
 
@@ -243,7 +245,6 @@ pub fn init(umamusume: *const Il2CppImage) {
         UPDATE_HORSES_ADDR = get_method_addr(RaceManagerReplayBase, c"UpdateHorses", 1);
         UPDATE_HORSE_DATAS_ADDR = get_method_addr(RaceManagerReplayBase, c"UpdateHorseDatas", 1);
         UPDATE_HORSE_MODELS_ADDR = get_method_addr(RaceManagerReplayBase, c"UpdateHorseModels", 0);
-        GET_STATE_ADDR = get_method_addr(RaceManagerReplayBase, c"get_State", 0);
         EVENT_PLAYER_FIELD = get_field_from_name(RaceManagerReplayBase, c"_eventPlayer");
     }
 
