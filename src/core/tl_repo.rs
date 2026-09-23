@@ -5,7 +5,7 @@ use std::{
     collections::HashSet,
     path::{Path, PathBuf},
     sync::{
-        atomic::{self, AtomicBool, AtomicU64, AtomicUsize},
+        atomic::{self, AtomicBool, AtomicU8, AtomicU64, AtomicUsize},
         mpsc, Arc, Mutex,
     },
     thread,
@@ -269,6 +269,12 @@ pub struct Updater {
     /// files on disk (fresh install). The GUI shows "Downloading..." instead
     /// of "Updating..." in that case; reset whenever a new check starts.
     fresh_install: AtomicBool,
+    /// Queued user intent for a deferred update check (see `PENDING_CHECK_*`).
+    /// Armed when a user-initiated (non-silent) check is suppressed, consumed
+    /// at the start of a check that actually runs, and honored by spawning the
+    /// queued check once a download finishes. Background (silent) checks are
+    /// never queued; the periodic bg thread is their own retry mechanism.
+    pending_check: AtomicU8,
     skipped_etag: Mutex<Option<String>>,
     new_mod_update: ArcSwap<Option<ModUpdateInfo>>,
     mod_progress: ArcSwap<Option<UpdateProgress>>,
@@ -277,10 +283,26 @@ pub struct Updater {
 }
 
 const LOCALIZED_DATA_DIR: &str = "localized_data";
+
+// Values for `Updater::pending_check`.
+const PENDING_CHECK_NONE: u8 = 0;
+const PENDING_CHECK_NORMAL: u8 = 1;
+const PENDING_CHECK_PEDANTIC: u8 = 2;
 const CHUNK_SIZE: usize = 8192; // 8KiB
 
 fn get_repo_cache_path(id: u32) -> PathBuf {
     Hachimi::instance().get_data_path(format!(".tl_repo_cache_{id}"))
+}
+
+/// Resolve the localized-data directory the same way at every call site: the
+/// active repo dir wins, then the manual `localized_data_dir` override.
+/// Mixing the two orders made the standalone addon check hash a different
+/// directory than the one downloads write to and the game loads from, so the
+/// integrity scan flagged every file for a full re-download and never matched.
+fn resolve_ld_dir(hachimi: &Hachimi, config: &crate::core::hachimi::Config) -> Option<PathBuf> {
+    hachimi.get_active_tl_dir().or_else(|| {
+        config.localized_data_dir.as_ref().map(|p| hachimi.get_data_path(p))
+    })
 }
 static NUM_THREADS: Lazy<usize> = Lazy::new(|| {
     let parallelism = thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
@@ -533,19 +555,79 @@ impl Updater {
         });
     }
 
+    /// Arms a deferred check for a suppressed user-initiated (non-silent)
+    /// check, upgrading an already-queued normal check to pedantic. Silent
+    /// (background) checks are never queued: the periodic bg thread retries
+    /// them on its own.
+    fn queue_check(&self, silent: bool, pedantic: bool) {
+        if silent {
+            return;
+        }
+        let value = if pedantic { PENDING_CHECK_PEDANTIC } else { PENDING_CHECK_NORMAL };
+        self.pending_check.fetch_max(value, atomic::Ordering::Relaxed);
+    }
+
+    /// Consumes and returns any queued check intent. Called at the start of a
+    /// check that actually runs (a running check satisfies the intent, so the
+    /// user clicking again later won't trigger a redundant re-check) and at
+    /// the end of a download to honor the intent.
+    fn take_queued_check(&self) -> Option<bool> {
+        match self.pending_check.swap(PENDING_CHECK_NONE, atomic::Ordering::Relaxed) {
+            PENDING_CHECK_PEDANTIC => Some(true),
+            PENDING_CHECK_NORMAL => Some(false),
+            _ => None,
+        }
+    }
+
+    /// Spawns the queued deferred check, if any. Called when a download
+    /// finishes so a user-initiated check that was suppressed while the
+    /// download ran actually happens. Runs on the calling thread: callers
+    /// invoke this after `run_internal`/`run_mod_internal` have returned, so
+    /// the update_check_mutex is free again.
+    fn deferred_check(self: Arc<Self>) {
+        if let Some(pedantic) = self.take_queued_check() {
+            info!("Running deferred update check (Pedantic: {}).", pedantic);
+            self.check_for_updates(pedantic, false);
+        }
+    }
+
+    /// Makes a suppressed (no-op) update check visible instead of a silent
+    /// skip: always logs the reason, and shows a notification for checks that
+    /// weren't run in silent (background) mode.
+    fn report_check_skipped(&self, silent: bool, reason: &str) {
+        info!("Update check skipped: {}", reason);
+        if silent {
+            return;
+        }
+        if let Some(mutex) = Gui::instance() {
+            mutex
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .show_notification(reason);
+        }
+    }
+
     fn check_for_mod_updates_only_internal(&self, pedantic: bool, silent: bool) -> Result<(), Error> {
         let Ok(_guard) = self.update_check_mutex.try_lock() else {
+            self.queue_check(silent, pedantic);
+            self.report_check_skipped(silent, &t!("notification.update_check_skipped_busy"));
             return Ok(());
         };
 
         if self.has_pending_update() || self.has_pending_mod_update() {
+            self.queue_check(silent, pedantic);
+            self.report_check_skipped(silent, &t!("notification.update_check_skipped_pending"));
             return Ok(());
         }
         self.fresh_install.store(false, atomic::Ordering::Relaxed);
 
         if self.is_downloading.load(atomic::Ordering::Relaxed) {
+            self.queue_check(silent, pedantic);
+            self.report_check_skipped(silent, &t!("notification.update_check_skipped_downloading"));
             return Ok(());
         }
+
+        self.take_queued_check();
 
         let hachimi = Hachimi::instance();
         let config = hachimi.config.load();
@@ -557,10 +639,10 @@ impl Updater {
             return Ok(());
         }
 
-        let ld_dir_path = config
-            .localized_data_dir
-            .as_ref()
-            .map(|p| hachimi.get_data_path(p));
+        // Must match the directory downloads write to and load_localized_data
+        // reads from, otherwise the integrity scan checks the wrong files and
+        // flags everything for a full re-download.
+        let ld_dir_path = resolve_ld_dir(&hachimi, &config);
 
         if !silent {
             if let Some(mutex) = Gui::instance() {
@@ -621,17 +703,25 @@ impl Updater {
     fn check_for_updates_internal(&self, pedantic_main: bool, pedantic_mod: bool, silent: bool) -> Result<(), Error> {
         // Prevent multiple update checks running at the same time
         let Ok(_guard) = self.update_check_mutex.try_lock() else {
+            self.queue_check(silent, pedantic_main);
+            self.report_check_skipped(silent, &t!("notification.update_check_skipped_busy"));
             return Ok(());
         };
 
         if self.has_pending_update() || self.has_pending_mod_update() {
+            self.queue_check(silent, pedantic_main);
+            self.report_check_skipped(silent, &t!("notification.update_check_skipped_pending"));
             return Ok(());
         }
         self.fresh_install.store(false, atomic::Ordering::Relaxed);
 
         if self.is_downloading.load(atomic::Ordering::Relaxed) {
+            self.queue_check(silent, pedantic_main);
+            self.report_check_skipped(silent, &t!("notification.update_check_skipped_downloading"));
             return Ok(());
         }
+
+        self.take_queued_check();
 
         let hachimi = Hachimi::instance();
         let config = hachimi.config.load();
@@ -660,12 +750,7 @@ impl Updater {
             hachimi.save_and_reload_config(new_config)?;
         }
         let config = hachimi.config.load(); // in case repo id was migrated
-        let ld_dir_path = hachimi.get_active_tl_dir().or_else(|| {
-            config
-                .localized_data_dir
-                .as_ref()
-                .map(|p| hachimi.get_data_path(p))
-        });
+        let ld_dir_path = resolve_ld_dir(&hachimi, &config);
 
         if !silent {
             if let Some(mutex) = Gui::instance() {
@@ -981,9 +1066,7 @@ impl Updater {
             let mut mod_updates_found = false;
             if !config.disable_mod_downloads && !pedantic_main {
                 if let Some(mod_index_url) = &config.translation_repo_index_mod {
-                    let ld_dir_path = hachimi.get_active_tl_dir().or_else(|| {
-                        config.localized_data_dir.as_ref().map(|p| hachimi.get_data_path(p))
-                    });
+                    let ld_dir_path = resolve_ld_dir(&hachimi, &config);
                     match self.check_for_mod_updates(mod_index_url, pedantic_mod, silent, &config, &ld_dir_path) {
                         Ok(found) => mod_updates_found = found,
                         Err(e) => warn!("Failed to check for mod updates: {}", e),
@@ -1009,7 +1092,8 @@ impl Updater {
             .name("tl_repo_updater".into())
             .stack_size(8 * 1024 * 1024) // increase stack size to 8MB to prevent 0xc0000409 (Stack Buffer Overrun) during single-threaded downloads
             .spawn(move || {
-                if let Err(e) = self.clone().run_internal() {
+                let result = self.clone().run_internal();
+                if let Err(e) = &result {
                     error!("{}", e);
                     self.progress.store(Arc::new(None));
                     self.is_downloading.store(false, atomic::Ordering::Relaxed);
@@ -1024,6 +1108,10 @@ impl Updater {
                         }
                     }
                 }
+
+                // Honor a check that was suppressed while this download was
+                // in progress (user-initiated checks only, see queue_check).
+                self.deferred_check();
             })
             .expect("Failed to spawn updater thread");
     }
@@ -1161,9 +1249,7 @@ impl Updater {
         let config = hachimi.config.load();
         if !update_info.pedantic && !config.disable_mod_downloads {
             if let Some(mod_index_url) = &config.translation_repo_index_mod {
-                let ld_dir_path = hachimi.get_active_tl_dir().or_else(|| {
-                    config.localized_data_dir.as_ref().map(|p| hachimi.get_data_path(p))
-                });
+                let ld_dir_path = resolve_ld_dir(&hachimi, &config);
                 match self.check_for_mod_updates(mod_index_url, false, true, &config, &ld_dir_path) {
                     Ok(true) => {
                         if let Err(e) = self.clone().run_mod_internal() {
@@ -1436,7 +1522,8 @@ impl Updater {
             .name("tl_repo_mod_updater".into())
             .stack_size(8 * 1024 * 1024)
             .spawn(move || {
-                if let Err(e) = self.clone().run_mod_internal() {
+                let result = self.clone().run_mod_internal();
+                if let Err(e) = &result {
                     error!("{}", e);
                     self.mod_progress.store(Arc::new(None));
                     self.is_downloading.store(false, atomic::Ordering::Relaxed);
@@ -1451,6 +1538,10 @@ impl Updater {
                         }
                     }
                 }
+
+                // Honor a check that was suppressed while this download was
+                // in progress (user-initiated checks only, see queue_check).
+                self.deferred_check();
             })
             .expect("Failed to spawn mod updater thread");
     }
@@ -1499,13 +1590,8 @@ impl Updater {
         hachimi.localized_data.store(Arc::new(LocalizedData::default()));
 
         let config = hachimi.config.load();
-        let localized_data_dir = hachimi.get_active_tl_dir().unwrap_or_else(|| {
-            config
-                .localized_data_dir
-                .as_ref()
-                .map(|p| hachimi.get_data_path(p))
-                .unwrap_or_else(|| hachimi.get_data_path(LOCALIZED_DATA_DIR))
-        });
+        let localized_data_dir = resolve_ld_dir(&hachimi, &config)
+            .unwrap_or_else(|| hachimi.get_data_path(LOCALIZED_DATA_DIR));
 
         let disk_check_path = localized_data_dir.parent().unwrap_or(Path::new("."));
         check_available_disk_space(disk_check_path, update_info.size as u64)?;
@@ -1532,6 +1618,15 @@ impl Updater {
 
         if error_count > 0 {
             warn!("Mod update completed with {} errors (non-fatal), cache will be saved with successfully verified files", error_count);
+            let total_files = update_info.files.len();
+            if error_count >= total_files {
+                // Every single file failed verification (corrupt archive/CDN,
+                // hash drift, wrong dir...). Reporting success here hides the
+                // failure and leaves the install broken with no signal.
+                return Err(Error::RuntimeError(
+                    t!("notification.mod_update_all_failed", count = error_count).into_owned(),
+                ));
+            }
         }
 
         if config.localized_data_dir.is_none() {
@@ -1558,7 +1653,14 @@ impl Updater {
 
         if let Some(mutex) = Gui::instance() {
             if let Ok(mut gui) = mutex.lock() {
-                gui.show_notification(&t!("notification.mod_update_completed"));
+                if error_count > 0 {
+                    gui.show_notification(&t!(
+                        "notification.mod_update_completed_with_errors",
+                        count = error_count
+                    ));
+                } else {
+                    gui.show_notification(&t!("notification.mod_update_completed"));
+                }
             }
         }
 
@@ -2461,5 +2563,42 @@ mod tests {
 
         assert!(repo_file.is_some());
         assert_eq!(repo_file.unwrap().path, "assets/story/data/04/1047/storytimeline_041047001.json");
+    }
+
+    /// Verifies the deferred-check intent state machine used to re-run checks
+    /// that were suppressed by an in-progress download: queuing, silent-mode
+    /// bypass, consume-at-start, pedantic-upgrade and take-once semantics.
+    #[test]
+    fn deferred_check_state_machine() {
+        let updater = Updater::default();
+
+        // Silent (background) checks are never queued: the bg thread retries
+        // them on its own.
+        updater.queue_check(true, false);
+        updater.queue_check(true, true);
+        assert_eq!(updater.take_queued_check(), None);
+
+        // A queued normal check is consumed exactly once and reports its kind.
+        updater.queue_check(false, false);
+        assert_eq!(updater.take_queued_check(), Some(false));
+        assert_eq!(updater.take_queued_check(), None);
+
+        // A queued pedantic check reports as pedantic.
+        updater.queue_check(false, true);
+        assert_eq!(updater.take_queued_check(), Some(true));
+
+        // A later pedantic intent upgrades an already-queued normal one,
+        // regardless of queue order; take-once holds either way.
+        updater.queue_check(false, false);
+        updater.queue_check(false, true);
+        assert_eq!(updater.take_queued_check(), Some(true));
+        updater.queue_check(false, true);
+        updater.queue_check(false, false);
+        assert_eq!(updater.take_queued_check(), Some(true));
+
+        // A taken intent can be re-armed by a fresh check (loop safety: each
+        // cycle needs a new user action or a completed download).
+        updater.queue_check(false, false);
+        assert_eq!(updater.take_queued_check(), Some(false));
     }
 }

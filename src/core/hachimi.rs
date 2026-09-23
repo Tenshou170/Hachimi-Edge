@@ -606,7 +606,13 @@ impl Hachimi {
     }
 
     pub fn load_localized_data(&self) {
-        if self.tl_updater.progress().is_some() {
+        // Both download kinds wipe files on disk mid-run and start by clearing
+        // the in-memory data; loading now would return an empty dataset and
+        // make "Reload localized data" look broken until the download ends.
+        if self.tl_updater.progress().is_some()
+            || self.tl_updater.mod_progress().is_some()
+            || self.tl_updater.is_downloading()
+        {
             warn!("Update in progress, not loading localized data");
             return;
         }

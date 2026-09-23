@@ -27,6 +27,14 @@ impl Updater {
     fn check_for_updates_internal(&self) -> Result<bool, Error> {
         // Prevent multiple update checks running at the same time
         let Ok(_guard) = self.update_check_mutex.try_lock() else {
+            // Make the suppressed check visible instead of a silent no-op.
+            info!("Update check skipped: another update check is already running.");
+            if let Some(mutex) = Gui::instance() {
+                mutex
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .show_notification(&t!("notification.update_check_skipped_busy"));
+            }
             return Ok(false);
         };
 
