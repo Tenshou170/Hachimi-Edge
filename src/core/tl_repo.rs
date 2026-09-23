@@ -646,20 +646,30 @@ impl Updater {
 
         if !silent {
             if let Some(mutex) = Gui::instance() {
+                let msg = if pedantic {
+                    t!("notification.repairing_addon_updates")
+                } else {
+                    t!("notification.checking_for_addon_updates")
+                };
                 mutex
                     .lock()
                     .unwrap()
-                    .show_notification(&t!("notification.checking_for_addon_updates"));
+                    .show_notification(&msg);
             }
         }
 
         let found = self.check_for_mod_updates(mod_index_url, pedantic, silent, &config, &ld_dir_path)?;
         if !found && !silent {
             if let Some(mutex) = Gui::instance() {
+                let msg = if pedantic {
+                    t!("notification.nothing_to_repair")
+                } else {
+                    t!("notification.no_addon_updates")
+                };
                 mutex
                     .lock()
                     .unwrap()
-                    .show_notification(&t!("notification.no_addon_updates"));
+                    .show_notification(&msg);
             }
         }
         Ok(())
@@ -755,10 +765,15 @@ impl Updater {
         if !silent {
             if let Some(mutex) = Gui::instance() {
                 // Non-persistent: auto-dismisses after 4s like all other snackbars.
+                let msg = if pedantic_main {
+                    t!("notification.repairing_tl_updates")
+                } else {
+                    t!("notification.checking_for_tl_updates")
+                };
                 mutex
                     .lock()
                     .unwrap()
-                    .show_notification(&t!("notification.checking_for_tl_updates"));
+                    .show_notification(&msg);
             }
         }
 
@@ -1076,10 +1091,15 @@ impl Updater {
 
             if !mod_updates_found && !silent {
                 if let Some(mutex) = Gui::instance() {
+                    let msg = if pedantic_main {
+                        t!("notification.nothing_to_repair")
+                    } else {
+                        t!("notification.no_tl_updates")
+                    };
                     mutex
                         .lock()
                         .unwrap()
-                        .show_notification(&t!("notification.no_tl_updates"));
+                        .show_notification(&msg);
                 }
             }
         }
