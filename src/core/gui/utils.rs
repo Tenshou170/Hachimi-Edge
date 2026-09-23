@@ -28,7 +28,12 @@ pub fn ime_scroll_padding(ctx: &egui::Context) -> f32 {
     if !is_ime_visible() {
         return 0.0;
     }
-    ctx.input(|i| i.viewport_rect().height() * 0.35)
+    // Fixed padding instead of a viewport proportion: with the keyboard open
+    // the area above it is small, and a proportional pad (35% of the full
+    // viewport) exceeded it, flooding the scroll area with blank space and
+    // making scrolling jumpy. ~4 list rows is enough to bring the focused
+    // field above the keyboard in any window.
+    120.0 * get_scale(ctx)
 }
 
 /// Non-Android stub — IME padding is always zero on platforms without a

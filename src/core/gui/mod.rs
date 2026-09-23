@@ -111,6 +111,12 @@ pub struct Gui {
     last_focused: Option<egui::Id>,
     #[cfg(target_os = "android")]
     ime_cooldown: Option<Instant>,
+    /// Monotonic frame counter for the IME zombie check. Must be independent
+    /// of `tmp_frame_count`, which `update_fps` resets every 0.5 s — gating on
+    /// it made the check never fire below 40 FPS, leaving `IS_IME_VISIBLE`
+    /// stuck true (phantom IME padding + broken scrolling in every window).
+    #[cfg(target_os = "android")]
+    ime_frame_tick: u32,
 
     show_menu: bool,
 
@@ -394,6 +400,8 @@ impl Gui {
             last_focused: None,
             #[cfg(target_os = "android")]
             ime_cooldown: None,
+            #[cfg(target_os = "android")]
+            ime_frame_tick: 0,
 
             show_menu: false,
 
@@ -1334,7 +1342,8 @@ impl Gui {
 
             // Zombie check — detect when the JNI keyboard was dismissed
             // externally (e.g. user swiped it away) so we can clean up focus.
-            if self.tmp_frame_count % 20 == 0 {
+            self.ime_frame_tick = self.ime_frame_tick.wrapping_add(1);
+            if self.ime_frame_tick % 20 == 0 {
                 let should_check = if let Some(until) = self.ime_cooldown {
                     Instant::now() > until
                 } else {
