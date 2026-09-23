@@ -55,12 +55,10 @@ impl AppWindow for FirstTimeSetupWindow {
             { self.config.android.menu_open_key = raw; }
         }
 
-        let mut window = new_window(ctx, self.id.with(self.current_page), t!("first_time_setup.title"));
-        if self.current_page == 2 {
-            window = window.fixed_size(subwindow_size(ctx));
-        }
-
-        window
+        // No fixed_size here: pages are short except the repo list, which caps
+        // itself via a max_height ScrollArea — the window can size to content.
+        // (A fixed height left a large empty gap below the Common Settings page.)
+        new_window(ctx, self.id.with(self.current_page), t!("first_time_setup.title"))
             .open(&mut open)
             .show(ctx, |ui| {
                 let allow_next = match self.current_page {
@@ -287,6 +285,7 @@ impl AppWindow for FirstTimeSetupWindow {
                                 egui::ScrollArea::vertical()
                                     .id_salt("setup_common_settings_scroll")
                                     .auto_shrink([false, false])
+                                    .max_height(240.0 * scale)
                                     .show(ui, |ui| {
                                         ui.set_width(avail_w);
 
@@ -300,6 +299,13 @@ impl AppWindow for FirstTimeSetupWindow {
 
                                         // 2. Menu Open Keybind — label top, chip + bind button bottom
                                         //    (matches Config Editor general tab layout)
+                                        // Hidden on touch-only Android devices: no way to press a
+                                        // keybind without a hardware keyboard or gamepad.
+                                        #[cfg(target_os = "android")]
+                                        let show_keybind = crate::android::utils::has_hardware_input_device();
+                                        #[cfg(target_os = "windows")]
+                                        let show_keybind = true;
+                                        if show_keybind {
                                         #[cfg(target_os = "windows")]
                                         let key_label = crate::windows::utils::vk_to_display_label(self.config.windows.menu_open_key);
                                         #[cfg(target_os = "android")]
@@ -354,6 +360,7 @@ impl AppWindow for FirstTimeSetupWindow {
                                             });
                                         });
                                         ConfigEditor::space(ui, scale * 8.0);
+                                        } // end show_keybind
 
                                         // 3. Captions / Subtitles Toggle
                                         ConfigEditor::list_tile_switch(

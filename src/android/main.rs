@@ -60,11 +60,28 @@ pub extern "C" fn JNI_OnLoad(vm: JavaVM, reserved: *mut c_void) -> jint {
         return jni::sys::JNI_VERSION_1_6;
     };
 
+    let vm_ptr = vm.get_java_vm_pointer();
+
+    // Check for the hachimi_internal_files marker BEFORE Hachimi::init():
+    // init resolves game.data_dir through game_impl::get_data_dir, which depends
+    // on the marker result to select the internal files dir (upstream 7b2e994).
+    match unsafe { JavaVM::from_raw(vm_ptr) } {
+        Ok(vm_for_env) => match vm_for_env.get_env() {
+            Ok(mut env) => {
+                game_impl::check_internal_files_marker(&mut env);
+            }
+            Err(e) => {
+                error!("JNI_OnLoad: Failed to get JNI env for marker check: {:?}", e);
+            }
+        },
+        Err(e) => {
+            error!("JNI_OnLoad: Failed to reconstruct JavaVM for marker check: {:?}", e);
+        }
+    }
+
     if !Hachimi::init() {
         return orig_fn(vm, reserved);
     }
-    
-    let vm_ptr = vm.get_java_vm_pointer();
     
     if let Err(_) = JAVA_VM.set(vm) {
         error!("JAVA_VM already initialized");
@@ -74,6 +91,7 @@ pub extern "C" fn JNI_OnLoad(vm: JavaVM, reserved: *mut c_void) -> jint {
     }
     
     let hachimi = Hachimi::instance();
+    game_impl::log_marker_result();
     
     match hachimi.plugins.lock() {
         Ok(mut plugins) => {
@@ -99,7 +117,6 @@ pub extern "C" fn JNI_OnLoad(vm: JavaVM, reserved: *mut c_void) -> jint {
                     if env.exception_check().unwrap_or(false) {
                         let _ = env.exception_clear();
                     }
-                    game_impl::check_internal_files_marker(&mut env);
                     hook::init(env.get_raw());
                     info!("JNI_OnLoad: Hooks initialized successfully");
                 }

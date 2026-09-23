@@ -16,7 +16,7 @@ use arc_swap::ArcSwap;
 use fnv::FnvHashMap;
 use rust_i18n::t;
 use serde::{Deserialize, Serialize};
-use size::Size;
+use size::{Base, Size};
 use thread_priority::ThreadPriority;
 
 use super::{
@@ -180,7 +180,6 @@ struct UpdateInfo {
     cached_files: FnvHashMap<String, String>, // from repo cache
     size: usize,
     // New fields for better user communication, idk why it complains about these never being read
-    #[allow(dead_code)]
     update_size: usize, // Size of changed files only
     #[allow(dead_code)]
     total_size: usize, // Total size of all files (for ZIP downloads)
@@ -189,15 +188,28 @@ struct UpdateInfo {
     index_etag: Option<String>,
 }
 
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+pub enum UpdatePhase {
+    #[default]
+    Checking,
+    Downloading,
+    Extracting
+}
+
 #[derive(Default, Clone)]
 pub struct UpdateProgress {
     pub current: usize,
     pub total: usize,
+    pub phase: UpdatePhase
 }
 
 impl UpdateProgress {
-    pub fn new(current: usize, total: usize) -> UpdateProgress {
-        UpdateProgress { current, total }
+    pub fn new(current: usize, total: usize, phase: UpdatePhase) -> UpdateProgress {
+        UpdateProgress {
+            current,
+            total,
+            phase
+        }
     }
 }
 
@@ -239,6 +251,9 @@ struct ModUpdateInfo {
     #[allow(dead_code)]
     total_size: usize,
     will_use_zip: bool,
+    /// True when no existing addon files were found on disk (fresh install),
+    /// so the UI can say "Downloading..." instead of "Updating addon...".
+    is_fresh_install: bool,
 }
 
 #[derive(Default)]
@@ -250,6 +265,10 @@ pub struct Updater {
     /// True during `run_internal` (actual file download), false during the
     /// check/scan phase. Used by the GUI to show "Checking..." vs "Updating...".
     is_downloading: AtomicBool,
+    /// Set when the queued download targets an install with no existing TL
+    /// files on disk (fresh install). The GUI shows "Downloading..." instead
+    /// of "Updating..." in that case; reset whenever a new check starts.
+    fresh_install: AtomicBool,
     skipped_etag: Mutex<Option<String>>,
     new_mod_update: ArcSwap<Option<ModUpdateInfo>>,
     mod_progress: ArcSwap<Option<UpdateProgress>>,
@@ -297,6 +316,7 @@ fn store_progress(
     last_progress_ms: &AtomicU64,
     current: usize,
     total: usize,
+    phase: UpdatePhase
 ) {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -306,7 +326,7 @@ fn store_progress(
     let last = last_progress_ms.load(atomic::Ordering::Relaxed);
     if current == total || now.saturating_sub(last) >= 16 {
         last_progress_ms.store(now, atomic::Ordering::Relaxed);
-        progress.store(Arc::new(Some(UpdateProgress::new(current, total))));
+        progress.store(Arc::new(Some(UpdateProgress::new(current, total, phase))));
     }
 }
 
@@ -521,6 +541,7 @@ impl Updater {
         if self.has_pending_update() || self.has_pending_mod_update() {
             return Ok(());
         }
+        self.fresh_install.store(false, atomic::Ordering::Relaxed);
 
         if self.is_downloading.load(atomic::Ordering::Relaxed) {
             return Ok(());
@@ -606,6 +627,7 @@ impl Updater {
         if self.has_pending_update() || self.has_pending_mod_update() {
             return Ok(());
         }
+        self.fresh_install.store(false, atomic::Ordering::Relaxed);
 
         if self.is_downloading.load(atomic::Ordering::Relaxed) {
             return Ok(());
@@ -783,7 +805,7 @@ impl Updater {
         for (i, file) in index.files.iter().enumerate() {
             if i % 50 == 0 {
                 self.progress
-                    .store(Arc::new(Some(UpdateProgress::new(i, total_files))));
+                    .store(Arc::new(Some(UpdateProgress::new(i, total_files, UpdatePhase::Checking))));
             }
 
             if file.path.contains("..") || Path::new(&file.path).has_root() {
@@ -898,29 +920,29 @@ impl Updater {
                     if size_ratio >= ZIP_SIZE_WARNING_RATIO {
                         // Warn user about larger ZIP download
                         debug!(
-                            "ZIP download warning: changed={} MB, total={} MB, ratio={:.2}x",
-                            update_size / (1024 * 1024),
-                            total_size / (1024 * 1024),
+                            "ZIP download warning: changed={}, total={}, ratio={:.2}x",
+                            Size::from_bytes(update_size).format().with_base(Base::Base10),
+                            Size::from_bytes(total_size).format().with_base(Base::Base10),
                             size_ratio
                         );
 
                         t!(
                             "tl_update_dialog.content_zip_warning",
-                            changed_size = Size::from_bytes(update_size),
-                            download_size = Size::from_bytes(total_size)
+                            changed_size = Size::from_bytes(update_size).format().with_base(Base::Base10),
+                            download_size = Size::from_bytes(total_size).format().with_base(Base::Base10)
                         )
                     } else {
                         // ZIP is being used but size difference is not significant
                         t!(
                             "tl_update_dialog.content",
-                            size = Size::from_bytes(actual_download_size)
+                            size = Size::from_bytes(actual_download_size).format().with_base(Base::Base10)
                         )
                     }
                 } else {
                     // Incremental update or no warning needed
                     t!(
                         "tl_update_dialog.content",
-                        size = Size::from_bytes(actual_download_size)
+                        size = Size::from_bytes(actual_download_size).format().with_base(Base::Base10)
                     )
                 };
 
@@ -1033,7 +1055,7 @@ impl Updater {
         self.last_progress_ms.store(0, atomic::Ordering::Relaxed);
 
         self.progress
-            .store(Arc::new(Some(UpdateProgress::new(0, update_info.size))));
+            .store(Arc::new(Some(UpdateProgress::new(0, update_info.size, UpdatePhase::Downloading))));
         self.is_downloading.store(true, atomic::Ordering::Relaxed);
         if let Some(mutex) = Gui::instance() {
             if let Ok(mut gui) = mutex.lock() {
@@ -1054,6 +1076,11 @@ impl Updater {
 
         let disk_check_path = localized_data_dir.parent().unwrap_or(Path::new("."));
         check_available_disk_space(disk_check_path, update_info.size as u64)?;
+
+        // Remember whether this is a fresh install so the UI can say
+        // "Downloading..." instead of "Updating..." (also used by the addon
+        // cascade below, which runs as part of this same download session).
+        self.fresh_install.store(update_info.is_new_repo, atomic::Ordering::Relaxed);
 
         if update_info.is_new_repo {
             Self::create_dir(&localized_data_dir, true)?;
@@ -1126,7 +1153,10 @@ impl Updater {
             }
         }
 
-        // After main TL update completes, check for addon updates (non-pedantic, silent).
+        // After main TL update completes, check for addon updates (non-pedantic,
+        // silent) and run any pending download INLINE: we still hold run_mutex
+        // here, so spawning it would be skipped by the single-flight guard and
+        // strand the pending mod update (dead sidebar update buttons).
         // Pedantic TL checks are scoped to TL only and don't cascade.
         let config = hachimi.config.load();
         if !update_info.pedantic && !config.disable_mod_downloads {
@@ -1134,8 +1164,14 @@ impl Updater {
                 let ld_dir_path = hachimi.get_active_tl_dir().or_else(|| {
                     config.localized_data_dir.as_ref().map(|p| hachimi.get_data_path(p))
                 });
-                if let Err(e) = self.check_for_mod_updates(mod_index_url, false, true, &config, &ld_dir_path) {
-                    warn!("Failed to check for addon updates after TL download: {}", e);
+                match self.check_for_mod_updates(mod_index_url, false, true, &config, &ld_dir_path) {
+                    Ok(true) => {
+                        if let Err(e) = self.clone().run_mod_internal() {
+                            warn!("Addon update after TL download failed: {}", e);
+                        }
+                    }
+                    Ok(false) => {}
+                    Err(e) => warn!("Failed to check for addon updates after TL download: {}", e),
                 }
             }
         }
@@ -1220,6 +1256,15 @@ impl Updater {
             Self::populate_existing_mod_files(&mut mod_cache_files, &mod_index.files, ld_dir);
         }
 
+        // Fresh install = no addon files already on disk (cache still empty even
+        // after scanning the install dir). Decides whether the UI labels the
+        // download "Downloading..." or "Updating addon...". Also inherits the
+        // main update's freshness flag: in the post-download cascade of a fresh
+        // main install, the addon is still a first-time download even though the
+        // dir now holds main TL files.
+        let is_fresh_install = mod_cache_files.is_empty()
+            || self.fresh_install.load(atomic::Ordering::Relaxed);
+
         let mut update_files: Vec<RepoFile> = Vec::new();
         let mut update_size: usize = 0;
         let mut total_size: usize = 0;
@@ -1236,7 +1281,7 @@ impl Updater {
             for (i, file) in mod_index.files.iter().enumerate() {
                 if i % 50 == 0 {
                     self.mod_progress
-                        .store(Arc::new(Some(UpdateProgress::new(i, total_files))));
+                        .store(Arc::new(Some(UpdateProgress::new(i, total_files, UpdatePhase::Checking))));
                 }
                 if file.path.contains("..") || Path::new(&file.path).has_root() {
                     warn!("Mod file path '{}' sanitized", file.path);
@@ -1344,6 +1389,7 @@ impl Updater {
             );
             let actual_download_size = if will_use_zip { total_size } else { update_size };
 
+            self.fresh_install.store(is_fresh_install, atomic::Ordering::Relaxed);
             self.new_mod_update.store(Arc::new(Some(ModUpdateInfo {
                 base_url: mod_index.base_url,
                 zip_url: mod_index.zip_url,
@@ -1354,6 +1400,7 @@ impl Updater {
                 update_size,
                 total_size,
                 will_use_zip,
+                is_fresh_install,
             })));
 
             if silent || Gui::instance().is_none() {
@@ -1361,7 +1408,7 @@ impl Updater {
             } else if let Some(mutex) = Gui::instance() {
                 let dialog_message = t!(
                     "tl_update_dialog.content_mod",
-                    size = Size::from_bytes(actual_download_size)
+                    size = Size::from_bytes(actual_download_size).format().with_base(Base::Base10)
                 );
                 mutex
                     .lock()
@@ -1409,14 +1456,16 @@ impl Updater {
     }
 
     fn run_mod_internal(self: Arc<Self>) -> Result<(), Error> {
-        let Ok(_run_guard) = self.run_mutex.try_lock() else {
-            info!("Update already in progress, skipping.");
-            return Ok(());
+        // No run_mutex try_lock here: the post-download addon cascade calls this
+        // directly while run_internal still holds run_mutex, so a try_lock would
+        // strand the pending mod update forever (sidebar update buttons do
+        // nothing until app restart). Consuming new_mod_update atomically via
+        // swap keeps concurrent run_mod() spawns single-flight instead: only
+        // one caller can ever take a given queued update.
+        let mod_info = match self.new_mod_update.swap(Arc::new(None)).as_ref().clone() {
+            Some(info) => info,
+            None => return Ok(())
         };
-        let Some(mod_info) = (**self.new_mod_update.load()).clone() else {
-            return Ok(());
-        };
-        self.new_mod_update.store(Arc::new(None));
         self.last_mod_progress_ms.store(0, atomic::Ordering::Relaxed);
 
         // Reuse UpdateInfo/download machinery via a temporary UpdateInfo
@@ -1435,9 +1484,10 @@ impl Updater {
             modifies_atlas: false,
             index_etag: None,
         };
+        self.fresh_install.store(mod_info.is_fresh_install, atomic::Ordering::Relaxed);
 
         self.mod_progress
-            .store(Arc::new(Some(UpdateProgress::new(0, update_info.size))));
+            .store(Arc::new(Some(UpdateProgress::new(0, update_info.size, UpdatePhase::Downloading))));
         self.is_downloading.store(true, atomic::Ordering::Relaxed);
         if let Some(mutex) = Gui::instance() {
             if let Ok(mut gui) = mutex.lock() {
@@ -1521,7 +1571,7 @@ impl Updater {
         localized_data_dir: &Path,
         cached_files: Arc<Mutex<FnvHashMap<String, String>>>,
     ) -> Result<usize, Error> {
-        let total_size = update_info.size;
+        let total_size = update_info.update_size;
         let current_bytes = Arc::new(AtomicUsize::new(0));
         let non_fatal_error_count = Arc::new(AtomicUsize::new(0));
         let fatal_error = Arc::new(Mutex::new(None::<Error>));
@@ -1603,6 +1653,7 @@ impl Updater {
                                             &updater.last_mod_progress_ms,
                                             prev_size + bytes.len(),
                                             total_size,
+                                            UpdatePhase::Downloading,
                                         );
                                     },
                                 );
@@ -1723,7 +1774,7 @@ impl Updater {
             let progress_bar = Arc::new(move |bytes_read: usize| {
                 let prev_size = downloaded_clone.fetch_add(bytes_read, atomic::Ordering::Relaxed);
                 let current = prev_size + bytes_read;
-                store_progress(&self_clone.mod_progress, &self_clone.last_mod_progress_ms, current, progress_total);
+                store_progress(&self_clone.mod_progress, &self_clone.last_mod_progress_ms, current, progress_total, UpdatePhase::Downloading);
             });
 
             http::download_file_parallel(
@@ -1748,7 +1799,7 @@ impl Updater {
             let zip_file = fs::File::open(&zip_path)?;
             let mmap = Arc::new(unsafe { memmap2::Mmap::map(&zip_file)? });
 
-            let total_size = update_info.size;
+            let total_size = update_info.update_size;
             let current_bytes = Arc::new(AtomicUsize::new(0));
             let non_fatal_error_count = Arc::new(AtomicUsize::new(0));
             let fatal_error = Arc::new(Mutex::new(None::<Error>));
@@ -1854,7 +1905,7 @@ impl Updater {
                                         }
                                         hasher.update(data);
                                         let prev = current_bytes_clone.fetch_add(n, atomic::Ordering::Relaxed);
-                                        store_progress(&updater.mod_progress, &updater.last_mod_progress_ms, prev + n, total_size);
+                                        store_progress(&updater.mod_progress, &updater.last_mod_progress_ms, prev + n, total_size, UpdatePhase::Extracting);
                                     }
                                     Err(_) => {
                                         let _ = fs::remove_file(&tmp_path);
@@ -1931,7 +1982,7 @@ impl Updater {
         localized_data_dir: &Path,
         cached_files: Arc<Mutex<FnvHashMap<String, String>>>,
     ) -> Result<usize, Error> {
-        let total_size = update_info.size;
+        let total_size = update_info.update_size;
         let current_bytes = Arc::new(AtomicUsize::new(0));
         let non_fatal_error_count = Arc::new(AtomicUsize::new(0));
         let fatal_error = Arc::new(Mutex::new(None::<Error>));
@@ -2016,6 +2067,7 @@ impl Updater {
                                             &updater.last_progress_ms,
                                             prev_size + bytes.len(),
                                             total_size,
+                                            UpdatePhase::Downloading,
                                         );
                                     },
                                 );
@@ -2154,7 +2206,7 @@ impl Updater {
             let progress_bar = Arc::new(move |bytes_read: usize| {
                 let prev_size = downloaded_clone.fetch_add(bytes_read, atomic::Ordering::Relaxed);
                 let current = prev_size + bytes_read;
-                store_progress(&self_clone.progress, &self_clone.last_progress_ms, current, progress_total);
+                store_progress(&self_clone.progress, &self_clone.last_progress_ms, current, progress_total, UpdatePhase::Downloading);
             });
 
             http::download_file_parallel(
@@ -2183,7 +2235,7 @@ impl Updater {
             let zip_file = fs::File::open(&zip_path)?;
             let mmap = Arc::new(unsafe { memmap2::Mmap::map(&zip_file)? });
 
-            let total_size = update_info.size;
+            let total_size = update_info.update_size;
             let current_bytes = Arc::new(AtomicUsize::new(0));
             let non_fatal_error_count = Arc::new(AtomicUsize::new(0));
             let fatal_error = Arc::new(Mutex::new(None::<Error>));
@@ -2293,7 +2345,7 @@ impl Updater {
                                         }
                                         hasher.update(data_slice);
                                         let prev_size = current_bytes_clone.fetch_add(read_bytes, atomic::Ordering::Relaxed);
-                                        store_progress(&updater.progress, &updater.last_progress_ms, prev_size + read_bytes, total_size);
+                                        store_progress(&updater.progress, &updater.last_progress_ms, prev_size + read_bytes, total_size, UpdatePhase::Extracting);
                                     }
                                     Err(_) => {
                                         let _ = fs::remove_file(&tmp_path);
@@ -2371,6 +2423,13 @@ impl Updater {
 
     pub fn mod_progress(&self) -> Option<UpdateProgress> {
         (**self.mod_progress.load()).clone()
+    }
+
+    /// True when the queued/current download is a fresh install (no existing
+    /// TL files) rather than an update of an existing install. Reset whenever
+    /// a new update check starts. See `fresh_install` field docs.
+    pub fn fresh_install(&self) -> bool {
+        self.fresh_install.load(atomic::Ordering::Relaxed)
     }
 
     pub fn is_downloading(&self) -> bool {

@@ -18,6 +18,7 @@ previous: "Previous"
 yes: "Yes"
 no: "No"
 ok: "OK"
+unknown: "Unknown"
 remove: "Remove"
 save_changes: "Save changes?"
 retry: "Retry"
@@ -121,14 +122,7 @@ notification:
 first_time_setup:
   title: "First Time Setup"
   welcome_heading: "Welcome"
-  welcome_content: >-
-    Hachimi has been installed! This will guide you through the initial setup process.
-    If you're not interested in using the translation features, you may skip it by closing this dialog.
-
-
-    DISCLAIMER: Hachimi is a community-driven project. All translations were made by various community contributors.
-    It is not developed or endorsed by Cygames, Inc., and violates the game's terms of service. By continuing,
-    you accept that you will be using it at your own risk.
+  welcome_content: "Hachimi Edge has been installed! This wizard will guide you through the initial setup process. If you're not interested in using the translation features, you may skip this by closing the dialog.\n\nDISCLAIMER: Hachimi (and its successor Hachimi Edge) is a community-driven project. All translations are provided by various community contributors. It is neither developed nor endorsed by Cygames, Inc., and violates the game's Terms of Service. By continuing, you accept that you will be using it at your own risk."
   translation_repo_heading: "Translation repo"
   select_translation_repo: "Select a translation repo:"
   no_compatible_repo: "No translation repos are compatible with this game version."
@@ -146,7 +140,7 @@ first_time_setup:
 about:
   title: "About"
   copyright: "© 2024-%{year} LeadRDRK, kairusds and contributors"
-  view_license: "View license"
+  view_license: "View License"
   open_website: "Open website"
   view_source_code: "View source code"
 
@@ -157,7 +151,9 @@ license:
 tl_updater:
   title: "Updating..."
   title_mod: "Updating addon..."
+  downloading: "Downloading..."
   checking: "Checking..."
+  extracting: "Extracting..."
   warning: "Translations will not work while update is in progress"
 
 config_editor:
@@ -186,6 +182,7 @@ config_editor:
 
   # ── Graphics ─────────────────────────────────────────────────────────────
   target_fps: "Target FPS"
+  target_fps_unfocused: "Target FPS when unfocused"
   virtual_resolution_multiplier: "Virtual resolution multiplier"
   ui_scale: "UI scale"
   ui_animation_scale: "UI animation scale"
@@ -375,9 +372,7 @@ tl_update_dialog:
 
 update_prompt_dialog:
   title: "New update available"
-  content: |
-    A new Hachimi update is available (%{version}). Do you want to install it?
-    The game will be restarted in order to apply the update.
+  content: "A new Hachimi Edge update is available (%{version}). Do you want to install it?\nThe game will be restarted in order to apply the update.\n"
   android_content: |
     A new Hachimi Edge update is available (%{version}). Do you want to install it?
 

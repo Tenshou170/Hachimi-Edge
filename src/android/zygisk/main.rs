@@ -42,10 +42,17 @@ unsafe extern "C" fn pre_app_specialize(this: *mut Module, args: *mut AppSpecial
 
 unsafe extern "C" fn post_app_specialize(this: *mut Module, _args: *const AppSpecializeArgs) {
     if (*this).is_game {
+        // Check the hachimi_internal_files marker BEFORE Hachimi::init(): init
+        // resolves game.data_dir through game_impl::get_data_dir, which depends
+        // on the marker result to select the internal files dir.
+        let mut env = unsafe { JNIEnv::from_raw((*this).env).unwrap() };
+        game_impl::check_internal_files_marker(&mut env);
+
         if !Hachimi::init() {
             return;
         }
         let hachimi = Hachimi::instance();
+        game_impl::log_marker_result();
         let _ = hachimi.plugins.lock().map(|mut plugins| {
             *plugins = plugin_loader::load_libraries();
         });

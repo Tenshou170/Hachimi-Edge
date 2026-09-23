@@ -18,6 +18,7 @@ previous: "Quay về"
 yes: "Có"
 no: "Không"
 ok: "OK"
+unknown: "Không xác định"
 remove: "Xóa"
 save_changes: "Lưu thay đổi?"
 retry: "Thử lại"
@@ -152,7 +153,9 @@ license:
 tl_updater: 
   title: "Đang cập nhật..."
   title_mod: "Đang cập nhật addon..."
+  downloading: "Đang tải..."
   checking: "Đang kiểm tra..."
+  extracting: "Đang giải nén..."
   warning: "Bản dịch sẽ không hoạt động trong lúc đang cập nhật"
 
 config_editor: 
@@ -181,6 +184,7 @@ config_editor:
 
   # ── Graphics ─────────────────────────────────────────────────────────────
   target_fps: "Đặt FPS"
+  target_fps_unfocused: "FPS mục tiêu khi cửa sổ không hoạt động"
   virtual_resolution_multiplier: "Số nhân độ phân giải ảo"
   ui_scale: "Tỷ lệ UI"
   ui_animation_scale: "Tỷ lệ hoạt ảnh UI"
@@ -239,6 +243,15 @@ config_editor:
   race_playback_button: "Nút tạm dừng/tiếp tục phát lại cuộc đua"
   race_playback_key_enable: "Bật phím tắt tạm dừng/tiếp tục phát lại cuộc đua"
   race_playback_key: "Phím tắt tạm dừng/tiếp tục phát lại cuộc đua"
+  race_director_enabled: "HUD đạo diễn cuộc đua"
+  race_director_show_tower: "Tháp thời gian"
+  race_director_show_followed: "Bảng theo dõi Uma"
+  race_director_show_winprob: "Khả năng chiến thắng"
+  race_director_show_predicted: "Vị trí máy chủ dự đoán"
+  race_director_show_predicted_desc: "Hiển thị thứ tự về đích được máy chủ tính toán sẵn từ đầu cuộc đua - có spoiler, mặc định tắt."
+  race_director_opacity: "Độ mờ nền HUD"
+  race_director_reset_windows: "Đặt lại vị trí cửa sổ"
+  race_director_reset: "Đặt lại"
   live_slider_always_show: "Luôn hiển thị thanh điều khiển Live"
   live_playback_loop: "Lặp lại buổi biểu diễn trực tiếp"
   trainer_live_landscape: "Chế độ xoay ngang khi xem live MeniShuki"

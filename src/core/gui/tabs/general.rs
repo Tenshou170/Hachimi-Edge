@@ -54,7 +54,13 @@ pub fn render(_editor: &ConfigEditor, config: &mut crate::core::hachimi::Config,
 
     // Hotkey: setting name on top, chip + "Bind" button on the row below.
     // Uses the unified Set Keybind dialog (same capture path on both platforms).
-    if !ConfigEditor::row_filtered(&t!("config_editor.menu_open_key")) {
+    // Hidden on touch-only Android devices: no way to press a keybind without
+    // a hardware keyboard or gamepad.
+    #[cfg(target_os = "android")]
+    let show_keybind = crate::android::utils::has_hardware_input_device();
+    #[cfg(target_os = "windows")]
+    let show_keybind = true;
+    if show_keybind && !ConfigEditor::row_filtered(&t!("config_editor.menu_open_key")) {
         ConfigEditor::maybe_draw_category_header(ui);
         #[cfg(target_os = "windows")]
         let key_label = crate::windows::utils::vk_to_display_label(config.windows.menu_open_key);

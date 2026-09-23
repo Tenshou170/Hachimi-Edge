@@ -13,6 +13,14 @@ use crate::il2cpp::hook::UnityEngine_CoreModule::Texture::AnisoLevel;
 pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, ui: &mut egui::Ui) {
 
     ConfigEditor::list_tile_option_slider(ui, &t!("config_editor.target_fps"), &mut config.target_fps, 30..=240);
+
+    // Unfocused FPS cap — independent of the focused Target FPS option.
+    #[cfg(target_os = "windows")]
+    {
+        ConfigEditor::list_tile_option_slider(
+            ui, &t!("config_editor.target_fps_unfocused"), &mut config.windows.target_fps_unfocused, 1..=240
+        );
+    }
     ConfigEditor::list_tile_slider(ui, t!("config_editor.virtual_resolution_multiplier"), &mut config.virtual_res_mult, 1.0..=4.0, 0.1, 1);
     ConfigEditor::list_tile_slider(ui, t!("config_editor.ui_scale"), &mut config.ui_scale, 0.1..=10.0, 0.05, 2);
     ConfigEditor::list_tile_slider(ui, t!("config_editor.ui_animation_scale"), &mut config.ui_animation_scale, 0.1..=10.0, 0.1, 1);

@@ -197,7 +197,7 @@ impl Hachimi {
             target_fps: AtomicI32::new(config.target_fps.map(|v| v.clamp(30, 240)).unwrap_or(-1)),
 
             #[cfg(target_os = "windows")]
-            target_fps_unfocused: AtomicI32::new(config.windows.target_fps_unfocused.map(|v| v.clamp(10, 240)).unwrap_or(-1)),
+            target_fps_unfocused: AtomicI32::new(config.windows.target_fps_unfocused.map(|v| v.clamp(1, 240)).unwrap_or(-1)),
 
             #[cfg(target_os = "windows")]
             vsync_count: AtomicI32::new(config.windows.vsync_count),
@@ -383,7 +383,7 @@ impl Hachimi {
                 std::sync::atomic::Ordering::Relaxed,
             );
             self.target_fps_unfocused.store(
-                new_config.windows.target_fps_unfocused.map(|v| v.clamp(10, 240)).unwrap_or(-1),
+                new_config.windows.target_fps_unfocused.map(|v| v.clamp(1, 240)).unwrap_or(-1),
                 std::sync::atomic::Ordering::Relaxed,
             );
             self.window_always_on_top.store(
@@ -431,7 +431,7 @@ impl Hachimi {
                 std::sync::atomic::Ordering::Relaxed,
             );
             self.target_fps_unfocused.store(
-                config.windows.target_fps_unfocused.map(|v| v.clamp(10, 240)).unwrap_or(-1),
+                config.windows.target_fps_unfocused.map(|v| v.clamp(1, 240)).unwrap_or(-1),
                 std::sync::atomic::Ordering::Relaxed,
             );
             self.window_always_on_top.store(

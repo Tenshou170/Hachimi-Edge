@@ -35,6 +35,7 @@ use egui_scale::EguiScale;
 use fnv::FnvHashSet;
 use once_cell::sync::{Lazy, OnceCell};
 use rust_i18n::t;
+use size::{Base, Size, Style};
 
 use crate::il2cpp::{
     ext::StringExt,
@@ -58,7 +59,7 @@ use crate::il2cpp::hook::UnityEngine_CoreModule::QualitySettings;
 use super::{
     hachimi::{self, Language, REPO_PATH, WEBSITE_URL},
     http::AsyncRequest,
-    tl_repo::RepoInfo,
+    tl_repo::{RepoInfo, UpdatePhase},
     utils::SendPtr,
     Hachimi,
 };
@@ -145,6 +146,7 @@ static INSTANCE: OnceCell<Mutex<Gui>> = OnceCell::new();
 pub static IS_CONSUMING_INPUT: AtomicBool = AtomicBool::new(false);
 pub static WANTS_INPUT: AtomicBool = AtomicBool::new(false);
 pub static GUI_INPUT_ACTIVE: AtomicBool = AtomicBool::new(false);
+pub static EGUI_TYPING: AtomicBool = AtomicBool::new(false);
 pub static IS_LIVE_SCENE: AtomicBool = AtomicBool::new(false);
 pub static IS_LIVE_SLIDER_ACTIVE: AtomicBool = AtomicBool::new(false);
 static LIVE_SLIDER_SCENE_HANDLE: atomic::AtomicI32 = atomic::AtomicI32::new(-1);
@@ -1475,6 +1477,13 @@ impl Gui {
             atomic::Ordering::Release,
         );
 
+        // EGUI_TYPING: true while the user is typing into an egui text field. The OS-level
+        // key hooks use this to suppress mod keybinds so typing is not intercepted.
+        EGUI_TYPING.store(
+            self.context.wants_keyboard_input(),
+            atomic::Ordering::Release,
+        );
+
         self.context.end_pass()
     }
 
@@ -2501,6 +2510,7 @@ impl Gui {
         };
 
         let ratio = progress.current as f32 / progress.total as f32;
+        let show_sizes = matches!(progress.phase, UpdatePhase::Downloading | UpdatePhase::Extracting);
         let (safe_top, _) = get_safe_insets(ctx);
 
         egui::Area::new("update_progress".into())
@@ -2514,10 +2524,18 @@ impl Gui {
                 let pad_h = 16.0 * scale;
                 let pad_v = 10.0 * scale; // Align with splash card
                 let is_downloading = Hachimi::instance().tl_updater.is_downloading();
-                let title = if is_mod {
-                    t!("tl_updater.title_mod")
+                let title = if progress.phase == UpdatePhase::Extracting {
+                    t!("tl_updater.extracting")
                 } else if is_downloading {
-                    t!("tl_updater.title")
+                    // Fresh install (no existing TL files) is a download, not an
+                    // update — applies to the main repo and the addon cascade alike.
+                    if Hachimi::instance().tl_updater.fresh_install() {
+                        t!("tl_updater.downloading")
+                    } else if is_mod {
+                        t!("tl_updater.title_mod")
+                    } else {
+                        t!("tl_updater.title")
+                    }
                 } else {
                     t!("tl_updater.checking")
                 };
@@ -2566,6 +2584,27 @@ impl Gui {
                                 .value(ratio)
                                 .size(egui::Vec2::new(bar_w, 4.0 * scale)),
                         );
+
+                        if show_sizes {
+                            ui.add_space(4.0 * scale);
+                            let size_text = if progress.total > 0 {
+                                format!(
+                                    "{}/{}",
+                                    Size::from_bytes(progress.current).format().with_base(Base::Base10).with_style(Style::Abbreviated),
+                                    Size::from_bytes(progress.total).format().with_base(Base::Base10).with_style(Style::Abbreviated)
+                                )
+                            } else {
+                                format!(
+                                    "{}",
+                                    Size::from_bytes(progress.current).format().with_base(Base::Base10).with_style(Style::Abbreviated)
+                                )
+                            };
+                            ui.label(
+                                egui::RichText::new(size_text)
+                                    .font(egui::FontId::proportional(11.0 * scale))
+                                    .color(get_global_color("onSurfaceVariant")),
+                            );
+                        }
 
                         if is_downloading {
                             ui.add_space(4.0 * scale);
@@ -2675,6 +2714,10 @@ impl Gui {
 
     pub fn is_gui_input_active_atomic() -> bool {
         GUI_INPUT_ACTIVE.load(atomic::Ordering::Acquire)
+    }
+
+    pub fn is_egui_typing_atomic() -> bool {
+        EGUI_TYPING.load(atomic::Ordering::Acquire)
     }
 
     pub fn is_consuming_input(&self) -> bool {

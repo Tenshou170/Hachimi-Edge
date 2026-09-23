@@ -18,6 +18,7 @@ previous: "Anterior"
 yes: "Sim"
 no: "Não"
 ok: "OK"
+unknown: "Desconhecido"
 remove: "Remover"
 save_changes: "Salvar mudanças?"
 retry: "Tentar novamente"
@@ -74,7 +75,7 @@ menu:
   graphics_heading: "\ueb97 Gráficos"
   fps_label: "FPS"
   vsync_label: "VSync"
-  stay_on_top: "Mostrar no topo"
+  stay_on_top: "Sempre no topo"
   keep_screen_on: "Evitar tempo limite da tela"
   translation_heading: "\ue894 Tradução"
   reload_localized_data: "\ue5d5 Recarregar tradução"
@@ -105,7 +106,7 @@ notification:
   no_tl_updates: "Nenhuma atualização de tradução encontrada."
   no_addon_updates: "Nenhuma atualização de addon encontrada."
   update_failed: "Atualização falhou: %{reason}"
-  update_completed: "Atualização foi realizada."
+  update_completed: "Atualização concluída."
   mod_update_completed: "Atualização de addon foi realizada."
   errors_during_update: "%{count} erros aconteceram durante a atualização. Verifique os registros para mais detalhes."
   checking_for_updates: "Procurando atualizações..."
@@ -114,7 +115,7 @@ notification:
   press_to_set_menu_key: "Pressione uma tecla para definir um atalho para o menu."
   menu_open_key_set: "Tecla definida para abrir o menu: %{key}"
   ipc_softreset_exec: "Soft-restart remoto (IPC) realizado."
-  atlas_workaround_reset: "Arquivos de atlas modificados: solução temporária desabilitada."
+  atlas_workaround_reset: "Os arquivos de atlas foram modificados: solução temporária desabilitada."
   asset_mismatch: "Alguns assets foram desabilitados devido a uma atualização. Verifique os registros para mais detalhes."
   error_occurred: "Ocorreu um erro: %{reason}"
 
@@ -156,8 +157,10 @@ license:
 tl_updater: 
   title: "Atualizando..."
   title_mod: "Atualizando addon..."
+  downloading: "Baixando..."
   checking: "Verificando..."
-  warning: "As traduções não irão funcionar enquanto uma atualização estiver sendo realizada"
+  extracting: "Extraindo..."
+  warning: "As traduções não irão funcionar enquanto uma atualização estiver sendo realizada."
 
 config_editor: 
   title: "Editor de configurações"
@@ -168,7 +171,7 @@ config_editor:
   advanced_settings_heading: "Avançado"
   experimental_settings_heading: "Experimental"
   developer_settings_heading: "Desenvolvedor"
-  restore_defaults: "Restaurar Padrão"
+  restore_defaults: "Restaurar padrão"
 
   # ── General ──────────────────────────────────────────────────────────────
   language: "Idioma"
@@ -179,19 +182,20 @@ config_editor:
     Se não deseja isso, clique em OK e DESABILITE esta opção.
   gui_scale: "Escala da sobreposição"
   gui_landscape_ratio: "Proporção da escala da sobreposição (paisagem)"
-  menu_open_key: "Atalho para abrir o menu"
+  menu_open_key: "Atalho para abrir o menu:"
   menu_open_key_set: "Definir"
   recommended_ui_scale: "Aplicar escala de UI recomendada"
 
   # ── Graphics ─────────────────────────────────────────────────────────────
-  target_fps: "FPS Alvo"
+  target_fps: "FPS alvo"
+  target_fps_unfocused: "FPS alvo com a janela fora de foco"
   virtual_resolution_multiplier: "Multiplicador virtual de resolução"
   ui_scale: "Escala da UI"
   ui_animation_scale: "Escala das animações da UI"
   msaa: "MSAA"
-  render_scale: "Escala de Renderização"
+  render_scale: "Escala de renderização"
   aniso_level: "Filtragem Anisotrópica"
-  shadow_resolution: "Resolução das Sombras"
+  shadow_resolution: "Resolução das sombras"
   graphics_quality: "Qualidade dos gráficos"
   vsync: "VSync"
   auto_full_screen: "Tela cheia automática"
@@ -243,6 +247,15 @@ config_editor:
   race_playback_button: "Botão de pause nas corridas"
   race_playback_key_enable: "Atalho para pausar as corridas"
   race_playback_key: "Tecla para pausar as corridas"
+  race_director_enabled: "HUD do diretor de corridas"
+  race_director_show_tower: "Torre de tempo"
+  race_director_show_followed: "Painel da umamusume seguida"
+  race_director_show_winprob: "Probabilidade de vitória"
+  race_director_show_predicted: "Posições esperadas do servidor"
+  race_director_show_predicted_desc: "Mostra a ordem de chegada pré-calculada pelo servidor no início da corrida - cuidado, é spoiler; desativado por padrão."
+  race_director_opacity: "Opacidade do fundo do HUD"
+  race_director_reset_windows: "Redefinir posições das janelas"
+  race_director_reset: "Redefinir"
   live_slider_always_show: "Sempre mostrar controle do Live"
   live_playback_loop: "Repetir apresentações ao vivo"
   trainer_live_landscape: "Modo paisagem no show da música MeniShuki"
@@ -270,9 +283,9 @@ config_editor:
   # ── Advanced ─────────────────────────────────────────────────────────────
   enable_file_logging: "Habilitar arquivo de registro"
   enable_ipc: "Habilitar IPC"
-  ipc_listen_all: "IPC: Escutar Tudo"
-  ipv4_only: "Utilizar apenas IPv4 (ureq)"
-  meta_index_url: "URL dos Metadados das Traduções"
+  ipc_listen_all: "IPC: Escutar todas as interfaces"
+  ipv4_only: "Usar apenas IPv4 (ureq)"
+  meta_index_url: "URL dos metadados das traduções"
   localized_data_dir: "Diretório de dados localizados"
   translator_mode: "Modo tradutor"
   apply_atlas_workaround: "Solução temporária para arquivos de Atlas"
@@ -376,16 +389,11 @@ update_prompt_dialog:
 
 updating_dialog: 
   title: "Atualizando"
-  content: "Baixando atualização, o jogo reiniciará brevemente..."
+  content: "Baixando atualização, o jogo reiniciará em breve..."
 
 steam_overlay_conflict_dialog: 
   title: "Aviso"
-  content: >-
-    Compras podem não funcionar com a sobreposição do Hachimi habilitada. Se a sobreposição da Steam estiver aparecendo
-    por cima desta tela, ignore esta mensagem e pressione Não. Se nada tiver acontecido, pressione Sim
-    para desabilitar a sobreposição do Hachimi temporariamente. O jogo será fechado e, ao abri-lo novamente,
-    a sobreposição do Hachimi estará desabilitada e você conseguirá realizar a sua compra normalmente. Após isso,
-    basta reiniciar o seu jogo para habilitar a sobreposição do Hachimi novamente.
+  content: "Compras podem não funcionar com a sobreposição do Hachimi habilitada. Se a sobreposição da Steam estiver aparecendo por cima desta tela, ignore esta mensagem e pressione Não. Se nada tiver acontecido, pressione Sim para desabilitar a sobreposição do Hachimi temporariamente. O jogo será fechado e, ao abri-lo novamente, a sobreposição do Hachimi estará desabilitada e você conseguirá realizar sua compra normalmente. Após isso, basta reiniciar seu jogo para habilitar a sobreposição do Hachimi novamente."
 key_names: 
   left: "Seta esquerda"
   right: "Seta direita"

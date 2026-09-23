@@ -10,9 +10,12 @@ extern "C" fn SetupAndOpen(
     this: *mut Il2CppObject, dialog_data: *mut Il2CppObject, on_selected: *mut Il2CppObject,
     on_cancel: *mut Il2CppObject, is_special_unlock_race: bool, race_info: *mut Il2CppObject
 ) {
-    let force_allow_dynamic_camera = Hachimi::instance().config.load().force_allow_dynamic_camera;
+    // Don't spoof LoH race type for story races (upstream #50)
+    let force_allow_dynamic_camera = Hachimi::instance().config.load().force_allow_dynamic_camera
+        && !race_info.is_null()
+        && !RaceInfo::get_IsStoryRace(race_info);
     let mut orig_race_type = None;
-    if force_allow_dynamic_camera && !race_info.is_null() {
+    if force_allow_dynamic_camera {
         orig_race_type = Some(RaceInfo::get_RaceType(race_info));
         RaceInfo::set_RaceType(race_info, 16); // spoof LoH race
     }

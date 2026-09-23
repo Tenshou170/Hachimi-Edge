@@ -104,6 +104,94 @@ pub fn set_keyboard_visible(visible: bool) {
     }
 }
 
+/// True when at least one non-virtual hardware input device with keyboard, D-pad
+/// or gamepad capabilities is attached. Used to gate hotkey-related UI on
+/// Android — touch-only devices have no way to press a keybind.
+///
+/// Cached for 5 seconds so it can be called from UI draw code every frame
+/// without doing JNI device enumeration per frame; still re-evaluates often
+/// enough to pick up Bluetooth keyboards/gamepads after they connect.
+pub fn has_hardware_input_device() -> bool {
+    use std::time::{Instant, Duration};
+
+    static CACHE: std::sync::Mutex<Option<(Instant, bool)>> = std::sync::Mutex::new(None);
+    const TTL: Duration = Duration::from_secs(5);
+
+    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((at, val)) = *cache {
+        if at.elapsed() < TTL {
+            return val;
+        }
+    }
+
+    let val = has_hardware_input_device_impl();
+    *cache = Some((Instant::now(), val));
+    val
+}
+
+fn has_hardware_input_device_impl() -> bool {
+    let vm = match java_vm() {
+        Some(v) => v,
+        None => return false
+    };
+    let mut env = match vm.attach_current_thread_as_daemon() {
+        Ok(e) => e,
+        Err(_) => return false
+    };
+
+    (|| -> jni::errors::Result<bool> {
+        let activity = get_activity(unsafe { env.unsafe_clone() }).ok_or(jni::errors::Error::JavaException)?;
+        let devices = env.call_method(&activity, "getDeviceIds", "()[I", &[])?.l()?;
+        let arr: jni::objects::JPrimitiveArray<jni::sys::jint> = devices.into();
+        let len = env.get_array_length(&arr)?;
+        if len == 0 {
+            return Ok(false);
+        }
+
+        let mut ids = vec![0i32; len as usize];
+        env.get_int_array_region(&arr, 0, &mut ids)?;
+
+        let api_level = crate::android::hook::cached_api_level();
+
+        // InputDevice.SOURCE_KEYBOARD / SOURCE_DPAD / SOURCE_GAMEPAD
+        const SOURCE_KEYBOARD: i32 = 0x00000101;
+        const SOURCE_DPAD: i32 = 0x00010001;
+        const SOURCE_GAMEPAD: i32 = 0x00000401;
+
+        for id in ids {
+            let device = env.call_static_method(
+                "android/view/InputDevice",
+                "getDevice",
+                "(I)Landroid/view/InputDevice;",
+                &[JValue::Int(id)]
+            )?.l()?;
+            if device.is_null() {
+                continue;
+            }
+
+            // Skip on-screen/virtual devices (soft keyboard etc.). API 16+.
+            if api_level >= 16 {
+                let is_virtual = env.call_method(&device, "isVirtual", "()Z", &[])?.z()?;
+                if is_virtual {
+                    continue;
+                }
+            }
+
+            let sources = env.call_method(&device, "getSources", "()I", &[])?.i()?;
+            if sources & (SOURCE_KEYBOARD | SOURCE_DPAD | SOURCE_GAMEPAD) != 0 {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    })().unwrap_or_else(|_| {
+        if env.exception_check().unwrap_or(false) {
+            let _ = env.exception_describe();
+            let _ = env.exception_clear();
+        }
+        false
+    })
+}
+
 pub fn check_keyboard_status() -> bool {
     let vm = match java_vm() {
         Some(v) => v,

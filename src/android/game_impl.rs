@@ -89,10 +89,18 @@ pub fn check_internal_files_marker(env: &mut JNIEnv) {
         let _ = env.exception_clear();
     }
 
-    if result.is_some() {
-        info!("hachimi_internal_files marker found, using the app's internal files dir");
-    }
     _ = INTERNAL_FILES_DIR.set(result);
+}
+
+/// Logs the cached marker result. Call this AFTER log init (e.g. once
+/// Hachimi::init has set up logcat) — the check itself runs before the logger
+/// exists, so diagnostics emitted there would be silently dropped.
+pub fn log_marker_result() {
+    match INTERNAL_FILES_DIR.get() {
+        Some(Some(_)) => info!("hachimi_internal_files marker found, using the app's internal files dir"),
+        Some(None) => info!("hachimi_internal_files marker not found, using /sdcard/Android/media data dir"),
+        None => warn!("hachimi_internal_files marker check never ran, using /sdcard/Android/media data dir")
+    }
 }
 
 fn get_application<'local>(env: &mut JNIEnv<'local>) -> Option<JObject<'local>> {

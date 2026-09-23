@@ -18,6 +18,7 @@ previous: "Atrás"
 yes: "Sí"
 no: "No"
 ok: "OK"
+unknown: "Desconocido"
 remove: "Quitar"
 save_changes: "¿Guardar los cambios?"
 retry: "Reintentar"
@@ -134,7 +135,7 @@ first_time_setup:
   translation_repo_heading: "Repositorio de traducción"
   select_translation_repo: "Selecciona un repositorio de traducción:"
   no_compatible_repo: "No se han encontrado repositorios compatibles con esta versión del juego."
-  skip_translation: "Omitir traducciones"
+  skip_translation: "Omitir traducciones."
   common_settings_heading: "Ajustes comunes"
   common_settings_content: >-
     Configura las preferencias esenciales de juego y visuales. Puedes cambiarlas en cualquier momento en el Editor de configuración.
@@ -158,8 +159,10 @@ license:
 tl_updater: 
   title: "Actualizando..."
   title_mod: "Actualizando addon..."
+  downloading: "Descargando..."
   checking: "Comprobando..."
-  warning: "Las traducciones dejarán de funcionar mientras se actualizan"
+  extracting: "Extrayendo..."
+  warning: "Las traducciones no funcionarán mientras se actualizan"
 
 config_editor: 
   title: "Editor de Configuración"
@@ -187,9 +190,10 @@ config_editor:
 
   # ── Graphics ─────────────────────────────────────────────────────────────
   target_fps: "FPS objetivo"
+  target_fps_unfocused: "FPS objetivo cuando la ventana no está activa"
   virtual_resolution_multiplier: "Multiplicador de resolución virtual"
-  ui_scale: "Escala del UI"
-  ui_animation_scale: "Escala de animación del UI"
+  ui_scale: "Escala de la UI"
+  ui_animation_scale: "Escala de animación de la UI"
   msaa: "MSAA"
   render_scale: "Escala de renderizado"
   aniso_level: "Filtrado anisotrópico"
@@ -225,7 +229,7 @@ config_editor:
   story_choice_auto_select_delay: "Retraso de selección automática (historia)"
   story_text_speed_multiplier: "Velocidad del texto (historia)"
   force_allow_dynamic_camera: "Permitir siempre la cámara dinámica"
-  live_theater_allow_same_chara: "Permitir personajes iguales en Live Theater"
+  live_theater_allow_same_chara: "Permitir personajes duplicados en el Live Theater"
   disable_tap_effect: "Desactivar efecto de toque"
   live_vocals_swap: "Cambiar vocalistas"
   live_vocals_swap_character_n: "Personaje %{index}"
@@ -245,6 +249,15 @@ config_editor:
   race_playback_button: "Botón de pausa/reanudación de la repetición de carreras"
   race_playback_key_enable: "Activar tecla para pausar/reanudar la repetición de carreras"
   race_playback_key: "Tecla para pausar/reanudar la repetición de carreras"
+  race_director_enabled: "HUD del director de carreras"
+  race_director_show_tower: "Torre de tiempos"
+  race_director_show_followed: "Panel de la umamusume seguida"
+  race_director_show_winprob: "Probabilidad de victoria"
+  race_director_show_predicted: "Posiciones esperadas del servidor"
+  race_director_show_predicted_desc: "Muestra el orden de llegada precalculado por el servidor al inicio de la carrera: ojo, es un spoiler; desactivado por defecto."
+  race_director_opacity: "Opacidad del fondo del HUD"
+  race_director_reset_windows: "Restablecer posiciones de las ventanas"
+  race_director_reset: "Restablecer"
   live_slider_always_show: "Mostrar siempre el control de Live"
   live_playback_loop: "Repetir actuaciones en vivo"
   trainer_live_landscape: "Modo horizontal en el Live MeniShuki"
@@ -273,7 +286,7 @@ config_editor:
   enable_file_logging: "Guardar registro en un archivo"
   enable_ipc: "Habilitar IPC"
   ipc_listen_all: "IPC escuchar todo"
-  ipv4_only: "Usar IPv4 (sólo en ureq)"
+  ipv4_only: "Usar IPv4 (solo en ureq)"
   meta_index_url: "URL para las traducciones (meta)"
   localized_data_dir: "Directorio de datos localizados"
   translator_mode: "Modo traductor"
@@ -307,13 +320,7 @@ config_editor:
   unlock_live_chara: "Desbloquear personajes/canciones del Live Theater"
   # Experimental
   auto_translate_stories: "Auto-traducir historias"
-  auto_tl_warning: >-
-    Nota: Esta función no funciona por sí sola; requiere configuración externa.
-    Active esta opción solo si tiene instalado un servidor de traducción compatible
-    instalado en tu ordenador o un servicio en la nube que exponga una API como
-    py3translationServer o Sugoi Toolkit. Sin un servidor activo, no obtendrás
-    traducciones adicionales y el rendimiento del juego podría verse afectado.
-    Por favor, déjela desactivada si no dispone de un servidor de traducción.
+  auto_tl_warning: "Nota: Esta función no funciona por sí sola; requiere configuración externa. Activa esta opción solo si tiene instalado un servidor de traducción compatible en tu ordenador o un servicio en la nube que exponga una API como py3translationServer o Sugoi Toolkit. Sin un servidor activo, no obtendrás traducciones adicionales y el rendimiento del juego podría verse afectado. Por favor, déjala desactivada si no dispone de un servidor de traducción."
   sugoi_url: "URL del servidor de auto-traducción"
   auto_translate_ui: "Auto-traducir UI"
   auto_translate_ui_desc: "PUEDE ROMPER EL UI"
@@ -359,8 +366,8 @@ theme_editor:
 
 tl_update_dialog: 
   title: "Nueva actualización disponible"
-  content: "Existen nuevos datos de traducción (%{size}).\n¿Deseas descargarlos ahora?"
-  content_zip_warning: "Existen nuevos datos de traducción (%{changed_size}).\nEsta actualización descargará el archivo completo (%{download_size})."
+  content: "Existen nuevos datos de traducción (%{size}). ¿Deseas descargarlos ahora?"
+  content_zip_warning: "Existen nuevos datos de traducción (%{changed_size}). Esta actualización descargará el archivo completo (%{download_size})."
   title_mod: "Nueva actualización de addon disponible"
   content_mod: "Existen nuevos datos de addon de traducción (%{size}).\n¿Deseas descargarlos ahora?"
 
@@ -382,12 +389,7 @@ updating_dialog:
 
 steam_overlay_conflict_dialog: 
   title: "Aviso"
-  content: >-
-    Las compras podrían no funcionar con el overlay de Hachimi activo. Si el overlay de Steam ya apareció
-    para realizar compras, ignora este mensaje y pulsa No. Si no apareció nada, pulsa Sí para desactivar
-    temporalmente el overlay de Hachimi. Esto cerrará el juego, y la próxima vez que se inicie el overlay de
-    Hachimi estará desactivado para que puedas realizar compras. Después de realizar tus compras, podrás
-    volver a usar el overlay de Hachimi al reiniciar el juego.
+  content: "Las compras podrían dejar de funcionar si el overlay de Hachimi está activo. Si ya ves el overlay para realizar compras en Steam, ignora este mensaje y pulsa No. Si no ves nada, pulsa Sí para desactivar temporalmente el overlay de Hachimi. Esto cerrará el juego y, al iniciarlo nuevamente, el overlay de Hachimi estará desactivado para que puedas realizar compras. Después de realizarlas, podrás volver a usar el overlay de Hachimi tras reiniciar el juego."
 key_names: 
   left: "Flecha Izq."
   right: "Flecha Der."

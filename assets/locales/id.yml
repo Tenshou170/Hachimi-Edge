@@ -1,7 +1,7 @@
 hachimi: "Hachimi Edge"
 
 windows: 
-  menu_open_key: "Panah Kanan"
+  menu_open_key: "Panah kanan"
 
 android: 
   menu_open_key: "Vol Atas + Bawah\n\uf72b atau Ketuk tiga kali kiri atas"
@@ -18,6 +18,7 @@ previous: "Kembali"
 yes: "Ya"
 no: "Tidak"
 ok: "OK"
+unknown: "Tidak diketahui"
 remove: "Hapus"
 save_changes: "Simpan perubahan?"
 retry: "Ulangi"
@@ -107,7 +108,7 @@ notification:
   update_failed: "Pembaruan gagal: %{reason}"
   update_completed: "Pembaruan berhasil."
   mod_update_completed: "Pembaruan addon berhasil."
-  errors_during_update: "%{count} error terjadi ketika pembaruan. Mohon periksa log untuk info lanjutan."
+  errors_during_update: "%{count} error terjadi ketika pembaruan. Periksa log untuk info lanjutan."
   checking_for_updates: "Memeriksa pembaruan..."
   github_update_unreachable: "Tidak dapat terhubung ke GitHub, mencoba menggunakan Codeberg..."
   no_updates: "Tidak ada pembaruan."
@@ -131,7 +132,7 @@ first_time_setup:
 
 
   translation_repo_heading: "Repositori Translasi"
-  select_translation_repo: "Mohon pilih repositori translasi:"
+  select_translation_repo: "Pilih repositori translasi:"
   no_compatible_repo: "Tidak ada repositori yang didukung oleh versi game ini"
   skip_translation: "Lewati translasi."
   common_settings_heading: "Pengaturan umum"
@@ -156,8 +157,10 @@ license:
 tl_updater: 
   title: "Memperbarui..."
   title_mod: "Memperbarui addon..."
+  downloading: "Mengunduh..."
   checking: "Memeriksa..."
-  warning: "Fitur translasi tidak bekerja saat progres pembaruan berjalan."
+  extracting: "Mengekstrak..."
+  warning: "Fitur translasi tidak bekerja saat pembaruan berjalan."
 
 config_editor: 
   title: "Editor Konfigurasi"
@@ -177,21 +180,22 @@ config_editor:
     Opsi ini akan mematikan overlay (GUI) Hachimi.
     Kamu tidak bisa mengakses editor konfigurasi setelah kamu memulai ulang game.
     Jika tidak disengaja dinyalakan, mohon tutup dialog ini dan matikan opsinya!
-  gui_scale: "Skala overlay"
-  gui_landscape_ratio: "Rasio skala hamparan lanskap"
+  gui_scale: "Ukuran overlay"
+  gui_landscape_ratio: "Rasio GUI lanskap"
   menu_open_key: "Buka menu hotkey"
   menu_open_key_set: "Atur"
   recommended_ui_scale: "Terapkan skala UI yang disarankan"
 
   # ── Graphics ─────────────────────────────────────────────────────────────
   target_fps: "Target FPS"
+  target_fps_unfocused: "Target FPS saat jendela tidak aktif"
   virtual_resolution_multiplier: "Kelipatan resolusi virtual"
-  ui_scale: "Skala UI"
-  ui_animation_scale: "Skala animasi UI"
+  ui_scale: "Ukuran UI"
+  ui_animation_scale: "Kecepatan animasi UI"
   msaa: "MSAA"
   render_scale: "Skala render"
   aniso_level: "Filter Anisotropik"
-  shadow_resolution: "Resolusi Bayangan"
+  shadow_resolution: "Resolusi bayangan"
   graphics_quality: "Kualitas grafis"
   vsync: "VSync"
   auto_full_screen: "Otomatis Layar penuh"
@@ -225,11 +229,11 @@ config_editor:
   force_allow_dynamic_camera: "Paksa nyalakan kamera dinamis (POV)"
   live_theater_allow_same_chara: "Izinkan karakter yang sama untuk konser"
   disable_tap_effect: "Nonaktifkan Efek Ketukan"
-  live_vocals_swap: "Tukar Vokal Langsung"
+  live_vocals_swap: "Tukar vokal konser"
   live_vocals_swap_character_n: "Karakter %{index}"
   free_camera: "Kamera Bebas"
   skill_info_dialog: "Dialog info skill kustom"
-  homescreen_bgseason: "Latar Musim Beranda"
+  homescreen_bgseason: "Latar musim di beranda"
   disable_skill_name_translation: "Matikan translasi nama skill"
   hide_ingame_ui_hotkey: "Sembunyikan hotkey UI dalam game"
   hide_ingame_ui_hotkey_info: >-
@@ -243,6 +247,15 @@ config_editor:
   race_playback_button: "Tombol jeda/lanjutkan pemutaran balapan"
   race_playback_key_enable: "Aktifkan tombol pintas jeda/lanjutkan pemutaran balapan"
   race_playback_key: "Tombol pintas jeda/lanjutkan pemutaran balapan"
+  race_director_enabled: "HUD direktur balapan"
+  race_director_show_tower: "Menara waktu"
+  race_director_show_followed: "Panel uma yang diikuti"
+  race_director_show_winprob: "Peluang menang"
+  race_director_show_predicted: "Posisi perkiraan server"
+  race_director_show_predicted_desc: "Menampilkan urutan finis yang dihitung server sejak awal balapan - berisi spoiler, nonaktif secara bawaan."
+  race_director_opacity: "Opasitas latar belakang HUD"
+  race_director_reset_windows: "Atur ulang posisi jendela"
+  race_director_reset: "Atur ulang"
   live_slider_always_show: "Selalu Tampilkan Kontrol Live"
   live_playback_loop: "Ulangi Pertunjukan Live"
   trainer_live_landscape: "Mode lanskap di konser MeniShuki"
@@ -272,14 +285,14 @@ config_editor:
   enable_ipc: "Nyalakan IPC"
   ipc_listen_all: "Buka IPC listen-all"
   ipv4_only: "Khusus IPv4 ureq"
-  meta_index_url: "URL Meta Terjemahan"
+  meta_index_url: "URL Meta terjemahan"
   localized_data_dir: "Direktori data lokalisasi"
   translator_mode: "Mode Translator"
   apply_atlas_workaround: "Terapkan Perbaikan Atlas TL"
   disable_outdated_asset_notif: "Nonaktifkan notifikasi aset usang"
   replace_to_builtin_font: "Ganti dengan font bawaan"
   skip_first_time_setup: "Lewati setup pertama kali"
-  lazy_translation_updates: "Pembaruan terjemahan fleksibel"
+  lazy_translation_updates: "Pembaruan translasi fleksibel"
   disable_auto_update_check: "Matikan cek pembaruan otomatis"
   disable_mod_downloads: "Matikan unduhan addon"
   translation_repo_index_mod: "URL indeks addon translasi"
@@ -305,13 +318,7 @@ config_editor:
   unlock_live_chara: "Buka Kunci Karakter/Lagu Live Theater"
   # Experimental
   auto_translate_stories: "Otomatis terjemahkan cerita"
-  auto_tl_warning: >-
-    Catatan: Fitur ini tidak dapat berjalan sendiri; memerlukan pengaturan eksternal.
-    Mengaktifkan opsi ini memerlukan server terjemahan yang kompatibel terpasang di
-    komputer Anda atau layanan cloud dengan API seperti py3translationServer atau
-    Sugoi Toolkit. Tanpa server yang berjalan, tidak akan ada terjemahan tambahan
-    dan permainan mungkin terganggu. Harap biarkan opsi ini dinonaktifkan jika Anda
-    tidak memiliki server terjemahan.
+  auto_tl_warning: "Catatan: Fitur ini tidak dapat berjalan sendiri dan memerlukan pengaturan eksternal. Mengaktifkan opsi ini memerlukan server terjemahan yang kompatibel terpasang di komputer kamu atau layanan cloud dengan API seperti py3translationServer atau Sugoi Toolkit. Tanpa server yang berjalan, tidak ada terjemahan tambahan dan  permainan mungkin terganggu. Biarkan opsi ini nonaktif jika kamu tidak memiliki  server terjemahan."
   sugoi_url: "URL server terjemahan otomatis"
   auto_translate_ui: "Otomatis terjemahkan UI"
   auto_translate_ui_desc: "BISA MERUSAK UI"
@@ -323,7 +330,7 @@ config_editor:
   dump_msgpack: "Ekspor Respons MsgPack"
   dump_msgpack_request: "Ekspor Permintaan MsgPack"
   # Developer
-  debug_mode: "Mode Debug"
+  debug_mode: "Mode debug"
   text_debug: "Mode debug teks"
   text_log: "Catat teks yang diproses"
   text_property_dump: "Ekspor properti UI"
@@ -358,7 +365,7 @@ theme_editor:
 tl_update_dialog: 
   title: "Pembaruan Translasi Tersedia"
   content: "Pembaruan translasi tersedia (%{size}). Apa kamu ingin mengunduhnya?"
-  content_zip_warning: "Pembaruan translasi tersedia (%{changed_size}). Pembaruan akan diunduh secara arsip (%{download_size})."
+  content_zip_warning: "Pembaruan translasi tersedia (%{changed_size}). \nPembaruan akan diunduh secara arsip (%{download_size})."
   title_mod: "Pembaruan Addon Tersedia"
   content_mod: "Pembaruan addon translasi tersedia (%{size}). Apa kamu ingin mengunduhnya?"
 
@@ -379,11 +386,7 @@ updating_dialog:
 
 steam_overlay_conflict_dialog: 
   title: "Peringatan"
-  content: >-
-    Pembelian mungkin tidak bekerja saat overlay Hachimi menyala. Jika overlay Steam muncul saat melakukan 
-    transaksi, mohon abaikan pesan ini dan klik tombol Tidak. Jika tidak berfungsi, klik tombol Ya untuk 
-    mematikan sementara overlay Hachimi. Game akan dimulai ulang kemudian overlay Hachimi akan mati dan kamu
-    bisa melakukan pembelian lagi, setelah itu mulai ulang game untuk menyalakan kembali overlay Hachimi.
+  content: "Pembelian mungkin tidak bekerja saat overlay Hachimi menyala. Jika overlay Steam muncul saat melakukan  transaksi, abaikan pesan ini dan klik tombol Tidak. Jika tidak berfungsi, klik tombol Ya untuk  mematikan sementara overlay Hachimi. Game akan dimulai ulang, kemudian overlay Hachimi akan dimatikan dan kamu bisa melakukan pembelian lagi, setelah itu mulai ulang game lagi untuk menyalakan kembali overlay Hachimi."
 key_names: 
   left: "Panah Kiri"
   right: "Panah Kanan"

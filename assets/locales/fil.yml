@@ -18,6 +18,7 @@ previous: "Nakaraan"
 yes: "Oo"
 no: "Hindi"
 ok: "OK"
+unknown: "Unknown"
 remove: "Tanggalin"
 save_changes: "I-save ang mga pagbabago?"
 retry: "Subukan ulit"
@@ -159,7 +160,9 @@ license:
 tl_updater: 
   title: "Ina-update..."
   title_mod: "Ina-update ang addon..."
+  downloading: "Downloading..."
   checking: "Sinusuri..."
+  extracting: "Ine-extract..."
   warning: "Hindi gagana ang mga translations habang ina-update."
 
 config_editor: 
@@ -188,9 +191,10 @@ config_editor:
 
   # ── Graphics ─────────────────────────────────────────────────────────────
   target_fps: "Target FPS"
+  target_fps_unfocused: "Target FPS kung hindi aktibo ang window"
   virtual_resolution_multiplier: "Multiplier ng virtual resolution"
   ui_scale: "Laki ng UI"
-  ui_animation_scale: "Biliis ng UI animation"
+  ui_animation_scale: "Bilis ng UI animation"
   msaa: "MSAA"
   render_scale: "Render Scale"
   aniso_level: "Anisotropic Filtering"
@@ -228,7 +232,7 @@ config_editor:
   force_allow_dynamic_camera: "Pwersahang payagan ang dynamic camera"
   live_theater_allow_same_chara: "Payagan ang katulad na character sa live theater"
   disable_tap_effect: "I-disable ang particle effect sa pag-tap"
-  live_vocals_swap: "Pagpalit ng Vocals sa Live"
+  live_vocals_swap: "Pagpalit ng Vocals sa Live Theater"
   live_vocals_swap_character_n: "Karakter %{index}"
   free_camera: "Free Camera"
   skill_info_dialog: "Custom na dialog ng skill info"
@@ -368,8 +372,8 @@ theme_editor:
 
 tl_update_dialog: 
   title: "May bagong update"
-  content: "May bagong update sa translations (%{size}). Gusto mo ba ito i-download?"
-  content_zip_warning: "May bagong update sa translations (%{changed_size}). Ida-download ng update na ito ang buong archive (%{download_size}) sa halip."
+  content: "May bagong update sa translations (%{size}). Gusto mo ba itong i-download?"
+  content_zip_warning: "May bagong update sa translations (%{changed_size}). Ida-download ng update na ito ang buong archive (%{download_size}). Gusto mo ba itong i-download?"
   title_mod: "May bagong update sa addon"
   content_mod: "May bagong update sa translation addon (%{size}). Gusto mo ba ito i-download?"
 

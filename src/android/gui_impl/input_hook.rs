@@ -151,21 +151,24 @@ extern "C" fn nativeInjectEvent(mut env: JNIEnv, obj: JObject, input_event: JObj
                         return Ok(Some(JNI_TRUE));
                     }
 
-                    if pressed && key_code == Hachimi::instance().config.load().android.menu_open_key {
-                        let Some(mut gui) = Gui::instance().map(|m| m.lock().unwrap()) else {
-                            return Ok(None); // forward
-                        };
-                        gui.toggle_menu();
-                    }
+                    // Suppress mod keybinds while the user is typing into an egui text field.
+                    if !Gui::is_egui_typing_atomic() {
+                        if pressed && key_code == Hachimi::instance().config.load().android.menu_open_key {
+                            let Some(mut gui) = Gui::instance().map(|m| m.lock().unwrap()) else {
+                                return Ok(None); // forward
+                            };
+                            gui.toggle_menu();
+                        }
 
-                    if Hachimi::instance().config.load().hide_ingame_ui_hotkey && pressed
-                        && key_code == Hachimi::instance().config.load().android.hide_ingame_ui_hotkey_bind {
-                        Thread::main_thread().schedule(Gui::toggle_game_ui);
-                    }
+                        if Hachimi::instance().config.load().hide_ingame_ui_hotkey && pressed
+                            && key_code == Hachimi::instance().config.load().android.hide_ingame_ui_hotkey_bind {
+                            Thread::main_thread().schedule(Gui::toggle_game_ui);
+                        }
 
-                    if pressed && key_code == Hachimi::instance().config.load().android.race_playback_key
-                        && Hachimi::instance().config.load().race_playback_key_enable {
-                        Thread::main_thread().schedule(crate::il2cpp::hook::umamusume::RaceManagerReplayBase::toggle_playback);
+                        if pressed && key_code == Hachimi::instance().config.load().android.race_playback_key
+                            && Hachimi::instance().config.load().race_playback_key_enable {
+                            Thread::main_thread().schedule(crate::il2cpp::hook::umamusume::RaceManagerReplayBase::toggle_playback);
+                        }
                     }
 
                     if pressed && key_code == keymap::KEYCODE_BACK {
