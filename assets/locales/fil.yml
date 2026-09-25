@@ -83,6 +83,7 @@ menu:
   tl_check_for_updates_pedantic: "\ue923 Ayusin ang translations"
   tl_check_for_addon_updates_pedantic: "\ue923 Tingnan kung may update ang addon"
   dump_localize_dict: "\ue2c4 I-dump ang localize dict"
+  dump_meta_file: "\ue2c4 I-dump ang meta file"
   danger_zone_heading: "\ue8b2 Danger Zone"
   danger_zone_warning: "Maaaring magkaroon ng hindi inaasahang epekto sa laro ang mga opsyong ito. Gamitin nang may pag-iingat!"
   soft_restart: "\ue5d5 I-soft restart"
@@ -92,6 +93,7 @@ menu:
 
 notification: 
   saved_localize_dump: "Na-save sa localize_dump.json"
+  saved_meta_dump: "Na-save bilang meta_dump"
   freeform_window_disabled_landscape: "Na-disable ang freeform window dahil aktibo ang landscape mode."
   free_camera_unavailable_live: "Hindi available ang Free Camera sa concert na ito dahil sa kilalang isyu."
   config_reloaded: "Na-reload ang config."

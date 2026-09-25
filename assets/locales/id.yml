@@ -83,6 +83,7 @@ menu:
   tl_check_for_updates_pedantic: "\ue923 Perbaiki terjemahan"
   tl_check_for_addon_updates_pedantic: "\ue923 Periksa pembaruan addon"
   dump_localize_dict: "\ue2c4 Ekspor Kamus Terjemahan"
+  dump_meta_file: "\ue2c4 Ekspor file meta"
   danger_zone_heading: "\ue8b2 Zona Rawan"
   danger_zone_warning: "Hati-hati! Menggunakan opsi di bawah akan membuat game tidak stabil."
   soft_restart: "\ue5d5 Restart ringan"
@@ -92,6 +93,7 @@ menu:
 
 notification: 
   saved_localize_dump: "Tersimpan sebagai localize_dump.json"
+  saved_meta_dump: "Tersimpan sebagai meta_dump"
   freeform_window_disabled_landscape: "Jendela bebas dinonaktifkan karena mode lanskap sedang aktif."
   free_camera_unavailable_live: "Kamera Bebas tidak tersedia di Konser ini karena masalah yang diketahui. Kamera telah dinonaktifkan untuk Konser ini."
   config_reloaded: "Konfigurasi dimuat ulang."

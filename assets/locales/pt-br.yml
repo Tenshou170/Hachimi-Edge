@@ -83,6 +83,7 @@ menu:
   tl_check_for_updates_pedantic: "\ue923 Reparar traduções"
   tl_check_for_addon_updates_pedantic: "\ue923 Verificar atualização de addon"
   dump_localize_dict: "\ue2c4 Exportar dicionário de tradução"
+  dump_meta_file: "\ue2c4 Exportar arquivo meta"
   danger_zone_heading: "\ue8b2 Área Perigosa"
   danger_zone_warning: "Estas opções podem acabar tendo efeitos indesejados no seu jogo. Use com cuidado!"
   soft_restart: "\ue5d5 Soft-Restart"
@@ -92,6 +93,7 @@ menu:
 
 notification: 
   saved_localize_dump: "Exportado em localize_dump.json"
+  saved_meta_dump: "Exportado como meta_dump"
   freeform_window_disabled_landscape: "Janela livre foi desabilitada porque o modo paisagem está ativo."
   free_camera_unavailable_live: "A Câmera Livre está indisponível neste Live devido a um problema conhecido. Ela foi desabilitada para este Live."
   config_reloaded: "Configurações recarregadas."

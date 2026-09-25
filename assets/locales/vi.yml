@@ -83,6 +83,7 @@ menu:
   tl_check_for_updates_pedantic: "\ue923 Sửa lỗi bản dịch"
   tl_check_for_addon_updates_pedantic: "\ue923 Kiểm tra cập nhật addon"
   dump_localize_dict: "\ue2c4 Xuất dữ liệu dịch"
+  dump_meta_file: "\ue2c4 Xuất tệp meta"
   danger_zone_heading: "\ue8b2 Vùng nguy hiểm"
   danger_zone_warning: "Những lựa chọn này có thể gây ra các tác dụng không mong muốn. Hãy sử dụng cẩn thận!"
   soft_restart: "\ue5d5 Soft restart"
@@ -92,6 +93,7 @@ menu:
 
 notification: 
   saved_localize_dump: "Đã lưu localize_dump.json"
+  saved_meta_dump: "Đã lưu meta_dump"
   freeform_window_disabled_landscape: "Cửa sổ tự do đã bị tắt vì chế độ màn hình ngang đang hoạt động."
   free_camera_unavailable_live: "Camera Tự do không khả dụng trong Live này do lỗi đã biết. Đã tắt cho Live này."
   config_reloaded: "Đã tải lại cài đặt."

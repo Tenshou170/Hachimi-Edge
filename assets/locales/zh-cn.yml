@@ -83,6 +83,7 @@ menu:
   tl_check_for_updates_pedantic: "\ue923 修复翻译"
   tl_check_for_addon_updates_pedantic: "\ue923 检查插件更新"
   dump_localize_dict: "\ue2c4 导出本地化字典"
+  dump_meta_file: "\ue2c4 导出 meta 文件"
   danger_zone_heading: "\ue8b2 危险操作"
   danger_zone_warning: "这些选项可能会对游戏产生异常影响，请谨慎使用！"
   soft_restart: "\ue5d5 软重启"
@@ -92,6 +93,7 @@ menu:
 
 notification: 
   saved_localize_dump: "已保存到 localize_dump.json"
+  saved_meta_dump: "已保存到 meta_dump"
   freeform_window_disabled_landscape: "检测到横屏模式，自由窗口已自动关闭。"
   free_camera_unavailable_live: "自由视角在本 Live 中存在已知问题，在此 Live 中将不会启用自由视角。"
   config_reloaded: "配置已重新加载"

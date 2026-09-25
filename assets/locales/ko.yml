@@ -83,6 +83,7 @@ menu:
   tl_check_for_updates_pedantic: "\ue923 번역 복구"
   tl_check_for_addon_updates_pedantic: "\ue923 애드온 업데이트 확인"
   dump_localize_dict: "\ue2c4 로컬라이즈 딕셔너리 덤프"
+  dump_meta_file: "\ue2c4 메타 파일 덤프"
   danger_zone_heading: "\ue8b2 위험 구역"
   danger_zone_warning: "이 옵션은 게임에 의도치 않은 영향을 줄 수 있습니다. 주의해서 사용하세요!"
   soft_restart: "\ue5d5 소프트 재시작"
@@ -92,6 +93,7 @@ menu:
 
 notification:
   saved_localize_dump: "localize_dump.json에 저장되었습니다."
+  saved_meta_dump: "meta_dump에 저장되었습니다."
   freeform_window_disabled_landscape: "가로 모드가 활성화되어 자유 크기 조절 창이 비활성화되었습니다."
   free_camera_unavailable_live: "알려진 문제로 인해 이 라이브에서는 프리 카메라를 사용할 수 없습니다. 이 라이브에 대해 비활성화되었습니다."
   config_reloaded: "설정을 다시 불러왔습니다."

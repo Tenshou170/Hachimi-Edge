@@ -83,6 +83,7 @@ menu:
   tl_check_for_updates_pedantic: "\ue923 Reparar traducción"
   tl_check_for_addon_updates_pedantic: "\ue923 Buscar actualizaciones de addon"
   dump_localize_dict: "\ue2c4 Volcar dicc. de localización"
+  dump_meta_file: "\ue2c4 Volcar archivo meta"
   danger_zone_heading: "\ue8b2 Zona Peligrosa"
   danger_zone_warning: "Las siguientes opciones podrían tener efectos adversos en el juego. ¡Úsalas con precaución!"
   soft_restart: "\ue5d5 Reinicio suave"
@@ -92,6 +93,7 @@ menu:
 
 notification: 
   saved_localize_dump: "Exportado en localize_dump.json"
+  saved_meta_dump: "Exportado como meta_dump"
   freeform_window_disabled_landscape: "La ventana libre se ha desactivado porque el modo horizontal está activo."
   free_camera_unavailable_live: "La Cámara Libre no está disponible en este Live debido a un problema conocido. Se ha desactivado para este Live."
   config_reloaded: "Configuración recargada."

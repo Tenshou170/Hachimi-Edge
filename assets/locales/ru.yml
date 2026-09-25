@@ -83,6 +83,7 @@ menu:
   tl_check_for_updates_pedantic: "\ue923 Восстановить перевод"
   tl_check_for_addon_updates_pedantic: "\ue923 Проверить обновления аддонов"
   dump_localize_dict: "\ue2c4 Выгрузить данные localize_dict"
+  dump_meta_file: "\ue2c4 Выгрузить файл meta"
   danger_zone_heading: "\ue8b2 Зона опасности"
   danger_zone_warning: "Эти опции могут нести за собой непредвиденные последствия для игры. Используйте их с осторожностью!"
   soft_restart: "\ue5d5 Мягкая перезагрузка"
@@ -92,6 +93,7 @@ menu:
 
 notification:
   saved_localize_dump: "Сохранено в localize_dump.json"
+  saved_meta_dump: "Сохранено как meta_dump"
   freeform_window_disabled_landscape: "Свободная форма окна отключена, поскольку выбран альбомный режим."
   free_camera_unavailable_live: "Свободная камера недоступна на этом концерте из-за известной проблемы. Для этого концерта она будет отключена."
   config_reloaded: "Настройки перезагружены."

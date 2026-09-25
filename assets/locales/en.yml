@@ -83,6 +83,7 @@ menu:
   tl_check_for_updates_pedantic: "\ue923 Repair translation"
   tl_check_for_addon_updates_pedantic: "\ue923 Check addon update"
   dump_localize_dict: "\ue2c4 Dump localize dict"
+  dump_meta_file: "\ue2c4 Dump meta file"
   danger_zone_heading: "\ue8b2 Danger Zone"
   danger_zone_warning: "These options might have unintended effects on the game. Use with caution!"
   soft_restart: "\ue5d5 Soft restart"
@@ -92,6 +93,7 @@ menu:
 
 notification:
   saved_localize_dump: "Saved to localize_dump.json"
+  saved_meta_dump: "Saved to meta_dump"
   freeform_window_disabled_landscape: "Freeform window has been disabled because landscape mode is active."
   free_camera_unavailable_live: "Free Camera is unavailable in this Live because of a known issue. It has been disabled for this Live."
   config_reloaded: "Config reloaded."
