@@ -43,7 +43,10 @@ extern "C" fn UpdateView(this: *mut Il2CppObject) {
 
 fn is_valid_enhancement_context(this: *mut Il2CppObject) -> bool {    
     let card_button = CharacterHomeTopUI::get_cardRootButton(this);
-    if card_button.is_null() {
+    // op_Implicit also rejects destroyed Unity objects, which field getters can
+    // still hand back during scene teardown (e.g. returning home from the
+    // mission dialog while an asset unload is in flight).
+    if card_button.is_null() || !Object::op_Implicit(card_button) {
         return false;
     }
     
@@ -83,7 +86,7 @@ fn apply_button_configs(this: *mut Il2CppObject) {
     macro_rules! apply { ($cfg:ident, $getter:ident) => {
         if let Some(c) = overrides.$cfg.as_ref() {
             let b = CharacterHomeTopUI::$getter(this);
-            if !b.is_null() { 
+            if !b.is_null() && Object::op_Implicit(b) { 
                 apply_button_config(b, c, stringify!($cfg)); 
             }
         }
@@ -120,6 +123,12 @@ fn apply_button_configs(this: *mut Il2CppObject) {
 }
 
 fn apply_button_config(button: *mut Il2CppObject, config: &UITextConfig, config_name: &str) {
+    // Skip buttons whose underlying object was destroyed mid-frame (scene
+    // teardown); touching them crashes inside the engine.
+    if button.is_null() || !Object::op_Implicit(button) {
+        return;
+    }
+
     let text_components = collect_text_components(button, config_name);
     if text_components.is_empty() {
         return;
@@ -154,6 +163,7 @@ fn collect_text_components(button: *mut Il2CppObject, config_name: &str) -> Vec<
         if !text_objects.this.is_null() {
             let text_slice = unsafe { text_objects.as_slice() };
             for text_obj in text_slice {
+                if text_obj.is_null() || !Object::op_Implicit(*text_obj) { continue; }
                 let t_go = Component::get_gameObject(*text_obj);
                 if t_go.is_null() { continue; }
                 let name_ptr = Object::get_name(t_go);
@@ -172,7 +182,7 @@ fn collect_text_components(button: *mut Il2CppObject, config_name: &str) -> Vec<
     let mut text_components = Vec::new();
 
     let target_text = ButtonCommon::get_TargetText(button);
-    if !target_text.is_null() {
+    if !target_text.is_null() && Object::op_Implicit(target_text) {
         text_components.push(target_text);
     }
     
@@ -192,6 +202,9 @@ fn collect_text_components(button: *mut Il2CppObject, config_name: &str) -> Vec<
 }
 
 fn apply_text_config(text_component: *mut Il2CppObject, config: &UITextConfig, index: usize) {
+    if text_component.is_null() || !Object::op_Implicit(text_component) {
+        return;
+    }
 
     // index 0 and rest is 'text', index 1 is 'text2'
     let text_to_apply = if index == 1 {
@@ -222,6 +235,7 @@ fn apply_position_offset(text_component: *mut Il2CppObject, config: &UITextConfi
     }
 
     let Some(rect_transform) = get_rect_transform(text_component) else { return };
+    if rect_transform.is_null() || !Object::op_Implicit(rect_transform) { return; }
     
     // use the native wrapper implementation directly
     let current_pos = RectTransform::get_anchoredPosition(rect_transform);
@@ -235,7 +249,7 @@ fn apply_position_offset(text_component: *mut Il2CppObject, config: &UITextConfi
 
 fn get_rect_transform(text_component: *mut Il2CppObject) -> Option<*mut Il2CppObject> {
     let text_go = Component::get_gameObject(text_component);
-    if text_go.is_null() {
+    if text_go.is_null() || !Object::op_Implicit(text_go) {
         return None;
     }
 
