@@ -42,7 +42,6 @@ use crate::il2cpp::{
     hook::{
         umamusume::{
             GameSystem,
-            Localize,
         },
         UnityEngine_CoreModule::Application,
     },
@@ -1948,13 +1947,20 @@ impl Gui {
                                 if hachimi.config.load().translator_mode {
                                     if ConfigEditor::list_tile_button(ui, t!("menu.dump_localize_dict")) {
                                         Thread::main_thread().schedule(|| {
-                                            let data = Localize::dump_strings();
-                                            let dict_path = Hachimi::instance().get_data_path("localize_dump.json");
                                             let mut gui = Gui::instance().unwrap().lock().unwrap();
-                                            if let Err(e) = crate::core::utils::write_json_file(&data, dict_path) {
-                                                gui.show_notification(&e.to_string())
-                                            } else {
-                                                gui.show_notification(&t!("notification.saved_localize_dump"))
+                                            match crate::core::utils::dump_localize_dict() {
+                                                Ok(_) => gui.show_notification(&t!("notification.saved_localize_dump")),
+                                                Err(e) => gui.show_notification(&e.to_string())
+                                            }
+                                        })
+                                    }
+                                    #[cfg(target_os = "android")]
+                                    if ConfigEditor::list_tile_button(ui, t!("menu.dump_meta_file")) {
+                                        Thread::main_thread().schedule(|| {
+                                            let mut gui = Gui::instance().unwrap().lock().unwrap();
+                                            match crate::core::utils::dump_meta_file() {
+                                                Ok(_) => gui.show_notification(&t!("notification.saved_meta_dump")),
+                                                Err(e) => gui.show_notification(&e.to_string())
                                             }
                                         })
                                     }

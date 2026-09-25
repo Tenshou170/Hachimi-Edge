@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fs::File, io::Write, sync::Mutex, path::Path, time::SystemTime};
+use std::{borrow::Cow, fs::File, io::Write, sync::Mutex, path::{Path, PathBuf}, time::SystemTime};
 
 use serde::Serialize;
 use textwrap::{core::Word, wrap_algorithms, WordSeparator::UnicodeBreakProperties};
@@ -601,6 +601,49 @@ pub unsafe fn truncate_text_il2cpp(string: *mut Il2CppString, width: usize, elli
             .collect::<String>()
             .to_il2cpp_string()
     )
+}
+
+/// Directory for translator dumps (localize_dump.json, meta_dump). On Android
+/// this is always the game's external media dir,
+/// /sdcard/Android/media/<package>/hachimi, so dumps land in one fixed,
+/// user-accessible location regardless of whether the Hachimi data dir itself
+/// resolves to internal storage (hachimi_internal_files marker present, e.g.
+/// UmaPatcher-Edge Direct Install) or external media. That dir is owned by the
+/// game app, so writing to it needs no extra permissions on any Android
+/// version. Windows keeps the regular data dir.
+pub fn get_dump_dir() -> PathBuf {
+    #[cfg(target_os = "android")]
+    {
+        Path::new("/sdcard/Android/media")
+            .join(&Hachimi::instance().game.package_name)
+            .join("hachimi")
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        Hachimi::instance().game.data_dir.clone()
+    }
+}
+
+/// Writes the current localize dict into the dump dir, returning the
+/// destination path on success.
+pub fn dump_localize_dict() -> Result<PathBuf, Error> {
+    let dir = get_dump_dir();
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join("localize_dump.json");
+    let data = Localize::dump_strings();
+    write_json_file(&data, &path)?;
+    Ok(path)
+}
+
+/// Copies the game's meta database into the dump dir, returning the
+/// destination path on success.
+pub fn dump_meta_file() -> Result<PathBuf, Error> {
+    let dir = get_dump_dir();
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join("meta_dump");
+    std::fs::copy(get_meta_path(), &path)?;
+    Ok(path)
 }
 
 pub fn write_json_file<T: Serialize, P: AsRef<Path>>(data: &T, path: P) -> Result<(), Error> {
