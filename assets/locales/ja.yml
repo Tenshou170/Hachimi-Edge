@@ -1,0 +1,577 @@
+hachimi: "Hachimi Edge"
+
+windows:
+  menu_open_key: "右方向キー"
+
+android:
+  menu_open_key: "音量上げ + 音量下げ\n\uf72b または左上を3回タップ"
+
+splash_sub: "\ue5d2 %{open_key_str}キーを押してメニューを開く。"
+loading_label: "読み込み中..."
+search_filter: "検索語を入力..."
+open: "開く"
+cancel: "キャンセル"
+save: "保存"
+done: "完了"
+next: "次へ"
+previous: "前へ"
+yes: "はい"
+no: "いいえ"
+ok: "OK"
+unknown: "不明"
+remove: "削除"
+save_changes: "変更を保存しますか？"
+retry: "再試行"
+bind_key: "キー設定"
+set_keybind:
+  title: "キー設定"
+  press_any_key: "任意のキーを押してください…"
+  bound_key: "設定したキー: %{key}"
+default: "デフォルト"
+off: "オフ"
+on: "オン"
+enable: "有効化"
+disabled: "無効"
+minutes: "分"
+info: "情報"
+warning: "警告"
+confirm_dialog_title: "確認"
+soft_restart_confirm_content: "ゲームをソフト再起動しますか？"
+in_game_browser_confirm_content: "ゲーム内ブラウザを開きますか？"
+browser_dialog_title: "ブラウザ"
+spring: "春"
+summer: "夏"
+fall: "秋"
+winter: "冬"
+cherry_blossom: "桜"
+
+change_translation_repo:
+  title: "翻訳リポジトリの変更"
+  no_repos: "ダウンロード済みの翻訳リポジトリはありません。"
+  browse_repositories: "リポジトリを一覧"
+  active: "使用中"
+  available: "利用可能"
+  confirm_remove: "「%{name}」を削除しますか？"
+  cannot_remove_active: "使用中のリポジトリは削除できません。先に別のリポジトリへ切り替えてください。"
+  removing: "翻訳リポジトリを削除中..."
+  remove_in_progress: "翻訳リポジトリを削除できません。別の削除が既に進行中です。"
+
+add_translation_repo:
+  title: "翻訳リポジトリの追加"
+  select_translation_repo: "翻訳リポジトリを選択："
+
+menu:
+  check_for_updates: "\ue923 アップデートを確認"
+  fps_text: "FPS: %{fps}"
+  close_menu: "\ue5cd メニューを閉じる"
+  stats_heading: "\ue473 統計"
+  localize_dict_entries: "localize_dict エントリ数: %{count}"
+  hashed_dict_entries: "hashed_dict エントリ数: %{count}"
+  config_heading: "\ue8b8 設定"
+  open_config_editor: "\ue8b9 設定エディターを開く"
+  reload_config: "\ue5d5 設定を再読み込み"
+  open_first_time_setup: "\ue869 初回セットアップを開く"
+  change_translation_repo: "\ue8da 翻訳リポジトリを変更"
+  graphics_heading: "\ueb97 グラフィック"
+  fps_label: "FPS"
+  vsync_label: "VSync"
+  stay_on_top: "常に手前に表示"
+  keep_screen_on: "画面のタイムアウトを防止"
+  translation_heading: "\ue894 翻訳"
+  reload_localized_data: "\ue5d5 翻訳データを再読み込み"
+  tl_check_for_updates: "\ue923 翻訳のアップデートを確認"
+  tl_check_for_updates_pedantic: "\ue923 翻訳を修復"
+  tl_check_for_addon_updates_pedantic: "\ue923 アドオンのアップデートを確認"
+  dump_localize_dict: "\ue2c4 ローカライズ辞書をダンプ"
+  dump_meta_file: "\ue2c4 meta ファイルをダンプ"
+  danger_zone_heading: "\ue8b2 危険地帯"
+  danger_zone_warning: "これらのオプションはゲームに予期しない影響を与える可能性があります。注意して使用してください！"
+  soft_restart: "\ue5d5 ソフト再起動"
+  open_in_game_browser: "\ue80b ゲーム内ブラウザを開く"
+  toggle_game_ui: "\ue8f4 ゲームUIの切り替え"
+  discord_rpc: "Discord RPC"
+
+notification:
+  saved_localize_dump: "localize_dump.json に保存しました"
+  saved_meta_dump: "meta_dump に保存しました"
+  freeform_window_disabled_landscape: "ランドスケープモードが有効なため、フリーフォームウィンドウは無効になりました。"
+  free_camera_unavailable_live: "既知の不具合のため、このライブではフリーカメラを利用できません。このライブでは無効化されました。"
+  config_reloaded: "設定を再読み込みしました。"
+  config_saved: "設定を保存しました。"
+  recommended_ui_scale_applied: "推奨UIスケールを適用しました"
+  config_error: "設定ファイルが破損しています。デフォルト設定を使用します..."
+  localized_data_reloaded: "翻訳データを再読み込みしました。"
+  tl_repo_changed: "翻訳リポジトリを変更しました。翻訳データを再読み込みしました。"
+  tl_repo_folder_missing: "翻訳データフォルダが見つかりません。アップデートを確認して翻訳を復元してください。"
+  checking_for_tl_updates: "翻訳のアップデートを確認中..."
+  repairing_tl_updates: "翻訳を修復中..."
+  checking_for_addon_updates: "アドオンのアップデートを確認中..."
+  repairing_addon_updates: "翻訳アドオンの整合性を確認中..."
+  no_tl_updates: "翻訳のアップデートはありません。"
+  no_addon_updates: "アドオンのアップデートはありません。"
+  nothing_to_repair: "すべてのファイルに問題ありません。"
+  update_failed: "アップデートに失敗しました: %{reason}"
+  update_completed: "アップデートが完了しました。"
+  mod_update_completed: "アドオンのアップデートが完了しました。"
+  mod_update_completed_with_errors: "%{count}件のエラーでアドオンのアップデートが完了しました。詳細はログを確認してください。"
+  mod_update_all_failed: "アドオンのアップデートに失敗しました: %{count}件すべてのファイルの検証に失敗しました。詳細はログを確認してください。"
+  errors_during_update: "アップデート中に%{count}件のエラーが発生しました。詳細はログを確認してください。"
+  checking_for_updates: "アップデートを確認中..."
+  github_update_unreachable: "GitHubに接続できないため、Codebergを試しています..."
+  no_updates: "アップデートはありません。"
+  update_check_skipped_busy: "アップデート確認をスキップ: 別のアップデート確認が既に実行中です。"
+  update_check_skipped_pending: "アップデート確認をスキップ: アップデートが既に保留中です。"
+  update_check_skipped_downloading: "アップデート確認をスキップ: アップデートのダウンロード中です。完了後に自動的に実行されます。"
+  press_to_set_menu_key: "ゲームウィンドウ内でキーを押してメニューを開くホットキーを設定してください。"
+  menu_open_key_set: "メニューを開くホットキーを %{key} に設定しました"
+  ipc_softreset_exec: "IPCリモートソフト再起動を実行しました"
+  atlas_workaround_reset: "アトラスファイルが変更されたため、ワークアラウンドを無効化しました。"
+  asset_mismatch: "アップデートにより一部のアセットが無効化されました。詳細はログを確認してください。"
+  error_occurred: "エラーが発生しました: %{reason}"
+
+first_time_setup:
+  title: "初回セットアップ"
+  welcome_heading: "ようこそ"
+  welcome_content: "Hachimi Edge がインストールされました！このウィザードで初期設定を行います。翻訳機能を使わない場合は、ダイアログを閉じるだけでスキップできます。\n\n免責事項: Hachimi（およびその後継である Hachimi Edge）はコミュニティ主導のプロジェクトです。すべての翻訳はコミュニティの貢献者によって提供されています。Cygames, Inc. の開発・公認作品ではなく、ゲームの利用規約に違反します。続行することで、自己の責任において使用することに同意したものとみなされます。"
+  translation_repo_heading: "翻訳リポジトリ"
+  select_translation_repo: "翻訳リポジトリを選択："
+  no_compatible_repo: "このゲームバージョンに対応した翻訳リポジトリはありません。"
+  skip_translation: "翻訳をスキップする。"
+  common_settings_heading: "共通設定"
+  common_settings_content: >-
+    ゲームプレイと表示に関する基本的な設定を行います。
+    これらの設定はいつでも設定エディターで変更できます。
+  complete_heading: "すべて完了！"
+  complete_content: >-
+    「完了」をクリックして設定を保存します。
+    翻訳リポジトリを選択した場合はアップデートの確認が行われ、
+    新しい翻訳データのダウンロードを促すメッセージが表示されます。
+
+about:
+  title: "情報"
+  copyright: "© 2024-%{year} LeadRDRK, kairusds and contributors"
+  view_license: "ライセンスを表示"
+  open_website: "公式サイトを開く"
+  view_source_code: "ソースコードを表示"
+
+license:
+  title: "ライセンス"
+  gpl_v3_only_notice: "GPL-3.0-only ライセンス全文"
+
+tl_updater:
+  title: "アップデート中..."
+  title_mod: "アドオンをアップデート中..."
+  downloading: "ダウンロード中..."
+  checking: "確認中..."
+  extracting: "展開中..."
+  warning: "アップデート中は翻訳が機能しません"
+
+config_editor:
+  title: "設定エディター"
+  general_tab: "\ue8b9 一般"
+  graphics_tab: "\ueb97 グラフィック"
+  gameplay_tab: "\ue30f ゲームプレイ"
+  advanced_tab: "\ue8b8 詳細"
+  advanced_settings_heading: "詳細"
+  experimental_settings_heading: "実験的機能"
+  developer_settings_heading: "開発者向け"
+  restore_defaults: "デフォルトに戻す"
+
+  # ── 一般 ──────────────────────────────────────────────────────────────
+  language: "言語"
+  disable_overlay: "オーバーレイ (GUI) を無効化"
+  disable_overlay_warning: >-
+    このオプションを有効にしてゲームを再起動すると、Hachimi のオーバーレイが無効化され、
+    設定エディターにアクセスできなくなります。意図した操作でない場合は、このダイアログを閉じて
+    オプションを無効（オフ）のままにしてください。
+  gui_scale: "オーバーレイのスケール"
+  gui_landscape_ratio: "ランドスケープ時のオーバーレイ倍率"
+  menu_open_key: "メニューを開くホットキー"
+  menu_open_key_set: "設定"
+  recommended_ui_scale: "推奨UIスケールを適用"
+
+  # ── グラフィック ──────────────────────────────────────────────────────
+  target_fps: "目標FPS"
+  target_fps_unfocused: "非フォーカス時の目標FPS"
+  virtual_resolution_multiplier: "仮想解像度の倍率"
+  ui_scale: "UIスケール"
+  ui_animation_scale: "UIアニメーションのスケール"
+  msaa: "MSAA"
+  render_scale: "レンダースケール"
+  aniso_level: "異方性フィルタリング"
+  shadow_resolution: "シャドウ解像度"
+  graphics_quality: "グラフィック品質"
+  vsync: "VSync"
+  auto_full_screen: "自動フルスクリーン"
+  full_screen_mode: "フルスクリーンモード"
+  full_screen_mode_exclusive: "排他"
+  full_screen_mode_borderless: "ボーダーレス"
+  block_minimize_in_full_screen: "フルスクリーン中の最小化を阻止"
+  full_screen_res: "カスタムフルスクリーン解像度"
+  landscape: "ランドスケープ"
+  portrait: "ポートレート"
+  resolution_scaling: "解像度スケーリング"
+  resolution_scaling_default: "デフォルト (1080p)"
+  resolution_scaling_ssize: "画面サイズに合わせる"
+  resolution_scaling_wsize: "ウィンドウサイズに合わせる"
+  window_always_on_top: "常に手前に表示"
+  freeform_window: "フリーフォームウィンドウ"
+  freeform_ui_scale_auto: "フリーフォーム時にUIを自動スケール"
+  freeform_ui_scale_auto_ratio: "自動UIスケール倍率"
+  ui_loading_show_orientation_guide: "ロード中に画面の向きのガイドを表示"
+  force_orientation_mode: "画面の向きを強制"
+
+  # ── ゲームプレイ ──────────────────────────────────────────────────────
+  physics_update_mode: "物理演算の更新モード"
+  cyspring_mono_uncap_frame_scale: "CySpring Mono フレームスケールの上限解除"
+  cyspring_disable_native: "CySpring Mono パスを強制"
+  cyspring_disable_native_desc: "ネイティブプラグインを無効化します"
+  cyspring_stiffness_force_rate_scale: "CySpring 剛性レート倍率"
+  cyspring_drag_force_rate_scale: "CySpring 抗力レート倍率"
+  story_choice_auto_select_delay: "ストーリー選択肢の自動選択遅延"
+  story_text_speed_multiplier: "ストーリーテキストの速度倍率"
+  force_allow_dynamic_camera: "ダイナミックカメラを強制許可"
+  live_theater_allow_same_chara: "ライブシアターで同一キャラを許可"
+  disable_tap_effect: "タップエフェクトを無効化"
+  live_vocals_swap: "ライブボーカルの入れ替え"
+  live_vocals_swap_character_n: "キャラクター %{index}"
+  free_camera: "フリーカメラ"
+  skill_info_dialog: "カスタムスキル情報ダイアログ"
+  homescreen_bgseason: "ホーム画面の背景シーズン"
+  disable_skill_name_translation: "スキル名の翻訳を無効化"
+  hide_ingame_ui_hotkey: "ゲーム内UI非表示ホットキー"
+  hide_ingame_ui_hotkey_info: >-
+    このオプションを使用すると、ショートカットキーでゲーム内UIの表示を切り替えられます。
+    Android では画面右上を3回タップできます。PC やキーボード接続時の Android では
+    Insert キーで、GUI または設定から変更できます。
+  hide_ingame_ui_hotkey_bind: "UI非表示ホットキー"
+  enable_keyboard_shortcuts: "ゲーム内キーボードショートカットを有効化"
+  race_playback_slider: "レース再生スライダー"
+  race_playback_slider_always: "レース再生スライダーを常に表示"
+  race_playback_button: "レース再生の一時停止/再開ボタン"
+  race_playback_key_enable: "レース再生 一時停止/再開 キーバインドを有効化"
+  race_playback_key: "レース再生 一時停止/再開 キーバインド"
+  race_director_enabled: "レースディレクターHUD"
+  race_director_show_tower: "タイミングタワー"
+  race_director_show_followed: "フォロー中のウマ娘パネル"
+  race_director_show_winprob: "勝利確率"
+  race_director_show_predicted: "サーバー予測着順"
+  race_director_show_predicted_desc: "レース開始時に計算された着順を表示します（ネタバレになるためデフォルトでオフ）。"
+  race_director_opacity: "HUD背景の不透明度"
+  race_director_reset_windows: "ウィンドウ位置をリセット"
+  race_director_reset: "リセット"
+  live_slider_always_show: "ライブスライダーを常に表示"
+  live_playback_loop: "ライブ公演をループ再生"
+  trainer_live_landscape: "メニシュキライブでランドスケープモード"
+  champions_live_show_text: "チャンピオンズミーティングのライブテキストを上書き"
+  champions_live_resource_id: "チャンピオンズミーティングのタイトル"
+  champions_live_year: "チャンピオンズミーティングの開催年"
+  captions: "キャプション"
+  caption_font_size: "フォントサイズ"
+  caption_pos_x: "位置 X"
+  caption_pos_y: "位置 Y"
+  caption_bg_alpha: "背景の不透明度"
+  caption_color: "文字色"
+  caption_outline_size: "縁取りのサイズ"
+  caption_outline_color: "縁取りの色"
+  caption_fallback_enable: "フォールバック折り返し"
+  caption_fallback_tooltip: "N文字ごとに強制的に改行"
+  caption_lines_char_count: "1行の文字数"
+  caption_show_logging: "キャプション表示イベントをログに出力"
+  caption_show_logging_tooltip: "有効にすると、キャプションの表示状態とイベントのログが出力されます"
+  caption_format_logging: "キャプションの整形過程をログに出力"
+  caption_format_logging_tooltip: "有効にすると、キャプションの整形過程のログが出力されます"
+  caption_logging: "デバッグ用にキャプションのテキストをログに出力"
+  caption_logging_tooltip: "有効にすると、キャプションのテキストがログに出力されます"
+
+  # ── 詳細 ──────────────────────────────────────────────────────────────
+  enable_file_logging: "ファイルログを有効化"
+  enable_ipc: "IPC を有効化"
+  ipc_listen_all: "IPC ですべてのインターフェースで待ち受け"
+  ipv4_only: "ureq を IPv4 専用にする"
+  meta_index_url: "翻訳メタURL"
+  localized_data_dir: "翻訳データディレクトリ"
+  translator_mode: "翻訳者モード"
+  apply_atlas_workaround: "TLアトラス ワークアラウンドを適用"
+  disable_outdated_asset_notif: "古いアセットの通知を無効化"
+  replace_to_builtin_font: "内蔵フォントに置き換える"
+  skip_first_time_setup: "初回セットアップをスキップ"
+  lazy_translation_updates: "翻訳のアップデートを遅延"
+  disable_auto_update_check: "自動アップデート確認を無効化"
+  disable_mod_downloads: "アドオンのダウンロードを無効化"
+  translation_repo_index_mod: "翻訳アドオンのインデックスURL"
+  bg_update_mode: "バックグラウンドアップデートモード"
+  bg_update_periodic: "定期的 (確認あり)"
+  bg_update_silent: "サイレント (自動)"
+  bg_update_interval: "バックグラウンドアップデートの間隔"
+  bg_update_interval_unit: "分"
+  disable_translations: "翻訳を無効化"
+  hook_libc_dlopen: "libc dlopen フックを強制 (Waydroid/エミュレータ)"
+  keep_screen_on: "画面のタイムアウトを防止"
+  discord_rpc: "Discord RPC"
+  enable_smtc: "Windows メディアコントロールを有効化"
+  unavailable_wine_proton: "Wine/Proton 環境では利用できません"
+  notification_tp: "TP 回復通知"
+  notification_rp: "RP 回復通知"
+  notification_jobs: "ジョブ完了通知"
+  taskbar_show_progress_on_download: "ダウンロード中のタスクバー進捗"
+  taskbar_show_progress_on_connecting: "接続中のタスクバー進捗"
+  taskbar_show_progress_on_schedule_book: "トレーナー Agenda のタスクバー進捗"
+  custom_title_name: "カスタムウィンドウタイトル"
+  hide_now_loading: "ロード画面を隠す"
+  unlock_live_chara: "ライブシアターのキャラクター/楽曲を解放"
+  # 実験的機能
+  auto_translate_stories: "ストーリーを自動翻訳"
+  auto_tl_warning: >-
+    注意: この機能は単独では動作しません。外部環境の構築が必要です。
+    有効にするには、py3translationServer や Sugoi Toolkit など、API を公開する
+    翻訳サーバーをお使いのPCまたはクラウドサービスに用意する必要があります。
+    サーバーが動作していない場合、追加の翻訳は行われず、ゲームプレイに影響が出る
+    場合があります。翻訳サーバーを用意していない場合は、このオプションを
+    無効のままにしてください。
+  sugoi_url: "自動翻訳サーバーのURL"
+  auto_translate_ui: "UIを自動翻訳"
+  auto_translate_ui_desc: "UIが壊れる可能性があります"
+  msgpack_notifier: "MsgPack 通知を有効化"
+  msgpack_notifier_host: "通知ホストのURL"
+  msgpack_notifier_request: "通知にリクエストを含める"
+  msgpack_notifier_connection_timeout_ms: "通知の接続タイムアウト (ms)"
+  msgpack_notifier_print_error: "HTTP エラーをコンソールに出力"
+  dump_msgpack: "MsgPack レスポンスをダンプ"
+  dump_msgpack_request: "MsgPack リクエストをダンプ"
+  # 開発者向け
+  debug_mode: "デバッグモード"
+  text_debug: "テキストデバッグモード"
+  text_log: "処理したテキストをログに出力"
+  text_property_dump: "UIプロパティをダンプ"
+  text_localize_dump: "翻訳済み文字列をダンプ"
+  text_position_debug: "位置オフセットをログに出力"
+  text_path_debug: "UIパスをログに出力"
+
+theme_editor:
+  title: "テーマ設定"
+  seed_color: "シードカラー"
+  theme_mode: "テーマモード"
+  dark: "ダーク"
+  light: "ライト"
+  contrast_level: "コントラスト"
+  normal: "標準"
+  medium: "中"
+  high: "高"
+  scheme_mode: "カラースキーム"
+  auto: "自動 (シードから生成)"
+  manual: "手動"
+  manual_colors: "カラーの上書き"
+  primary: "プライマリ"
+  surface: "サーフェス"
+  on_surface: "オンサーフェス"
+  transparency: "背景の透過率"
+  corner_radius: "角の丸み"
+  translucency_method: "半透明の方式"
+  translucency_none: "なし"
+  translucency_overlay: "フローティングカード"
+  translucency_full: "フル"
+
+tl_update_dialog:
+  title: "新しいアップデートがあります"
+  content: "新しい翻訳のアップデートがあります (%{size})。ダウンロードしますか？"
+  content_zip_warning: "新しい翻訳のアップデートがあります (%{changed_size})。このアップデートでは完全なアーカイブ (%{download_size}) をダウンロードします。"
+  title_mod: "新しいアドオンのアップデートがあります"
+  content_mod: "新しい翻訳アドオンのアップデートがあります (%{size})。ダウンロードしますか？"
+
+update_prompt_dialog:
+  title: "新しいアップデートがあります"
+  content: "新しい Hachimi Edge のアップデートがあります (%{version})。インストールしますか？\nアップデートを適用するため、ゲームが再起動されます。\n"
+  android_content: |
+    新しい Hachimi Edge のアップデートがあります (%{version})。インストールしますか？
+
+    「はい」をタップすると UmaPatcher Edge が開き、現在のゲームに再パッチします。
+    （ゲーム本体や APK の再ダウンロードは不要です。UmaPatcher Edge は常に最新の
+    Hachimi Edge をダウンロードするため、普段どおりに再パッチするだけです。）
+
+updating_dialog:
+  title: "アップデート中"
+  content: "アップデートをダウンロード中です。まもなくゲームが再起動されます..."
+
+steam_overlay_conflict_dialog:
+  title: "お知らせ"
+  content: >-
+    Hachimi のオーバーレイが有効な場合、購入が正常に行えないことがあります。
+    購入時に Steam オーバーレイが表示された場合は、このメッセージを無視して「いいえ」を
+    押してください。うまくいかない場合は「はい」を押して、一時的に Hachimi のオーバーレイを
+    無効にしてください。ゲームが終了し、次回の起動時にはオーバーレイが無効化された状態で
+    起動するため、購入できるようになります。その後、ゲームを再起動すればオーバーレイを
+    再度有効にできます。
+key_names:
+  left: "左方向キー"
+  right: "右方向キー"
+  up: "上方向キー"
+  down: "下方向キー"
+  insert: "Insert"
+  delete: "Delete"
+  home: "Home"
+  end: "End"
+  page_up: "Page Up"
+  page_down: "Page Down"
+  escape: "Escape"
+  tab: "Tab"
+  enter: "Enter"
+  space: "スペース"
+  backspace: "Backspace"
+  clear: "Clear"
+  pause: "Pause"
+  caps_lock: "Caps Lock"
+  scroll_lock: "Scroll Lock"
+  num_lock: "Num Lock"
+  print_screen: "Print Screen"
+  left_win: "左Windows"
+  right_win: "右Windows"
+  apps: "メニュー"
+  alt: "Alt"
+  ctrl: "Ctrl"
+  shift: "Shift"
+  numpad_0: "テンキー 0"
+  numpad_1: "テンキー 1"
+  numpad_2: "テンキー 2"
+  numpad_3: "テンキー 3"
+  numpad_4: "テンキー 4"
+  numpad_5: "テンキー 5"
+  numpad_6: "テンキー 6"
+  numpad_7: "テンキー 7"
+  numpad_8: "テンキー 8"
+  numpad_9: "テンキー 9"
+  numpad_add: "テンキー +"
+  numpad_subtract: "テンキー -"
+  numpad_multiply: "テンキー *"
+  numpad_divide: "テンキー /"
+  numpad_decimal: "テンキー ."
+  dpad_up: "十字キー 上"
+  dpad_down: "十字キー 下"
+  dpad_left: "十字キー 左"
+  dpad_right: "十字キー 右"
+  back: "戻る"
+  volume_up: "音量上げ"
+  volume_down: "音量下げ"
+  copy: "コピー"
+  cut: "切り取り"
+  paste: "貼り付け"
+  semicolon: "セミコロン"
+  comma: "カンマ"
+  backslash: "円記号"
+  slash: "スラッシュ"
+  left_bracket: "["
+  right_bracket: "]"
+  grave: "半角濁点"
+  minus: "マイナス"
+  period: "ピリオド"
+  plus: "プラス"
+  equals: "イコール"
+  unknown: "キー %{code}"
+free_camera:
+  enable: "フリーカメラを有効化"
+  settings_title: "フリーカメラ設定"
+  section_general: "一般"
+  section_live: "ライブシアター"
+  section_race: "レース"
+  section_keybinds: "Windows キーバインド"
+  remove_camera_effects: "カメラエフェクトを除去"
+  live_remove_screen_effects: "スクリーンエフェクトを除去"
+  live_disable_character_teleport: "キャラクターのテレポートを無効化"
+  live_force_all_characters_visible: "すべてのキャラクターを常に表示"
+  show_overlay: "切り替えオーバーレイを表示"
+  selfie_use_head_transform: "キャラクター追従時にセルカ棒を使用"
+  mode: "モード"
+  mode_free: "フリー移動"
+  mode_first_person: "一人称視点"
+  mode_selfie_stick: "キャラクター追従"
+  live_move_step: "ライブの移動ステップ"
+  race_move_step: "レースの移動ステップ"
+  look_step: "視点の回転ステップ"
+  mouse_speed: "マウス速度"
+  live_fov: "ライブ FOV"
+  race_fov: "レース FOV"
+  gamepad_deadzone: "ゲームパッドのデッドゾーン"
+  gamepad_move_speed: "ゲームパッドの移動速度"
+  gamepad_look_speed: "ゲームパッドの視点速度"
+  live_target_position: "ライブのターゲット位置"
+  live_target_part: "ライブのターゲット部位"
+  live_selfie_horizontal_stabilization: "ライブ 水平追従デッドゾーン"
+  live_selfie_vertical_stabilization: "ライブ 垂直追従デッドゾーン"
+  live_follow_offset: "ライブ 追従オフセット"
+  live_follow_lookat_offset: "ライブ 視点オフセット"
+  live_follow_smooth: "ライブ追従をスムージング"
+  live_follow_smooth_lookat_step: "ライブ 視点のスムージング"
+  live_follow_smooth_pos_step: "ライブ 位置のスムージング"
+  live_first_person_offset: "ライブ 一人称オフセット"
+  race_target_index: "レース ターゲット番号 (-1 = 自動)"
+  race_follow_offset: "レース 追従オフセット"
+  race_follow_distance: "レース 追従距離"
+  race_first_person_lookat_offset: "レース 視点オフセット"
+  overlay_mode: "モード: %{mode}"
+  overlay_target: "ターゲット: %{target}"
+  overlay_part: "部位: %{part}"
+  target_auto: "自動"
+  target_gate: "%{index}番ゲート"
+  key_move_forward: "前へ移動"
+  key_move_back: "後ろへ移動"
+  key_move_left: "左へ移動"
+  key_move_right: "右へ移動"
+  key_move_down: "下へ移動"
+  key_move_up: "上へ移動"
+  key_look_up: "上を見る"
+  key_look_down: "下を見る"
+  key_look_left: "左を見る"
+  key_look_right: "右を見る"
+  key_fov_increase: "FOV を拡大"
+  key_fov_decrease: "FOV を縮小"
+  key_follow_offset_up: "追従オフセットを上へ"
+  key_follow_offset_down: "追従オフセットを下へ"
+  key_follow_offset_left: "追従オフセットを左へ"
+  key_follow_offset_right: "追従オフセットを右へ"
+  key_target_previous: "前のターゲット"
+  key_target_next: "次のターゲット"
+  key_part_previous: "前の部位"
+  key_part_next: "次の部位"
+  key_reset: "カメラ位置をリセット"
+  key_cycle_mode: "モードを切り替え"
+  key_reverse: "追従カメラの視点を反転 (前 <-> 後ろ)"
+  cheatsheet_title: "フリーカメラ 操作ガイド"
+  cheatsheet_contents: |
+    # フリーカメラ 操作ガイド
+    この機能は **レース** または **ライブコンサート** でのみ動作します。
+
+    デフォルトの部位は **顔 (Face)** です。
+
+    デフォルトのターゲットは **Place01** です。
+
+    ## マウス操作
+    * **右クリック + ドラッグ:** 視点を回す
+    * **ホイール 上 / 下:** FOV 拡大 / 縮小
+
+    ---
+
+    ## ゲームパッド操作 (Xbox / PlayStation)
+
+    ### **移動とカメラアングル**
+    * **左スティック:** 前後左右へ移動
+    * **右スティック:** 視点の操作 (左/右/上/下)
+    * **Rトリガー (RT / R2):** 上へ移動
+    * **Lトリガー (LT / L2):** 下へ移動
+    * **Rショルダー / バンパー (RB / R1):** FOV 縮小
+    * **Lショルダー / バンパー (LB / L1):** FOV 拡大
+
+    ---
+
+    ### アクションボタン
+    * **Y** (△): カメラ位置をリセット
+    * **X** (□): カメラモードを切り替え
+    * **B** (○): 追従カメラの視点を反転 *(前 <-> 後ろ、追従カメラのみ)*
+    * **A** (✕): ライブの一時停止 / 再開
+
+    ---
+
+    ### 十字キー操作 (フリー移動では使用不可)
+    * **十字キー 右:** 次のターゲット *(追従カメラ & 一人称視点)*
+    * **十字キー 左:** 前のターゲット *(追従カメラ & 一人称視点)*
+    * **十字キー 上:** 次の部位 *(追従カメラのみ)*
+    * **十字キー 下:** 前の部位 *(追従カメラのみ)*

@@ -1343,6 +1343,9 @@ pub enum Language {
     #[serde(rename = "en")]
     English,
 
+    #[serde(rename = "ja")]
+    Japanese,
+
     #[serde(rename = "zh-tw")]
     TChinese,
 
@@ -1381,6 +1384,8 @@ impl Default for Language {
             Self::TChinese
         } else if locale.contains("zh") {
             Self::SChinese
+        } else if locale.starts_with("ja") {
+            Self::Japanese
         } else if locale.starts_with("vi") {
             Self::Vietnamese
         } else if locale.starts_with("id") {
@@ -1404,6 +1409,7 @@ impl Default for Language {
 impl Language {
     pub const CHOICES: &[(Self, &'static str)] = &[
         Self::English.choice(),
+        Self::Japanese.choice(),
         Self::TChinese.choice(),
         Self::SChinese.choice(),
         Self::Vietnamese.choice(),
@@ -1422,6 +1428,7 @@ impl Language {
     pub const fn locale_str(&self) -> &'static str {
         match self {
             Language::English => "en",
+            Language::Japanese => "ja",
             Language::TChinese => "zh-tw",
             Language::SChinese => "zh-cn",
             Language::Vietnamese => "vi",
@@ -1437,6 +1444,7 @@ impl Language {
     pub const fn name(&self) -> &'static str {
         match self {
             Language::English => "English",
+            Language::Japanese => "日本語",
             Language::TChinese => "繁體中文",
             Language::SChinese => "简体中文",
             Language::Vietnamese => "Tiếng Việt",
