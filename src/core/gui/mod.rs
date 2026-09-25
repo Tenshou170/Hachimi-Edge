@@ -459,6 +459,7 @@ impl Gui {
         add_font!(fonts, proportional_fonts, "GoogleSansFlex.ttf");
         add_font!(fonts, proportional_fonts, "MaterialSymbolsOutlined.ttf");
         add_font!(fonts, proportional_fonts, "HarmonyOSSansRegularMerged.ttf");
+        add_font!(fonts, proportional_fonts, "MPLUS1-Regular.ttf");
         add_font!(fonts, proportional_fonts, "Pretendard-Regular.ttf");
 
         fonts

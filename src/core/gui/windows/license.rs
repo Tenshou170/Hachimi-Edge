@@ -27,6 +27,16 @@ const FONT_NOTICES: &[FontNotice] = &[
         license: "HarmonyOS Sans Font License Agreement",
         copyright: "Copyright (c) 2021 Huawei Device (Dongguan) Co., Ltd. All rights reserved.",
     },
+    FontNotice {
+        name: "Pretendard",
+        license: "SIL Open Font License 1.1",
+        copyright: "Copyright © 2023 Kil Hyung-jin",
+    },
+    FontNotice {
+        name: "M PLUS 1",
+        license: "SIL Open Font License 1.1",
+        copyright: "Copyright 2021 The M+ FONTS Project Authors (https://github.com/coz-m/MPLUS_FONTS)",
+    },
 ];
 
 pub struct LicenseWindow {
