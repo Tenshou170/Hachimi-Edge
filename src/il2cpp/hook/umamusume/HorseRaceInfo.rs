@@ -77,17 +77,21 @@ pub fn is_start_dash_instance(race_manager: *mut Il2CppObject) -> bool {
     }
 }
 
-pub fn is_finished() -> bool {
+/// Whether the player's horse has finished the race. `None` when race data is
+/// currently unavailable — the game can drop `RaceManager`/`_horseManager` for a
+/// single transient frame mid-race, and the one-way finished latch in
+/// race_telemetry must never fire on that (it would hide the Race Director HUD
+/// and playback slider for the rest of the race). Overlays hide while data is
+/// missing via the null guards in the GUI `*_showing()` paths instead.
+pub fn is_finished() -> Option<bool> {
     let race_manager = RaceManager::instance();
-    if race_manager.is_null() { return true; }
+    if race_manager.is_null() { return None; }
 
     let horse_manager = RaceManager::get__horseManager(race_manager);
-    if horse_manager.is_null() { return true; }
+    if horse_manager.is_null() { return None; }
 
-    match player_horse_info(horse_manager) {
-        Some(player_info) => IsFinished(player_info) || reached_course_end(player_info),
-        None => true,
-    }
+    let player_info = player_horse_info(horse_manager)?;
+    Some(IsFinished(player_info) || reached_course_end(player_info))
 }
 
 /// The game can leave IsFinished() false after the player horse has crossed the

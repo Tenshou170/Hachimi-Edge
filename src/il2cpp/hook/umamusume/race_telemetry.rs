@@ -60,14 +60,20 @@ pub fn collect_frame() {
     // here (safe: we're on the game thread and race objects are still alive) so
     // showing() can dismiss the HUD and playback slider immediately.
     //
-    // race_manager can go null for a single transient frame mid-race, so it's guarded
-    // rather than treated as "race over" - this sets a one-way latch, so a false positive
-    // here would kill the feature for the rest of the race.
-    if !race_director::is_race_finished()
-        && (HorseRaceInfo::is_finished() || (!race_manager.is_null() && RaceManager::is_race_finished(race_manager)))
-    {
-        race_director::set_race_finished(true);
-        crate::core::gui::reset_race_slider();
+    // race_manager can go null for a single transient frame mid-race, so both signals
+    // are guarded against missing data rather than treated as "race over" -
+    // is_finished() returns None then, and is_race_finished is only called with a live
+    // instance. This sets a one-way latch, so a false positive here would kill the
+    // feature for the rest of the race; while data is missing the GUI *_showing()
+    // paths hide via their own null guards instead.
+    if !race_director::is_race_finished() {
+        let data_finished = HorseRaceInfo::is_finished();
+        let manager_finished =
+            !race_manager.is_null() && RaceManager::is_race_finished(race_manager);
+        if matches!(data_finished, Some(true)) || manager_finished {
+            race_director::set_race_finished(true);
+            crate::core::gui::reset_race_slider();
+        }
     }
 
     // Runs ahead of the race_director.enabled gate below since race_slider_showing()/
