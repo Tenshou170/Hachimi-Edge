@@ -5,6 +5,8 @@ use crate::il2cpp::{
     types::*
 };
 
+use super::RaceManager;
+
 static RACE_ACTIVE: AtomicBool = AtomicBool::new(false);
 pub fn is_race_active() -> bool {
     RACE_ACTIVE.load(Ordering::Acquire)
@@ -19,6 +21,14 @@ extern "C" fn RaceHorseManagerBase_Init(this: *mut Il2CppObject, raceInfo: *mut 
     // collect_frame() never sees stale GATE_OPEN/RACE_FINISHED from the prior race.
     // Called unconditionally — independent of race_director.enabled in config.
     crate::core::race_director::on_race_start();
+    // Best-effort cross-race hygiene, before this race starts running:
+    // - a prior seek that crossed the finish can leave the game's skip-to-race-end
+    //   flag latched on a reused RaceManager, which would fast-forward this race to
+    //   the end instantly (no-op when the flag doesn't exist on this build);
+    // - drop the previous race's cached seek ceiling so the slider recomputes it
+    //   for this race's course instead of reusing a stale bound.
+    RaceManager::clear_race_end_skip_state(RaceManager::instance());
+    crate::core::gui::reset_seek_ceiling();
     RACE_ACTIVE.store(true, Ordering::Release);
     get_orig_fn!(RaceHorseManagerBase_Init, RaceHorseManagerBase_InitFn)(this, raceInfo);
 }

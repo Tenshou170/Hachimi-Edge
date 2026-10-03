@@ -126,6 +126,17 @@ fn trainer_of(gate: i32) -> (String, i64) {
 /// Record this frame's telemetry for one horse, and (if it just crossed the finish line)
 /// its live finish rank. `course` is the race's course distance in meters (0 if unknown).
 pub fn record_horse(gate: i32, t: HorseTelem, course: f32) {
+    // `_distance` can come back absurd after a bad seek (observed at ~53 km, i.e.
+    // speed × a bogus seek time). Never let such a sample enter telemetry: it would
+    // poison finish ranks and the timing tower's gap math. Keep the last known-good
+    // sample for this gate instead.
+    if !t.distance.is_finite()
+        || t.distance < -1.0
+        || (course > 0.0 && t.distance > course + 500.0)
+    {
+        return;
+    }
+
     {
         let mut buf = TELEM.lock().unwrap();
         if let Some(slot) = buf.iter_mut().find(|(g, _)| *g == gate) {
@@ -482,7 +493,18 @@ pub fn field_rows() -> Vec<FieldRow> {
             name: gate_name(h.gate),
             style: h.running_style,
             sta: if h.max_hp > 0.0 { (h.hp / h.max_hp).clamp(0.0, 1.0) } else { 0.0 },
-            gap_leader: (leader_dist - h.distance).max(0.0),
+            gap_leader: {
+                let gap = leader_dist - h.distance;
+                if !gap.is_finite() {
+                    0.0
+                } else if course > 0.0 {
+                    // A gap can never exceed the course itself; clamping keeps a
+                    // single bad distance from rendering as an absurd +50 km gap.
+                    gap.clamp(0.0, course)
+                } else {
+                    gap.max(0.0)
+                }
+            },
             trend: 0,
             popularity: h.popularity,
             spurt: h.spurt,

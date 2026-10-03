@@ -9,6 +9,8 @@ def_field_object_accessors!(get__simData, set__simData, SIM_DATA_FIELD, Il2CppOb
 def_field_value_accessors!(get__curTime, set__curTime, CUR_TIME_FIELD, f32);
 
 def_method_wrapper_fn!(GetLastFrameTime, GET_LAST_FRAME_TIME_ADDR, f32, this: *mut Il2CppObject);
+def_method_wrapper_fn!(GetTimeByDistance, GET_TIME_BY_DISTANCE_ADDR, f32, this: *mut Il2CppObject, horse_index: i32, target_distance: f32);
+def_method_wrapper_fn!(GetDistance, GET_DISTANCE_ADDR, f32, this: *mut Il2CppObject, horse_index: i32, time: f32);
 
 pub fn replay_cur_time(race_manager: *mut Il2CppObject) -> Option<f32> {
     let horse_manager = RaceManager::get__horseManager(race_manager);
@@ -29,5 +31,7 @@ pub fn init(umamusume: *const Il2CppImage) {
         SIM_DATA_FIELD = get_field_from_name(RaceSimulateReader, c"_simData");
         CUR_TIME_FIELD = get_field_from_name(RaceSimulateReader, c"_curTime");
         GET_LAST_FRAME_TIME_ADDR = get_method_addr(RaceSimulateReader, c"GetLastFrameTime", 0);
+        GET_TIME_BY_DISTANCE_ADDR = get_method_addr(RaceSimulateReader, c"GetTimeByDistance", 2);
+        GET_DISTANCE_ADDR = get_method_addr(RaceSimulateReader, c"GetDistance", 2);
     }
 }

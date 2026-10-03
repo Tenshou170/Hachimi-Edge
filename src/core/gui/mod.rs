@@ -166,6 +166,17 @@ pub static RACE_SLIDER_DRAG_START_TIME: AtomicU32 = AtomicU32::new(0);
 static RACE_SLIDER_SEEK_FAULTED: AtomicBool = AtomicBool::new(false);
 pub static RACE_SLIDER_MUSIC_TIME: AtomicU32 = AtomicU32::new(0);
 pub static RACE_SLIDER_MUSIC_VALID: AtomicBool = AtomicBool::new(false);
+// Seek ceiling for the current race (f32 bits, 0 = unknown), computed on the game
+// thread by RaceManagerReplayBase::seek_ceiling and read by the widget, since the
+// render thread must never call into IL2CPP to size the slider range.
+static RACE_SLIDER_CEILING: AtomicU32 = AtomicU32::new(0);
+
+/// Drop the cached seek ceiling so the next race recomputes it for its own course.
+/// Called at race init (see RaceHorseManagerBase_Init) to avoid a stale bound from
+/// the previous race constraining this one.
+pub fn reset_seek_ceiling() {
+    RACE_SLIDER_CEILING.store(0, atomic::Ordering::Release);
+}
 
 pub fn reset_race_slider() {
     IS_CONSUMING_INPUT.store(false, atomic::Ordering::Release);
@@ -175,6 +186,14 @@ pub fn reset_race_slider() {
     RACE_SLIDER_END_REQUESTED.store(false, atomic::Ordering::Release);
     RACE_SLIDER_PAUSE_DEPTH.store(0, atomic::Ordering::Release);
     RACE_SLIDER_SEEK_FAULTED.store(false, atomic::Ordering::Release);
+    // Also clear the per-seek values: they used to survive here until the slider's
+    // not-showing branch ran, leaking one race's seek state into the next.
+    RACE_SLIDER_LAST_APPLIED.store(0, atomic::Ordering::Release);
+    RACE_SLIDER_DRAG_START_TIME.store(0, atomic::Ordering::Release);
+    RACE_SLIDER_TARGET_TIME.store(0, atomic::Ordering::Release);
+    RACE_SLIDER_MUSIC_TIME.store(0, atomic::Ordering::Release);
+    RACE_SLIDER_MUSIC_VALID.store(false, atomic::Ordering::Release);
+    reset_seek_ceiling();
 }
 
 pub fn race_slider_drain() {
@@ -184,11 +203,28 @@ pub fn race_slider_drain() {
     let seek_pending = RACE_SLIDER_PENDING.swap(false, atomic::Ordering::AcqRel);
 
     let race_manager = RaceManager::instance();
-    if race_manager.is_null() || RaceManager::is_race_finished(race_manager) {
+    if race_manager.is_null()
+        || RaceManager::is_race_finished(race_manager)
+        // One-way finish latch: once it is set the race is over, and applying a
+        // queued seek would rewind a dead replay and un-latch the HUD (whose only
+        // render-thread gate IS this latch - it can't see the game-side flags).
+        || crate::core::race_director::is_race_finished()
+    {
         RACE_SLIDER_PAUSE_DEPTH.swap(0, atomic::Ordering::AcqRel);
         RACE_SLIDER_DRAGGING.store(false, atomic::Ordering::Release);
         RACE_SLIDER_SEEK_FAULTED.store(false, atomic::Ordering::Release);
+        RACE_SLIDER_CEILING.store(0, atomic::Ordering::Release);
         return;
+    }
+
+    // Cache the widget's seek ceiling once per race (game-thread only; the render
+    // thread must not compute it). Until it is known, the widget falls back to the
+    // old (total - 0.5) bound.
+    if RACE_SLIDER_CEILING.load(atomic::Ordering::Acquire) == 0 {
+        let ceiling = RaceManagerReplayBase::seek_ceiling(race_manager);
+        if ceiling > 0.0 {
+            RACE_SLIDER_CEILING.store(ceiling.to_bits(), atomic::Ordering::Release);
+        }
     }
 
     if !end_requested && !seek_pending { return; }
@@ -201,12 +237,21 @@ pub fn race_slider_drain() {
 
     let mut settle_target: Option<f32> = None;
     if seek_pending {
-        let target_time = f32::from_bits(RACE_SLIDER_TARGET_TIME.load(atomic::Ordering::Acquire));
-        if RaceManagerReplayBase::seek_sync(target_time) {
+        let mut target_time = f32::from_bits(RACE_SLIDER_TARGET_TIME.load(atomic::Ordering::Acquire));
+        let ceiling = f32::from_bits(RACE_SLIDER_CEILING.load(atomic::Ordering::Acquire));
+        // Clamp before applying so LAST_APPLIED/settle reflect what was actually
+        // applied; if no sane ceiling exists yet, drop the seek rather than risk a
+        // past-the-finish target (seek_sync re-checks independently).
+        if ceiling > 0.0 {
+            target_time = target_time.min(ceiling);
+        }
+        if ceiling > 0.0 && target_time.is_finite() && target_time >= 0.0
+            && RaceManagerReplayBase::seek_sync(target_time)
+        {
             RACE_SLIDER_LAST_APPLIED.store(target_time.to_bits(), atomic::Ordering::Release);
             RACE_SLIDER_SEEK_FAULTED.store(false, atomic::Ordering::Release);
             settle_target = Some(target_time);
-        } else {
+        } else if ceiling > 0.0 {
             RACE_SLIDER_SEEK_FAULTED.store(true, atomic::Ordering::Release);
         }
     } else if !RACE_SLIDER_SEEK_FAULTED.load(atomic::Ordering::Acquire) {
@@ -898,8 +943,20 @@ impl Gui {
         if reader.is_null() { return; }
 
         let total = RaceSimulateReader::GetLastFrameTime(reader);
-        if total <= 0.0 { return; }
-        let max_time = (total - 0.5).max(0.0);
+        // Never trust a garbage total as the seek range: a transiently bogus value
+        // here previously widened the slider past the finish line (and NaN slipped
+        // through the old `total <= 0.0` check).
+        if !total.is_finite() || total <= 0.0 || total > RaceManagerReplayBase::MAX_RACE_SECS {
+            return;
+        }
+        // Prefer the game-thread-computed finish ceiling; fall back to (total - 0.5)
+        // until it is known.
+        let ceiling = f32::from_bits(RACE_SLIDER_CEILING.load(atomic::Ordering::Acquire));
+        let max_time = if ceiling > 0.0 && ceiling < total {
+            ceiling
+        } else {
+            (total - 0.5).max(0.0)
+        };
 
         let cut_in_playing = RaceManagerReplayBase::get_IsPlayingCutIn(race_manager);
         let interactable = !cut_in_playing;

@@ -40,9 +40,74 @@ def_method_wrapper_fn!(UpdateHorseModels, UPDATE_HORSE_MODELS_ADDR, (), this: *m
 
 def_field_object_accessors!(get__eventPlayer, set__eventPlayer, EVENT_PLAYER_FIELD, Il2CppObject);
 
+/// Longest plausible race (generous). Totals outside `(0, MAX_RACE_SECS]` are
+/// treated as garbage rather than trusted as a seek bound - a transiently bogus
+/// `GetLastFrameTime()` previously became the slider's range and let seeks land
+/// far past the finish line.
+pub const MAX_RACE_SECS: f32 = 900.0;
+
+/// Hard ceiling for seek targets, computed on the game thread: the moment the last
+/// horse covers the course (the replay's terminal goal - seeking at/past it fires the
+/// game's finish checks mid-seek and wedges the replay into its race-end state), minus
+/// a small margin, itself bounded by the sim's last frame. Falls back to
+/// `total - 0.5` when per-horse finish times aren't readable yet; returns 0.0 when no
+/// sane total exists, meaning "cannot bound" (callers must then refuse to seek).
+///
+/// Game thread only (IL2CPP calls); the render thread reads the cached copy in
+/// `crate::core::gui` instead.
+pub fn seek_ceiling(race_manager: *mut Il2CppObject) -> f32 {
+    let horse_manager = RaceManager::get__horseManager(race_manager);
+    if horse_manager.is_null() || !RaceHorseManagerReplay::is_replay_manager(horse_manager) {
+        return 0.0;
+    }
+    let reader = RaceHorseManagerReplay::get__reader(horse_manager);
+    if reader.is_null() {
+        return 0.0;
+    }
+
+    let total = RaceSimulateReader::GetLastFrameTime(reader);
+    if !total.is_finite() || total <= 0.0 || total > MAX_RACE_SECS {
+        return 0.0;
+    }
+    let mut ceiling = total - 0.5;
+
+    // Tighten to the last horse's finish time when the sim can tell us. The finish
+    // times must live in the same clock as the reader (`_curTime`/`GetLastFrameTime`)
+    // and land just before the final frame; anything else is discarded and we keep
+    // the plain `total - 0.5` bound (never worse than the old behavior).
+    let course = crate::core::race_director::course_distance() as f32;
+    if course > 0.0 {
+        let horse_infos = RaceHorseManagerBase::GetHorseRaceInfos(horse_manager);
+        if !horse_infos.is_null() {
+            let horse_arr: Array<*mut Il2CppObject> = Array::from(horse_infos);
+            let n = horse_arr.len();
+            let mut last_finish = 0.0f32;
+            for i in 0..n {
+                let t = RaceSimulateReader::GetTimeByDistance(reader, i as i32, course);
+                if t.is_finite() && t > last_finish {
+                    last_finish = t;
+                }
+            }
+            if last_finish > 0.0 && last_finish < total && last_finish + 15.0 >= total {
+                ceiling = ceiling.min(last_finish - 0.5);
+            }
+        }
+    }
+
+    if ceiling < 0.0 { 0.0 } else { ceiling }
+}
+
 pub fn seek_sync(target_time: f32) -> bool {
     let race_manager = RaceManager::instance();
     if race_manager.is_null() { return true; }
+
+    // Defense in depth: whatever the caller computed, never seek to or past the
+    // terminal goal, and never seek on a nonsense target.
+    let ceiling = seek_ceiling(race_manager);
+    if ceiling <= 0.0 || !target_time.is_finite() || target_time < 0.0 {
+        return true;
+    }
+    let target_time = target_time.min(ceiling);
 
     let event_player = get__eventPlayer(race_manager);
 
@@ -69,7 +134,11 @@ pub fn seek_sync(target_time: f32) -> bool {
                 }
             }
         }
-        crate::core::race_director::set_race_finished(false);
+        // NOTE: this intentionally does NOT clear race_director's race-finished
+        // latch any more. Clearing it here let a seek resurrect the HUD after the
+        // race was already over (the player horse had been rewound and could never
+        // finish again, so the latch never re-fired). Seeks can no longer cross the
+        // finish (ceiling above), so the latch can only be genuinely set now.
 
         race_seek_stage(2); // race_time
         ForceSetRaceTime(race_manager, target_time, true);
@@ -104,7 +173,14 @@ pub fn seek_sync(target_time: f32) -> bool {
         RaceViewReplay::set_lastSpurtProcessed(view, false);
 
         if backward {
-            race_seek_stage(11); // minimap_rearm
+            race_seek_stage(11); // distance_repair
+            // The game only rewinds `_distance` for unfinished horses; finished ones
+            // keep stale values (observed at ~53 km) that explode the timing tower's
+            // gap math. Repair any horse whose distance is inconsistent with where
+            // the sim says it should be at the target time.
+            repair_horse_distances(race_manager, target_time);
+
+            race_seek_stage(12); // minimap_rearm
             let race_main_view = RaceManager::get_RaceMainView(race_manager);
             if race_main_view.is_null() { return; }
 
@@ -122,6 +198,49 @@ pub fn seek_sync(target_time: f32) -> bool {
     });
 
     ok
+}
+
+/// Post-seek repair for backward seeks: force any horse whose `_distance` is
+/// non-finite, negative, absurdly past the course, or still far ahead of where the
+/// sim's time->distance table says it should be at `target_time`, back to the sim's
+/// own value. Called inside `race_seek_seh`, so a fault here is reported by stage.
+fn repair_horse_distances(race_manager: *mut Il2CppObject, target_time: f32) {
+    let horse_manager = RaceManager::get__horseManager(race_manager);
+    if horse_manager.is_null() || !RaceHorseManagerReplay::is_replay_manager(horse_manager) {
+        return;
+    }
+    let reader = RaceHorseManagerReplay::get__reader(horse_manager);
+    if reader.is_null() {
+        return;
+    }
+    let horse_infos = RaceHorseManagerBase::GetHorseRaceInfos(horse_manager);
+    if horse_infos.is_null() {
+        return;
+    }
+
+    let course = crate::core::race_director::course_distance() as f32;
+    let horse_arr: Array<*mut Il2CppObject> = Array::from(horse_infos);
+    for (i, horse_info) in unsafe { horse_arr.as_slice() }.iter().enumerate() {
+        if horse_info.is_null() {
+            continue;
+        }
+        // horseIndex == gate - 1 == infos index (same mapping resync_used_skills uses).
+        let expected = RaceSimulateReader::GetDistance(reader, i as i32, target_time);
+        if !expected.is_finite()
+            || expected < 0.0
+            || (course > 0.0 && expected > course + 500.0)
+        {
+            continue;
+        }
+        let cur = HorseRaceInfo::get__distance(*horse_info);
+        let corrupt = !cur.is_finite()
+            || cur < -1.0
+            || (course > 0.0 && cur > course + 500.0)
+            || cur > expected + 100.0;
+        if corrupt {
+            HorseRaceInfo::set__distance(*horse_info, expected);
+        }
+    }
 }
 
 fn resync_used_skills(race_manager: *mut Il2CppObject, target_time: f32) {
