@@ -499,6 +499,15 @@ impl Updater {
         }
     }
 
+    /// Temp sibling used for atomic writes: `<path>.part`. Appending instead of
+    /// replacing the extension (the old `.tmp_mod` name) keeps two files that share
+    /// a stem but differ in extension from ever colliding on one temp file.
+    fn temp_file_path(path: &Path) -> PathBuf {
+        let mut os = path.as_os_str().to_owned();
+        os.push(".part");
+        PathBuf::from(os)
+    }
+
     fn log_corrupted_download(path: &Path, url: &str, expected_hash: &str, actual_hash: &str) {
         error!(
             "Corrupted download detected for '{}' from '{}': expected {} got {}",
@@ -604,6 +613,30 @@ impl Updater {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .show_notification(reason);
+        }
+    }
+
+    /// Shared addon (mod) repo check, run from every exit path of a normal
+    /// check_for_updates_internal run so a single check always covers BOTH repos:
+    /// the button used to skip the addon check whenever the main repo reported an
+    /// update or answered 304/skipped-etag. Returns true when an addon update was
+    /// queued or prompted.
+    fn run_addon_check(&self, pedantic_main: bool, pedantic_mod: bool, silent: bool) -> bool {
+        let hachimi = Hachimi::instance();
+        let config = hachimi.config.load();
+        if config.disable_mod_downloads || pedantic_main {
+            return false;
+        }
+        let Some(mod_index_url) = &config.translation_repo_index_mod else {
+            return false;
+        };
+        let ld_dir_path = resolve_ld_dir(&hachimi, &config);
+        match self.check_for_mod_updates(mod_index_url, pedantic_mod, silent, &config, &ld_dir_path) {
+            Ok(found) => found,
+            Err(e) => {
+                warn!("Failed to check for mod updates: {}", e);
+                false
+            }
         }
     }
 
@@ -736,6 +769,9 @@ impl Updater {
         let hachimi = Hachimi::instance();
         let config = hachimi.config.load();
         let Some(index_url) = &config.translation_repo_index else {
+            // No main repo configured: a normal check still covers the addon
+            // repo (the dedicated addon button is pedantic-only).
+            let _ = self.run_addon_check(pedantic_main, pedantic_mod, silent);
             return Ok(());
         };
 
@@ -837,7 +873,11 @@ impl Updater {
                 // ureq 3 returns this as Ok rather than Err, so check explicitly.
                 if res.status() == ureq::http::StatusCode::NOT_MODIFIED {
                     info!("Server returned 304 Not Modified. No translation updates available.");
-                    if !silent {
+                    // The main repo is unchanged, but the addon repo is a separate
+                    // index that may still have updates - never exit without
+                    // checking it on a normal (non-pedantic) run.
+                    let addon_found = self.run_addon_check(pedantic_main, pedantic_mod, silent);
+                    if !silent && !addon_found {
                         if let Some(mutex) = Gui::instance() {
                             mutex.lock().unwrap_or_else(|e| e.into_inner())
                                 .show_notification(&t!("notification.no_tl_updates"));
@@ -855,6 +895,9 @@ impl Updater {
                             if let Some(skipped) = &*self.skipped_etag.lock().unwrap_or_else(|e| e.into_inner()) {
                                 if skipped == &etag_string {
                                     debug!("Server ETag matches skipped ETag. Ignoring update.");
+                                    // The user declined this main version; the addon
+                                    // repo still gets checked before exiting.
+                                    let _ = self.run_addon_check(pedantic_main, pedantic_mod, silent);
                                     return Ok(());
                                 }
                             }
@@ -878,7 +921,10 @@ impl Updater {
             Err(ureq::Error::StatusCode(code)) if code == ureq::http::StatusCode::NOT_MODIFIED => {
                 // Kept as a safety net in case ureq behaviour changes in a future version.
                 info!("Server returned 304 Not Modified. No translation updates available.");
-                if !silent {
+                // Same as the Ok(304) arm above: the addon repo has its own index
+                // and must be checked before this run exits.
+                let addon_found = self.run_addon_check(pedantic_main, pedantic_mod, silent);
+                if !silent && !addon_found {
                     if let Some(mutex) = Gui::instance() {
                         mutex.lock().unwrap_or_else(|e| e.into_inner())
                             .show_notification(&t!("notification.no_tl_updates"));
@@ -1061,6 +1107,13 @@ impl Updater {
                                 // until a newer one ships or the user checks manually.
                                 updater.skip_update(etag_to_skip);
                                 updater.clear_pending_update();
+                                // Declining the main update must not end the check
+                                // without ever looking at the addon repo. Own thread:
+                                // this callback runs on the GUI thread and the addon
+                                // check does network + disk IO.
+                                if !pedantic_main {
+                                    updater.clone().check_for_mod_updates_only(pedantic_mod, false);
+                                }
                                 return;
                             }
                             updater.run();
@@ -1077,17 +1130,7 @@ impl Updater {
             }
 
             // No main TL updates — check for mod/addon updates unless this was a dedicated main pedantic run.
-            let config = hachimi.config.load();
-            let mut mod_updates_found = false;
-            if !config.disable_mod_downloads && !pedantic_main {
-                if let Some(mod_index_url) = &config.translation_repo_index_mod {
-                    let ld_dir_path = resolve_ld_dir(&hachimi, &config);
-                    match self.check_for_mod_updates(mod_index_url, pedantic_mod, silent, &config, &ld_dir_path) {
-                        Ok(found) => mod_updates_found = found,
-                        Err(e) => warn!("Failed to check for mod updates: {}", e),
-                    }
-                }
-            }
+            let mod_updates_found = self.run_addon_check(pedantic_main, pedantic_mod, silent);
 
             if !mod_updates_found && !silent {
                 if let Some(mutex) = Gui::instance() {
@@ -1178,9 +1221,17 @@ impl Updater {
             .store(Arc::new(LocalizedData::default()));
 
         let config = hachimi.config.load();
-        let localized_data_dir = hachimi
-            .get_active_tl_dir()
-            .expect("Active TL repo directory not set.");
+        // Not an expect(): localized_data was just emptied above, and a panic here
+        // would kill the updater thread before run()'s error path can reload it,
+        // leaving the game without localized data until a manual reload.
+        let localized_data_dir = match hachimi.get_active_tl_dir() {
+            Some(v) => v,
+            None => {
+                return Err(Error::RuntimeError(
+                    "Active TL repo directory not set.".to_owned(),
+                ));
+            }
+        };
 
         let disk_check_path = localized_data_dir.parent().unwrap_or(Path::new("."));
         check_available_disk_space(disk_check_path, update_info.size as u64)?;
@@ -1738,13 +1789,18 @@ impl Updater {
                             }
 
                             let mut last_err = None;
+                            // Download into a .part sibling and rename into place only
+                            // after the hash matches, so a crash mid-download can never
+                            // leave a truncated file at the final path (where the cached
+                            // hash index would treat it as valid forever).
+                            let part_path = Self::temp_file_path(&file_path);
                             for attempt in 0..3 {
                                 if stop_signal_clone.load(atomic::Ordering::Relaxed) {
                                     break;
                                 }
 
                                 job.hasher.reset();
-                                let mut file = fs::File::create(&file_path)?;
+                                let mut file = fs::File::create(&part_path)?;
                                 let mut req = job.agent.get(&url);
                                 if attempt > 0 {
                                     req = req.header("Cache-Control", "no-cache").header("Pragma", "no-cache");
@@ -1754,7 +1810,7 @@ impl Updater {
                                     Ok(r) => r,
                                     Err(e) => {
                                         last_err = Some(Error::from(e));
-                                        let _ = fs::remove_file(&file_path);
+                                        let _ = fs::remove_file(&part_path);
                                         thread::sleep(Duration::from_millis(200 * (attempt + 1) as u64));
                                         continue;
                                     }
@@ -1783,7 +1839,7 @@ impl Updater {
                                 if let Err(e) = download_res {
                                     current_bytes_clone.fetch_sub(downloaded_bytes_this_attempt, atomic::Ordering::Relaxed);
                                     last_err = Some(e);
-                                    let _ = fs::remove_file(&file_path);
+                                    let _ = fs::remove_file(&part_path);
                                     thread::sleep(Duration::from_millis(200 * (attempt + 1) as u64));
                                     continue;
                                 }
@@ -1795,6 +1851,13 @@ impl Updater {
                                 let hash = job.hasher.finalize().to_hex().to_string();
                                 if hash == repo_file.hash {
                                     job.hasher.reset();
+                                    if let Err(e) = fs::rename(&part_path, &file_path) {
+                                        let _ = fs::remove_file(&part_path);
+                                        current_bytes_clone.fetch_sub(downloaded_bytes_this_attempt, atomic::Ordering::Relaxed);
+                                        last_err = Some(Error::from(e));
+                                        thread::sleep(Duration::from_millis(200 * (attempt + 1) as u64));
+                                        continue;
+                                    }
                                     return Ok(hash);
                                 }
 
@@ -1807,7 +1870,7 @@ impl Updater {
                                     repo_file.hash,
                                     hash
                                 );
-                                let _ = fs::remove_file(&file_path);
+                                let _ = fs::remove_file(&part_path);
                                 last_err = Some(Error::FileHashMismatch(path_str));
                                 thread::sleep(Duration::from_millis(200 * (attempt + 1) as u64));
                             }
@@ -1815,7 +1878,7 @@ impl Updater {
                             if let Some(err) = last_err {
                                 if let Error::FileHashMismatch(ref path_str) = err {
                                     Self::log_corrupted_download(&file_path, &url, &repo_file.hash, "mismatch_after_retries");
-                                    let _ = fs::remove_file(&file_path);
+                                    let _ = fs::remove_file(&part_path);
                                     return Err(Error::FileHashMismatch(path_str.clone()));
                                 }
                                 Err(err)
@@ -2004,7 +2067,8 @@ impl Updater {
                             }
 
                             // Write to a temporary file and atomically rename into place to avoid partial/overwritten files
-                            let tmp_path = path.with_extension("tmp_mod");
+                            let tmp_path = Self::temp_file_path(&path);
+                            let mut entry_ok = true;
                             let mut out_file = match fs::File::create(&tmp_path) {
                                 Ok(f) => f,
                                 Err(_) => {
@@ -2020,6 +2084,7 @@ impl Updater {
                                     Ok(n) => {
                                         let data = &buffer[..n];
                                         if out_file.write_all(data).is_err() {
+                                                    let _ = fs::remove_file(&tmp_path);
                                                     extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner()).remove(&repo_file.path);
                                                     *fatal_error_clone.lock().unwrap_or_else(|e| e.into_inner()) = Some(Error::OutOfDiskSpace);
                                                     stop_signal_clone.store(true, atomic::Ordering::Relaxed);
@@ -2032,6 +2097,7 @@ impl Updater {
                                     Err(_) => {
                                         let _ = fs::remove_file(&tmp_path);
                                         non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::Relaxed);
+                                        entry_ok = false;
                                         break;
                                     }
                                 }
@@ -2042,6 +2108,16 @@ impl Updater {
                             drop(out_file);
 
                             let hash = hasher.finalize().to_hex().to_string();
+                            hasher.reset();
+
+                            if !entry_ok {
+                                // The read error was already counted (and its temp file
+                                // cleaned up); skip hash/rename so the partial hash can't
+                                // double-count this entry as a corruption as well.
+                                let _ = fs::remove_file(&tmp_path);
+                                extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner()).remove(&repo_file.path);
+                                continue;
+                            }
                             if hash != repo_file.hash {
                                 Self::log_corrupted_download(&path, &zip_url_clone, &repo_file.hash, &hash);
                                 let _ = fs::remove_file(&tmp_path);
@@ -2058,7 +2134,6 @@ impl Updater {
                                     info!("Extracted mod file '{}' -> {} (hash={})", repo_file.path, path.display(), hash);
                                 }
                             }
-                            hasher.reset();
 
                             // Clear in-progress marker
                             extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner()).remove(&repo_file.path);
@@ -2152,13 +2227,18 @@ impl Updater {
                             }
 
                             let mut last_err = None;
+                            // Download into a .part sibling and rename into place only
+                            // after the hash matches, so a crash mid-download can never
+                            // leave a truncated file at the final path (where the cached
+                            // hash index would treat it as valid forever).
+                            let part_path = Self::temp_file_path(&file_path);
                             for attempt in 0..3 {
                                 if stop_signal_clone.load(atomic::Ordering::Relaxed) {
                                     break;
                                 }
 
                                 job.hasher.reset();
-                                let mut file = fs::File::create(&file_path)?;
+                                let mut file = fs::File::create(&part_path)?;
                                 let mut req = job.agent.get(&url);
                                 if attempt > 0 {
                                     req = req.header("Cache-Control", "no-cache").header("Pragma", "no-cache");
@@ -2168,7 +2248,7 @@ impl Updater {
                                     Ok(r) => r,
                                     Err(e) => {
                                         last_err = Some(Error::from(e));
-                                        Self::cleanup_partial_file(&file_path);
+                                        Self::cleanup_partial_file(&part_path);
                                         thread::sleep(Duration::from_millis(200 * (attempt + 1) as u64));
                                         continue;
                                     }
@@ -2197,7 +2277,7 @@ impl Updater {
                                 if let Err(e) = download_res {
                                     current_bytes_clone.fetch_sub(downloaded_bytes_this_attempt, atomic::Ordering::Relaxed);
                                     last_err = Some(e);
-                                    Self::cleanup_partial_file(&file_path);
+                                    Self::cleanup_partial_file(&part_path);
                                     thread::sleep(Duration::from_millis(200 * (attempt + 1) as u64));
                                     continue;
                                 }
@@ -2209,6 +2289,13 @@ impl Updater {
                                 let hash = job.hasher.finalize().to_hex().to_string();
                                 if hash == repo_file.hash {
                                     job.hasher.reset();
+                                    if let Err(e) = fs::rename(&part_path, &file_path) {
+                                        Self::cleanup_partial_file(&part_path);
+                                        current_bytes_clone.fetch_sub(downloaded_bytes_this_attempt, atomic::Ordering::Relaxed);
+                                        last_err = Some(Error::from(e));
+                                        thread::sleep(Duration::from_millis(200 * (attempt + 1) as u64));
+                                        continue;
+                                    }
                                     return Ok(hash);
                                 }
 
@@ -2221,7 +2308,7 @@ impl Updater {
                                     repo_file.hash,
                                     hash
                                 );
-                                Self::cleanup_partial_file(&file_path);
+                                Self::cleanup_partial_file(&part_path);
                                 last_err = Some(Error::FileHashMismatch(path_str));
                                 thread::sleep(Duration::from_millis(200 * (attempt + 1) as u64));
                             }
@@ -2229,7 +2316,7 @@ impl Updater {
                             if let Some(err) = last_err {
                                 if let Error::FileHashMismatch(ref path_str) = err {
                                     Self::log_corrupted_download(&file_path, &url, &repo_file.hash, "mismatch_after_retries");
-                                    Self::cleanup_partial_file(&file_path);
+                                    Self::cleanup_partial_file(&part_path);
                                     return Err(Error::FileHashMismatch(path_str.clone()));
                                 }
                                 Err(err)
@@ -2442,7 +2529,9 @@ impl Updater {
                                 }
                             }
 
-                            let tmp_path = path.with_extension("tmp_mod");
+                            // Write to a temporary file and atomically rename into place to avoid partial/overwritten files
+                            let tmp_path = Self::temp_file_path(&path);
+                            let mut entry_ok = true;
                             let mut out_file = match fs::File::create(&tmp_path) {
                                 Ok(file) => file,
                                 Err(_) => {
@@ -2472,6 +2561,7 @@ impl Updater {
                                     Err(_) => {
                                         let _ = fs::remove_file(&tmp_path);
                                         non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::Relaxed);
+                                        entry_ok = false;
                                         break;
                                     }
                                 }
@@ -2482,6 +2572,16 @@ impl Updater {
                             drop(out_file);
 
                             let hash = hasher.finalize().to_hex().to_string();
+                            hasher.reset();
+
+                            if !entry_ok {
+                                // The read error was already counted (and its temp file
+                                // cleaned up); skip hash/rename so the partial hash can't
+                                // also trip the fatal hash-mismatch path below.
+                                let _ = fs::remove_file(&tmp_path);
+                                extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner()).remove(&repo_file.path);
+                                continue;
+                            }
                             if hash != repo_file.hash {
                                 Self::log_corrupted_download(&path, &zip_url_clone, &repo_file.hash, &hash);
                                 let _ = fs::remove_file(&tmp_path);
@@ -2497,10 +2597,8 @@ impl Updater {
                                 let _ = fs::remove_file(&tmp_path);
                                 non_fatal_error_count_clone.fetch_add(1, atomic::Ordering::Relaxed);
                             } else {
-                                cached_files_clone.lock().unwrap_or_else(|e| e.into_inner()).insert(repo_file.path.clone(), hash.clone());
-                                info!("Extracted '{}' -> {} (hash={})", repo_file.path, path.display(), hash);
+                                cached_files_clone.lock().unwrap_or_else(|e| e.into_inner()).insert(repo_file.path.clone(), hash.clone());                                    info!("Extracted '{}' -> {} (hash={})", repo_file.path, path.display(), hash);
                             }
-                            hasher.reset();
 
                             extraction_in_progress.lock().unwrap_or_else(|e| e.into_inner()).remove(&repo_file.path);
                         }

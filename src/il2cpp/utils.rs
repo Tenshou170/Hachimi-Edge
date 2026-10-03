@@ -1,4 +1,4 @@
-use std::{io::Write, path::{Path, PathBuf}};
+use std::{fs, io::Write, path::{Path, PathBuf}};
 
 use crate::{core::utils::{get_file_modified_time, load_rgba_png_file}, il2cpp::{ext::{Il2CppObjectExt, Il2CppStringExt}, hook::UnityEngine_CoreModule::{Component, Object, RectTransform}, types::*}};
 
@@ -52,6 +52,16 @@ pub fn replace_texture_with_diff_ex<P1: AsRef<Path>, P2: AsRef<Path>>(
 
     let Some((mut pixels, diff_info)) = load_rgba_png_file(&diff_path) else {
         error!("Failed to load texture diff: {}", diff_path.as_ref().display());
+        // A diff that can't be decoded is permanently broken (e.g. truncated by a
+        // killed download) and would fail on every subsequent load - delete it so
+        // the next update re-downloads it, then fall back to the original texture
+        // so a single bad diff can't keep the game from loading.
+        if fs::remove_file(&diff_path).is_ok() {
+            warn!("Removed corrupted texture diff, it will be re-downloaded on the next update: {}", diff_path.as_ref().display());
+        }
+        if allow_fallback {
+            return Texture2D::load_image_file(texture, &path, mark_non_readable);
+        }
         return false;
     };
 
