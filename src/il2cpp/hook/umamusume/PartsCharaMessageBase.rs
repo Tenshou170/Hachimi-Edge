@@ -60,7 +60,7 @@ type PartsCharaMessageBase_CloseFn = extern "C" fn(this: *mut Il2CppObject);
 extern "C" fn PartsCharaMessageBase_Close(this: *mut Il2CppObject) {
     // Saturate at 0 — if Close fires without a matching Open (e.g. on first scene load)
     // we must not go negative.
-    ACTIVE_BUBBLE_COUNT.fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+    ACTIVE_BUBBLE_COUNT.try_update(Ordering::AcqRel, Ordering::Acquire, |v| {
         Some(if v > 0 { v - 1 } else { 0 })
     }).ok();
     get_orig_fn!(PartsCharaMessageBase_Close, PartsCharaMessageBase_CloseFn)(this);

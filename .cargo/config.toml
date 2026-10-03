@@ -2,22 +2,28 @@
 target = "x86_64-pc-windows-msvc"
 
 [alias]
+# NOTE: the clippy (and build) aliases below deliberately mirror the commands in
+# .github/workflows/clippy_check.yml (and the build steps of test_build.yml)
+# byte-for-byte, including `-D warnings`, so a local run reproduces CI instead of
+# silently passing on lint policy CI enforces (CI installs the latest stable
+# toolchain via dtolnay/rust-toolchain@stable).
+
 # Aliases for Windows host
 # xbuild = "build --release"
 # xcheck = "check --release"
-# xclippy = "clippy"
+# xclippy = "clippy --target x86_64-pc-windows-msvc -- -D warnings"
 # xtest = "test --no-run"
 
 # Aliases for Linux/macOS host (cross-compiling using cargo-xwin)
-xbuild = "xwin build"
+xbuild = "xwin build --target x86_64-pc-windows-msvc --release"
 xcheck = "xwin check --release"
-xclippy = "xwin clippy"
+xclippy = "xwin clippy --target x86_64-pc-windows-msvc -- -D warnings"
 xtest = "xwin test --no-run"
 
 # Aliases for Android target
-abuild = "build --target aarch64-linux-android"
+abuild = "build --release --target aarch64-linux-android"
 acheck = "check --target aarch64-linux-android --release"
-aclippy = "clippy --target aarch64-linux-android"
+aclippy = "clippy --target aarch64-linux-android -- -D warnings"
 atest = "test --target aarch64-linux-android --no-run"
 
 [target.aarch64-linux-android]
