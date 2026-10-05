@@ -116,7 +116,10 @@ pub fn apply_translations(completed: &[(String, String)]) {
     {
         let mut tracker = ACTIVE_TEXT_COMPONENTS.lock().unwrap();
 
-        tracker.retain(|_, active| !active.handle.target().is_null());
+        tracker.retain(|_, active| {
+            let ptr = active.handle.target();
+            !ptr.is_null() && Object::op_Implicit(ptr)
+        });
 
         for (orig, trans) in completed {
             let unity_string = trans.to_il2cpp_string();
@@ -133,7 +136,14 @@ pub fn apply_translations(completed: &[(String, String)]) {
     }
 
     for (ptr, unity_string) in updates_to_apply {
-        get_orig_fn!(set_text_hook, SetTextFn)(ptr as *mut Il2CppObject, unity_string);
+        let target = ptr as *mut Il2CppObject;
+        // A weak handle stays non-null for destroyed-but-uncollected objects, and
+        // the il2cpp string allocations above can trigger a GC collection in
+        // between. Re-check Unity liveness right before the native call so we
+        // never run set_text on a dead component (native access violation).
+        if Object::op_Implicit(target) {
+            get_orig_fn!(set_text_hook, SetTextFn)(target, unity_string);
+        }
     }
 }
 

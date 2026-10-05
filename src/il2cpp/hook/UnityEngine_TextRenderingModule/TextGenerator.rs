@@ -147,7 +147,12 @@ extern "C" fn PopulateWithErrors(
             if components.contains(&Object::get_instanceID(this)) { force_wrap = true; }
         }
     }
-    if force_wrap { settings.horizontalOverflow = 0; }
+    if force_wrap {
+        settings.horizontalOverflow = 0;
+        if TDQ_IS_SKILL_LEARNING_QUERY.load(Ordering::Relaxed) {
+            info!("[skill-dialog-trace] TG::PopulateWithErrors skill-learning wrap pass");
+        }
+    }
 
     let mut cached_path: Option<String> = None;
     macro_rules! get_path {
@@ -579,6 +584,10 @@ pub fn drain_pending_offsets() {
         crate::core::utils::size_trace::event_msg("TG.drain", &format!(
             "batches={} actions={}", offsets.len(), total
         ));
+    }
+
+    if !offsets.is_empty() {
+        info!("[skill-dialog-trace] drain_pending_offsets batches={}", offsets.len());
     }
 
     let config = Hachimi::instance().config.load();

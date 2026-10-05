@@ -331,6 +331,9 @@ impl SelectQueryState for TextDataQuery {
         if let Some(category) = self.category.int_value {
             if let Some(index) = self.index.int_value {
                 // specialized handlers
+                if category == 47 || category == 48 {
+                    info!("[skill-dialog-trace] text_data get_text cat={} idx={}", category, index);
+                }
                 match category {
                     47 => return Self::get_skill_name(index),
                     48 => return Self::get_skill_desc(index),
