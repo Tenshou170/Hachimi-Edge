@@ -1,12 +1,26 @@
 # Building Hachimi Edge
 
-Hachimi Edge is a cross-platform game enhancement and translation mod written in Rust, supporting Windows (x64 MSVC) and Android (ARM64).
+Hachimi Edge is a cross-platform game enhancement and translation mod written in Rust, supporting Windows (x64 MSVC) and Android (ARM64). This guide covers the toolchain, environment setup, and every command needed to produce working artifacts.
 
 > **Supported targets only:** Linux and Windows GNU/MinGW targets are not supported. `build.rs` will hard-fail those targets immediately with a clear error message pointing to the correct commands.
 
+> [!NOTE]
+> The full release pipeline — including the Windows installer and Cellar builds — lives in [`.github/workflows/test_build.yml`](.github/workflows/test_build.yml), which is the authoritative reference for how official artifacts are produced.
+
 ---
 
-## 1. Prerequisites
+## 1. Getting the Source
+
+```bash
+git clone https://github.com/Tenshou170/Hachimi-Edge.git
+cd Hachimi-Edge
+```
+
+If the git working tree has uncommitted changes, the Zygisk build appends a `-dirty` suffix to the module version. Set `HACHIMI_IGNORE_DIRTY=true` to suppress this (CI pins it to `false` so local modifications stay visible in artifacts).
+
+---
+
+## 2. Prerequisites
 
 ### Rust Toolchain
 Install the latest stable Rust toolchain via [rustup.rs](https://rustup.rs/).
@@ -17,6 +31,16 @@ Install the latest stable Rust toolchain via [rustup.rs](https://rustup.rs/).
   ```bash
   cargo install cargo-xwin
   ```
+  The LLVM/Clang/LLD toolchain is also required for the link stage; make sure `llvm-lib` is available (CI symlinks it to `llvm-ar`):
+  ```bash
+  # Debian / Ubuntu (LLVM 19, as used in CI)
+  sudo apt-get install -y clang-19 lld-19 llvm-19
+  sudo ln -sf /usr/lib/llvm-19/bin/llvm-ar /usr/local/bin/llvm-lib
+
+  # macOS
+  brew install llvm
+  sudo ln -sf "$(brew --prefix llvm)/bin/llvm-ar" /usr/local/bin/llvm-lib
+  ```
 
 ### Android (ARM64)
 - **Android NDK r27d LTS** is recommended.
@@ -24,10 +48,11 @@ Install the latest stable Rust toolchain via [rustup.rs](https://rustup.rs/).
   ```bash
   rustup target add aarch64-linux-android
   ```
+- `zip` is required on the host when packaging the Zygisk module.
 
 ---
 
-## 2. NDK Setup
+## 3. NDK Setup
 
 The build system discovers the NDK path automatically, in order of precedence:
 
@@ -53,7 +78,7 @@ No manual edits to `.cargo/config.toml` are needed — the build system handles 
 
 ---
 
-## 3. Building
+## 4. Building
 
 ### Windows (x64 MSVC)
 
@@ -76,9 +101,7 @@ The script detects the host OS automatically:
 - On Windows: builds natively using the MSVC toolchain.
 - On Linux / macOS: cross-compiles via `cargo-xwin`.
 
-**Output:** `build/hachimi.dll` and `build/blake3.json` (release only)
-
----
+**Output:** `build/hachimi.dll`, plus `build/blake3.json` (generated when `b3sum` is installed).
 
 ### Android (ARM64)
 
@@ -99,19 +122,39 @@ RELEASE=1 ./tools/android/build.sh
 
 Builds against **API level 24** with **16 KB page-size alignment**, giving full compatibility from Android 7.0 through Android 15+.
 
-**Output:** `build/libmain-arm64-v8a.so` and `build/sha256.json` (release only)
+**Output:** `build/libmain-arm64-v8a.so`, plus `build/sha256.json` (generated when `sha256sum` or `shasum` is available).
+
+### Zygisk Module (Android)
+
+```bash
+RELEASE=1 ./tools/android/build_zygisk.sh
+```
+
+Runs the Android release build, strips debug symbols with the NDK's `llvm-strip`, packages the module from `tools/android/zygisk-template`, and writes per-file SHA-256 checksums.
+
+**Output:** `build/zygisk-hachimi-edge-v<version>-<commit>[-dirty]-release.zip` (a Magisk/KernelSU-installable module). Requires `zip` on the host.
+
+### Extra Cargo Arguments
+
+Both build scripts forward additional arguments to cargo via `CARGOARGS`:
+
+```bash
+RELEASE=1 CARGOARGS="--features some_feature" ./tools/windows/build.sh
+```
 
 ---
 
-## 4. Cargo Aliases Reference
+## 5. Cargo Aliases Reference
 
-Defined in `.cargo/config.toml`. For day-to-day development only — use the build scripts above for producing release artifacts.
+Defined in `.cargo/config.toml`. The `check`, `clippy`, and `test` aliases mirror the commands in CI byte-for-byte, including `-D warnings`, so a local run reproduces CI exactly. For producing release artifacts, use the build scripts above instead of the build aliases.
 
 | Alias | Description |
 |---|---|
 | `cargo xcheck` | Compiler check for Windows MSVC target (release profile) |
-| `cargo xbuild` | Build for Windows MSVC (no `--release`; use the script for releases) |
-| `cargo xclippy` | Clippy lint for Windows MSVC target |
+| `cargo xbuild` | Build for Windows MSVC via `cargo-xwin` (release profile) |
+| `cargo xclippy` | Clippy lint for Windows MSVC target (`-D warnings`) |
+| `cargo xtest` | Compile tests for Windows MSVC target (`--no-run`) |
 | `cargo acheck` | Compiler check for Android ARM64 target (release profile) |
-| `cargo abuild` | Build for Android ARM64 (no `--release`; use the script for releases) |
-| `cargo aclippy` | Clippy lint for Android ARM64 target |
+| `cargo abuild` | Build for Android ARM64 (release profile) |
+| `cargo aclippy` | Clippy lint for Android ARM64 target (`-D warnings`) |
+| `cargo atest` | Compile tests for Android ARM64 target (`--no-run`) |

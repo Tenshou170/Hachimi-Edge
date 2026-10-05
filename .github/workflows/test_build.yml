@@ -16,6 +16,7 @@ on:
       - 'README-*.md'
       - 'BUILDING.md'
       - 'BUILDING-*.md'
+      - 'docs/**'
       - '.gitignore'
       - 'rustfmt.toml'
       - '.github/**'

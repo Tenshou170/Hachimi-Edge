@@ -3,7 +3,7 @@
   <h1>Hachimi Edge</h1>
   <p><b>Game enhancement and translation mod for UM:PD</b></p>
 
-  <p>English | <a href="README-zh_cn.md">简体中文</a> | <a href="README-zh_tw.md">繁體中文</a></p>
+  <p>English | <a href="docs/README-es.md">Español</a> | <a href="docs/README-fil.md">Filipino</a> | <a href="docs/README-id.md">Bahasa Indonesia</a> | <a href="docs/README-ja.md">日本語</a> | <a href="docs/README-ko.md">한국어</a> | <a href="docs/README-pt-br.md">Português (Brasil)</a> | <a href="docs/README-ru.md">Русский</a> | <a href="docs/README-vi.md">Tiếng Việt</a> | <a href="docs/README-zh_cn.md">简体中文</a> | <a href="docs/README-zh_tw.md">繁體中文</a></p>
 
   <p>
     <a href="https://github.com/Tenshou170/Hachimi-Edge/actions"><img src="https://img.shields.io/github/actions/workflow/status/Tenshou170/Hachimi-Edge/test_build.yml?branch=main&label=Build&style=for-the-badge" alt="Build Status"></a> <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Android-blue?style=for-the-badge" alt="Target Platforms">
@@ -18,17 +18,23 @@
   <img height="400" src="assets/Screenshot.png">
 </div>
 
-## Sharing & Redistribution Guidelines
+## ⚠️ Sharing & Redistribution Guidelines
 
-This project modifies game runtime behavior and violates the target application's Terms of Service (TOS). To minimize risk to the project and its userbase, please observe the following guidelines:
+This project modifies game runtime behavior and violates the target application's Terms of Service (TOS). The game's developer most definitely wants it gone if they were ever to learn about it. To minimize risk to the project and its userbase, please observe the following guidelines:
 
 - **Do not post direct links** to this repository, project website, or associated tools on public websites, forums, or social media platforms.
 - Share information exclusively via direct private messaging or self-managed community groups.
 - When referencing the target application publicly, use indirect references (such as "UM:PD" or "The Honse Game") to prevent search engine indexing.
 
+**Or share them and ruin it for the dozens of Hachimi users. It's up to you.**
+
+> [!WARNING]
+> **If you're going to share it anyways**
+> Do what you must, but we would respectfully request that you try to label the game as "UM:PD" or "The Honse Game" instead of the actual name of the game, to avoid search engine parsing.
+
 ## Features
 
-- **High-Quality Localizations:** Advanced text formatting support (plural forms, ordinal numbers, dynamic layout fitting) without manual asset modifications.
+- **High-Quality Localizations:** Advanced text formatting support (plural forms, ordinal numbers, dynamic layout fitting) without manual asset modifications. It also supports translating most in-game components; no manual asset patching needed!
   - Supported components:
     - UI Text
     - Database entries (`master.mdb`, skill names, descriptions)
@@ -36,10 +42,12 @@ This project modifies game runtime behavior and violates the target application'
     - Song lyrics
     - Dynamic texture and sprite atlas replacement
   - Configurable language system supporting custom localization dictionaries.
+- **Automatic Machine Translation (optional):** Community-sourced and machine translation for text not yet covered by localization packages, applied directly in-game.
 - **In-Game Configuration:** Embedded GUI configuration editor allows real-time tuning of settings without restarting the application.
 - **Automatic Localization Updates:** Integrated updater downloads and reloads updated translation packages directly within the game runtime.
 - **Graphics Enhancement:** Device optimization features including target frame rate unlocking (FPS unlock) and resolution scaling.
 - **Cross-Platform:** Native support for Windows (DirectX 11 proxy DLL) and Android (Zygisk / Dobby inline hooks).
+- **Windows Desktop Integrations:** Discord Rich Presence, Windows Media Transport (SMTC) media controls with live jacket thumbnails, and taskbar progress reporting.
 
 ## Installation
 
@@ -48,6 +56,10 @@ Refer to the official [Getting Started Documentation](https://hachimi.noccu.art/
 ## Building from Source
 
 Detailed compilation and environment setup instructions are documented in [BUILDING.md](BUILDING.md).
+
+## AI / LLM Usage Disclaimer
+
+Parts of Hachimi Edge — including code, documentation, and translation content — have been written or refined with the assistance of large language models (LLMs) and other AI tools. All AI-assisted output is reviewed before being included, but it may still contain inaccuracies, mistranslations, or unintended behavior. Use at your own discretion; no guarantee of correctness is provided for AI-generated content.
 
 ## Credits & References
 
