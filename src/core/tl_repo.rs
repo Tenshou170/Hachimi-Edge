@@ -290,7 +290,19 @@ const PENDING_CHECK_NORMAL: u8 = 1;
 const PENDING_CHECK_PEDANTIC: u8 = 2;
 const CHUNK_SIZE: usize = 8192; // 8KiB
 
-fn get_repo_cache_path(id: u32) -> PathBuf {
+pub fn get_repo_cache_path(id: u32) -> PathBuf {
+    if id == 1 {
+        let canonical = Hachimi::instance().get_data_path(REPO_CACHE_FILENAME);
+        let bugged = Hachimi::instance().get_data_path(".tl_repo_cache_1");
+        if !canonical.exists() && bugged.exists() {
+            log::info!("Migrating '.tl_repo_cache_1' to canonical '.tl_repo_cache'");
+            if let Err(e) = fs::rename(&bugged, &canonical) {
+                log::warn!("Failed to rename '.tl_repo_cache_1' to '.tl_repo_cache': {e}");
+                return bugged;
+            }
+        }
+        return canonical;
+    }
     Hachimi::instance().get_data_path(format!(".tl_repo_cache_{id}"))
 }
 

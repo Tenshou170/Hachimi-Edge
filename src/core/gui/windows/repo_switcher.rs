@@ -42,6 +42,12 @@ impl RepoSwitcherWindow {
             if let Err(e) = manager.save(&repos_path) {
                 warn!("Failed to save .tl_repos: {e}");
             }
+            if id > 1 {
+                let cache_path = tl_repo::get_repo_cache_path(id);
+                if cache_path.exists() {
+                    let _ = std::fs::remove_file(&cache_path);
+                }
+            }
         });
     }
 

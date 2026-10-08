@@ -461,14 +461,21 @@ impl Hachimi {
         Ok(())
     }
 
-    /// Resolves the data dir for a registered repo. id 1 keeps the legacy
-    /// `localized_data` dir when it exists so migrated installs keep their files.
+    /// Resolves the data dir for a registered repo. Repo id 1 uses the canonical
+    /// `localized_data` dir. If `localized_data_1` exists from a previous install,
+    /// it is migrated to `localized_data`.
     pub fn get_repo_dir(&self, id: u32) -> PathBuf {
         if id == 1 {
-            let legacy = self.game.data_dir.join("localized_data");
-            if legacy.is_dir() {
-                return legacy;
+            let canonical = self.game.data_dir.join("localized_data");
+            let bugged = self.game.data_dir.join("localized_data_1");
+            if !canonical.exists() && bugged.is_dir() {
+                info!("Migrating 'localized_data_1' folder to canonical 'localized_data'");
+                if let Err(e) = fs::rename(&bugged, &canonical) {
+                    warn!("Failed to rename 'localized_data_1' to 'localized_data': {e}");
+                    return bugged;
+                }
             }
+            return canonical;
         }
         self.game.data_dir.join(format!("localized_data_{id}"))
     }
@@ -485,6 +492,23 @@ impl Hachimi {
     pub fn ensure_tl_repo_registry(&self) -> Result<(), Error> {
         let repos_path = self.get_data_path(".tl_repos");
         let old_data_dir = self.game.data_dir.join("localized_data");
+        let bugged_data_dir = self.game.data_dir.join("localized_data_1");
+
+        if !old_data_dir.exists() && bugged_data_dir.is_dir() {
+            info!("Migrating 'localized_data_1' folder to canonical 'localized_data'");
+            if let Err(e) = fs::rename(&bugged_data_dir, &old_data_dir) {
+                warn!("Failed to rename 'localized_data_1' to 'localized_data': {e}");
+            }
+        }
+        let canonical_cache = self.get_data_path(".tl_repo_cache");
+        let bugged_cache = self.get_data_path(".tl_repo_cache_1");
+
+        if !canonical_cache.exists() && bugged_cache.exists() {
+            info!("Migrating '.tl_repo_cache_1' to canonical '.tl_repo_cache'");
+            if let Err(e) = fs::rename(&bugged_cache, &canonical_cache) {
+                warn!("Failed to rename '.tl_repo_cache_1' to '.tl_repo_cache': {e}");
+            }
+        }
 
         // Everything is decided under the manager lock, but save_and_reload_config
         // must never be called while holding it: it re-enters load_localized_data
@@ -584,19 +608,6 @@ impl Hachimi {
             let mut new_config = (**config).clone();
             new_config.selected_tl_repo_id = Some(id);
             self.save_and_reload_config(new_config)?;
-        }
-
-        // Legacy single-repo cache: fold it into the per-repo cache file so
-        // upgraded installs don't re-download everything once.
-        if let Some(id) = self.config.load().selected_tl_repo_id {
-            let old_cache = self.get_data_path(".tl_repo_cache");
-            if old_cache.exists() {
-                let new_cache = self.get_data_path(format!(".tl_repo_cache_{id}"));
-                info!("Migrating legacy tl repo cache file to {}", new_cache.display());
-                if let Err(e) = fs::rename(&old_cache, &new_cache) {
-                    warn!("Failed to rename legacy tl repo cache file: {e}");
-                }
-            }
         }
 
         Ok(())
