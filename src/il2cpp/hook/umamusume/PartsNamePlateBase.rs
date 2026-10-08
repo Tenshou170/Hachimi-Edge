@@ -7,18 +7,24 @@ use crate::il2cpp::{
 def_field_object_accessors!(get get_charaSubTitleText, CHARA_SUBTITLE_TEXT_FIELD, Il2CppObject);
 def_field_object_accessors!(get get_charaNameText, CHARA_NAME_TEXT_FIELD, Il2CppObject);
 
+use crate::il2cpp::hook::UnityEngine_CoreModule::Object;
+
 type PlayFadeInFn = extern "C" fn(this: *mut Il2CppObject, onComplete: *mut Il2CppDelegate);
 extern "C" fn PlayFadeIn(this: *mut Il2CppObject, onComplete: *mut Il2CppDelegate) {
-    let subtitle = get_charaSubTitleText(this);
-    let name = get_charaNameText(this);
-    if !subtitle.is_null() {
-        Text::set_best_fit_downscale(subtitle);
-    }
-    if !name.is_null() {
-        Text::set_best_fit_downscale(name);
+    get_orig_fn!(PlayFadeIn, PlayFadeInFn)(this, onComplete);
+
+    if this.is_null() || !Object::op_Implicit(this) {
+        return;
     }
 
-    get_orig_fn!(PlayFadeIn, PlayFadeInFn)(this, onComplete);
+    let subtitle = get_charaSubTitleText(this);
+    let name = get_charaNameText(this);
+    if !subtitle.is_null() && Object::op_Implicit(subtitle) {
+        Text::set_best_fit_downscale(subtitle);
+    }
+    if !name.is_null() && Object::op_Implicit(name) {
+        Text::set_best_fit_downscale(name);
+    }
 }
 
 pub fn init(umamusume: *const Il2CppImage) {

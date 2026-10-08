@@ -71,6 +71,9 @@ impl_addr_wrapper_fn!(get_preferredWidth, GET_PREFERREDWIDTH_ADDR, f32, this: *m
 // Ported from kairusds/Hachimi-Edge — text layout helper, uses the existing
 // resizeTextForBestFit API already exposed in this module (no new addresses).
 pub fn set_best_fit_downscale(this: *mut Il2CppObject) {
+    if this.is_null() || !Object::op_Implicit(this) {
+        return;
+    }
     let cur_size = get_fontSize(this);
     set_resizeTextMinSize(this, cur_size.min(10));
     set_resizeTextMaxSize(this, cur_size);
@@ -88,7 +91,7 @@ static ACTIVE_TEXT_COMPONENTS: Lazy<Mutex<FnvHashMap<usize, ActiveTextComponent>
 
 type SetTextFn = extern "C" fn(this: *mut Il2CppObject, value: *mut Il2CppString);
 pub unsafe extern "C" fn set_text_hook(this: *mut Il2CppObject, value: *mut Il2CppString) {
-    if value.is_null() {
+    if this.is_null() || !Object::op_Implicit(this) || value.is_null() {
         return get_orig_fn!(set_text_hook, SetTextFn)(this, value);
     }
 

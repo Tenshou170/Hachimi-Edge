@@ -1,7 +1,10 @@
 use crate::{
     core::{Hachimi, game::Region},
     il2cpp::{
-        hook::UnityEngine_UI::Text,
+        hook::{
+            UnityEngine_CoreModule::Object,
+            UnityEngine_UI::Text,
+        },
         sql::TextDataQuery,
         symbols::{get_field_from_name, get_field_object_value, get_method_addr},
         types::*,
@@ -31,31 +34,31 @@ static mut get_IsDrawDesc_addr: usize = 0;
 impl_addr_wrapper_fn!(get_IsDrawDesc, get_IsDrawDesc_addr, bool, this: *mut Il2CppObject);
 static mut get_IsDrawNeedSkillPoint_addr: usize = 0;
 impl_addr_wrapper_fn!(get_IsDrawNeedSkillPoint, get_IsDrawNeedSkillPoint_addr, bool, this: *mut Il2CppObject);
+
 fn UpdateItemCommon(this: *mut Il2CppObject, skill_info: *mut Il2CppObject, orig_fn_cb: impl FnOnce()) {
-    info!("[skill-dialog-trace] SkillListItem::UpdateItem enter");
+    TextDataQuery::with_skill_learning_query(|| {
+        orig_fn_cb();
+    });
+
     let name = get__nameText(this);
     let desc = get__descText(this);
 
     // Name should always exist, but let's be sure.
-    if !name.is_null() {
+    if !name.is_null() && Object::op_Implicit(name) {
         Text::set_horizontalOverflow(name, 0);
         Text::set_resizeTextForBestFit(name, true);
     }
 
-    if get_IsDrawDesc(skill_info) && !desc.is_null() {
+    if !skill_info.is_null() && get_IsDrawDesc(skill_info) && !desc.is_null() && Object::op_Implicit(desc) {
         Text::set_horizontalOverflow(desc, 0);
         Text::set_resizeTextForBestFit(desc, true);
         Text::set_resizeTextMinSize(desc, 14);
         Text::set_resizeTextMaxSize(desc, 30);
     }
 
-    TextDataQuery::with_skill_learning_query(|| {
-        orig_fn_cb();
-    });
-
     if let Some(mult) = Hachimi::instance().localized_data.load().config.skill_list_item_desc_font_size_multiplier {
         let desc_text = get__descText(this);
-        if !desc_text.is_null() {
+        if !desc_text.is_null() && Object::op_Implicit(desc_text) {
             let font_size = Text::get_fontSize(desc_text);
             Text::set_fontSize(desc_text, (font_size as f32 * mult).round() as i32);
         }

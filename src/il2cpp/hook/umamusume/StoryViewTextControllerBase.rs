@@ -31,13 +31,14 @@ extern "C" fn SetNameLabel(this: *mut Il2CppObject, name: *mut Il2CppString) {
         return get_orig_fn!(SetNameLabel, SetNameLabelFn)(this, name);
     };
 
+    get_orig_fn!(SetNameLabel, SetNameLabelFn)(this, name);
+
     let name_label = TextFrame::get_NameLabel(text_frame);
-    if !name_label.is_null() {
+    if !name_label.is_null() && crate::il2cpp::hook::UnityEngine_CoreModule::Object::op_Implicit(name_label) {
         utils::adjust_transform_size(name_label, size.0, size.1);
         Text::set_best_fit_downscale(name_label);
         Text::set_horizontalOverflow(name_label, TextOverflow_Disallow);
     }
-    get_orig_fn!(SetNameLabel, SetNameLabelFn)(this, name);
 }
 
 pub fn init(umamusume: *const Il2CppImage) {

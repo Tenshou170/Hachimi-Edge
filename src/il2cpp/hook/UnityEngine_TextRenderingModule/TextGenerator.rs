@@ -149,9 +149,6 @@ extern "C" fn PopulateWithErrors(
     }
     if force_wrap {
         settings.horizontalOverflow = 0;
-        if TDQ_IS_SKILL_LEARNING_QUERY.load(Ordering::Relaxed) {
-            info!("[skill-dialog-trace] TG::PopulateWithErrors skill-learning wrap pass");
-        }
     }
 
     let mut cached_path: Option<String> = None;
@@ -584,10 +581,6 @@ pub fn drain_pending_offsets() {
         crate::core::utils::size_trace::event_msg("TG.drain", &format!(
             "batches={} actions={}", offsets.len(), total
         ));
-    }
-
-    if !offsets.is_empty() {
-        info!("[skill-dialog-trace] drain_pending_offsets batches={}", offsets.len());
     }
 
     let config = Hachimi::instance().config.load();

@@ -254,10 +254,6 @@ impl TextDataQuery {
         TDQ_IS_SKILL_LEARNING_QUERY.store(false, atomic::Ordering::Relaxed);
     }
 
-    fn is_skill_learning_query() -> bool {
-        TDQ_IS_SKILL_LEARNING_QUERY.load(atomic::Ordering::Relaxed)
-    }
-
     pub fn get_skill_name(index: i32) -> Option<*mut Il2CppString> {
         // Return None if skill name translation is disabled
         if Hachimi::instance().config.load().disable_skill_name_translation {
@@ -271,16 +267,7 @@ impl TextDataQuery {
             .map(|c| c.get(&index))
             .unwrap_or_default();
 
-        if let Some(text) = text_opt {
-            // append $(bf) if it's a skill learning query to let best fit do its job
-            if Self::is_skill_learning_query() {
-                 return Some(format!("{}", text).to_il2cpp_string());
-            }
-            Some(text.to_il2cpp_string())
-        }
-        else {
-            None
-        }
+        text_opt.map(|text| text.to_il2cpp_string())
     }
 
     pub fn get_skill_desc(index: i32) -> Option<*mut Il2CppString> {
@@ -291,15 +278,7 @@ impl TextDataQuery {
             .map(|c| c.get(&index))
             .unwrap_or_default();
 
-        if let Some(text) = text_opt {
-            if Self::is_skill_learning_query() {
-                return Some(format!("{}", text).to_il2cpp_string());
-            }
-            Some(text.to_il2cpp_string())
-        }
-        else {
-            None
-        }
+        text_opt.map(|text| text.to_il2cpp_string())
     }
 }
 
@@ -331,9 +310,6 @@ impl SelectQueryState for TextDataQuery {
         if let Some(category) = self.category.int_value {
             if let Some(index) = self.index.int_value {
                 // specialized handlers
-                if category == 47 || category == 48 {
-                    info!("[skill-dialog-trace] text_data get_text cat={} idx={}", category, index);
-                }
                 match category {
                     47 => return Self::get_skill_name(index),
                     48 => return Self::get_skill_desc(index),

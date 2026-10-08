@@ -1,6 +1,10 @@
 use crate::{
-    core::{Hachimi, game::Region},
-    il2cpp::{hook::UnityEngine_UI::Text, symbols::{get_field_from_name, get_field_object_value, get_method_addr}, types::*}
+    core::{game::Region, Hachimi},
+    il2cpp::{
+        hook::{UnityEngine_CoreModule::Object, UnityEngine_UI::Text},
+        symbols::{get_field_from_name, get_field_object_value, get_method_addr},
+        types::*,
+    },
 };
 
 static mut STORYTEXT_FIELD: *mut FieldInfo = 0 as _;
@@ -9,8 +13,11 @@ fn get__storyText(this: *mut Il2CppObject) -> *mut Il2CppObject {
 }
 
 fn fix_story_text(this: *mut Il2CppObject) {
+    if this.is_null() || !Object::op_Implicit(this) {
+        return;
+    }
     let story_text = get__storyText(this);
-    if !story_text.is_null() {
+    if !story_text.is_null() && Object::op_Implicit(story_text) {
         Text::set_supportRichText(story_text, true);
     }
 }

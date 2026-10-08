@@ -51,7 +51,6 @@ pub fn on_LoadAsset(bundle: *mut Il2CppObject, this: *mut Il2CppObject, name: &U
     // All of the sprites in the atlas uses the same texture so we just need to replace one of them
     let sprites = get_sprites(this);
     if let Some(sprite) = unsafe { sprites.as_slice().get(0) } {
-        info!("[skill-dialog-trace] atlas diff replace: {}", rel_replace_path);
         replace_texture_with_diff(Sprite::get_texture(*sprite), replace_path, true);
     }
 }

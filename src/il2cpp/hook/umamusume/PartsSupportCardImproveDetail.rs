@@ -21,6 +21,10 @@ type SetupFn = extern "C" fn(this: *mut Il2CppObject, workSupportCard: *mut Il2C
 extern "C" fn Setup(this: *mut Il2CppObject, workSupportCard: *mut Il2CppObject, buttonAction: *mut Il2CppDelegate, hash: i32, enableObtain: bool) {
     get_orig_fn!(Setup, SetupFn)(this, workSupportCard, buttonAction, hash, enableObtain);
 
+    if this.is_null() || !Object::op_Implicit(this) {
+        return;
+    }
+
     let title = get_titleNameText(this);
     if !title.is_null() && Object::op_Implicit(title) {
         let go = Component::get_gameObject(title);
