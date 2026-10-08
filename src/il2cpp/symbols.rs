@@ -194,28 +194,46 @@ pub fn find_nested_class(class: *mut Il2CppClass, name: &CStr) -> Result<*mut Il
 }
 
 pub fn get_field_value<T>(obj: *mut Il2CppObject, field: *mut FieldInfo) -> T {
+    if obj.is_null() || field.is_null() {
+        return unsafe { std::mem::zeroed() };
+    }
     let mut value = MaybeUninit::uninit();
     il2cpp_field_get_value(obj, field, unsafe { std::mem::transmute(&mut value) });
     unsafe { value.assume_init() }
 }
 
 pub fn get_field_object_value<T>(obj: *mut Il2CppObject, field: *mut FieldInfo) -> *mut T {
+    if obj.is_null() || field.is_null() {
+        return null_mut();
+    }
     get_field_value(obj, field)
 }
 
 pub unsafe fn get_field_ptr<T>(obj: *mut Il2CppObject, field: *mut FieldInfo) -> *mut T {
+    if obj.is_null() || field.is_null() {
+        return null_mut();
+    }
     unsafe { (obj as usize + (*field).offset as usize) as _ }
 }
 
 pub fn set_static_field_value<T>(field: *mut FieldInfo, value: T) {
+    if field.is_null() {
+        return;
+    }
     il2cpp_field_static_set_value(field, std::ptr::from_ref(&value) as _);
 }
 
 pub fn set_field_value<T>(obj: *mut Il2CppObject, field: *mut FieldInfo, value: &T) {
+    if obj.is_null() || field.is_null() {
+        return;
+    }
     il2cpp_field_set_value(obj, field, std::ptr::from_ref(value) as _);
 }
 
 pub fn set_field_object_value<T>(obj: *mut Il2CppObject, field: *mut FieldInfo, value: *const T) {
+    if obj.is_null() || field.is_null() {
+        return;
+    }
     il2cpp_field_set_value(obj, field, value as _);
 }
 

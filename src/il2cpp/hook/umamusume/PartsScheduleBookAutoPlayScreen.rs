@@ -37,6 +37,10 @@ extern "C" fn IncrementProgressGauge(this: *mut Il2CppObject) {
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
+    if crate::core::Hachimi::instance().game.region != crate::core::game::Region::Japan {
+        return;
+    }
+
     get_class_or_return!(umamusume, Gallop, PartsScheduleBookAutoPlayScreen);
 
     let show_addr = get_method_addr(PartsScheduleBookAutoPlayScreen, c"ShowScreen", 2);

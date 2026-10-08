@@ -255,6 +255,10 @@ impl TextDataQuery {
     }
 
     pub fn get_skill_name(index: i32) -> Option<*mut Il2CppString> {
+        if Hachimi::instance().game.region != crate::core::game::Region::Japan {
+            return None;
+        }
+
         // Return None if skill name translation is disabled
         if Hachimi::instance().config.load().disable_skill_name_translation {
             return None;
@@ -271,6 +275,10 @@ impl TextDataQuery {
     }
 
     pub fn get_skill_desc(index: i32) -> Option<*mut Il2CppString> {
+        if Hachimi::instance().game.region != crate::core::game::Region::Japan {
+            return None;
+        }
+
         let localized_data = Hachimi::instance().localized_data.load();
         let text_opt = localized_data
             .text_data_dict

@@ -2900,7 +2900,7 @@ pub const ScreenOrientation_AutoRotation: ScreenOrientation = 5;
 pub const ScreenOrientation_Landscape: ScreenOrientation = 3;
 pub type ScreenOrientation = i32;
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Color_t {
     pub r: f32,
     pub g: f32,
@@ -2908,7 +2908,7 @@ pub struct Color_t {
     pub a: f32,
 }
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Color32_t {
     pub r: u8,
     pub g: u8,
@@ -2950,7 +2950,7 @@ pub struct Vector3_t {
     pub z: f32,
 }
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Rect_t {
     pub x: f32,
     pub y: f32,

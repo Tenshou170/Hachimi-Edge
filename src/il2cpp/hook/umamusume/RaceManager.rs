@@ -31,6 +31,9 @@ static WAS_FINISHED: AtomicBool = AtomicBool::new(false);
 
 pub fn is_race_finished(race_manager: *mut Il2CppObject) -> bool {
     if race_manager.is_null() { return true; }
+    if unsafe { GET_IS_SKIP_TO_RACE_END_CUT_IN_ADDR == 0 && GET_IS_AFTER_RACE_END_CUT_IN_ADDR == 0 } {
+        return false;
+    }
     let skip_cutin = get_IsSkipToRaceEndCutIn(race_manager);
     let after_cutin = get_IsAfterRaceEndCutIn(race_manager);
     let finished = skip_cutin || after_cutin;
