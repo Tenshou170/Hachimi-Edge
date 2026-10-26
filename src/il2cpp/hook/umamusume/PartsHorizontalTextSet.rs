@@ -7,7 +7,7 @@ use crate::il2cpp::{
 static mut TEXT_ARRAY_FIELD: *mut FieldInfo = std::ptr::null_mut();
 
 pub fn get_textArray(this: *mut Il2CppObject) -> *mut Il2CppArraySize {
-    if this.is_null() { 
+    if this.is_null() || unsafe { TEXT_ARRAY_FIELD.is_null() } { 
         return std::ptr::null_mut(); 
     }
     unsafe { 
@@ -29,23 +29,23 @@ pub fn init(umamusume: *const Il2CppImage) {
 }
 
 fn find_parts_horizontal_text_set_class(umamusume: *const Il2CppImage) -> *mut Il2CppClass {
-    const ASSEMBLY_NAMES: &[&str] = &[
-        "Cute.UI.Assembly.dll",
-        "Cute.Cri.Assembly.dll",
+    const ASSEMBLY_NAMES: &[&std::ffi::CStr] = &[
+        c"Cute.UI.Assembly.dll",
+        c"Cute.Cri.Assembly.dll",
     ];
     
     // try umamusume image first
     if !umamusume.is_null() {
-        if let Ok(class) = get_class(umamusume, cstr!("Gallop"), cstr!("PartsHorizontalTextSet")) {
+        if let Ok(class) = get_class(umamusume, c"Gallop", c"PartsHorizontalTextSet") {
             return class;
         }
     }
     
     // try other assemblies
-    for &_assembly_name in ASSEMBLY_NAMES {
-        if let Ok(image) = get_assembly_image(cstr!(assembly_name)) {
+    for &assembly_name in ASSEMBLY_NAMES {
+        if let Ok(image) = get_assembly_image(assembly_name) {
             if !image.is_null() {
-                if let Ok(class) = get_class(image, cstr!("Gallop"), cstr!("PartsHorizontalTextSet")) {
+                if let Ok(class) = get_class(image, c"Gallop", c"PartsHorizontalTextSet") {
                     return class;
                 }
             }

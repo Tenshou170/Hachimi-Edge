@@ -69,7 +69,7 @@ pub fn apply_ui_scale() {
     #[cfg(target_os = "windows")]
     let scaler_count = unsafe { canvas_scaler_list.as_slice().len() };
     for scaler in unsafe { canvas_scaler_list.as_slice().iter() } {
-        if scaler.is_null() {
+        if scaler.is_null() || !crate::il2cpp::hook::UnityEngine_CoreModule::Object::op_Implicit(*scaler) {
             continue;
         }
         #[cfg(target_os = "android")]
@@ -97,6 +97,11 @@ pub fn apply_ui_scale() {
 
 type SetHeaderTitleTextFn = extern "C" fn(this: *mut Il2CppObject, text: *mut Il2CppString, guide_id: i32);
 extern "C" fn SetHeaderTitleText(this: *mut Il2CppObject, text_: *mut Il2CppString, guide_id: i32) {
+    if text_.is_null() {
+        get_orig_fn!(SetHeaderTitleText, SetHeaderTitleTextFn)(this, text_, guide_id);
+        return;
+    }
+
     let text = unsafe { (*text_).as_utf16str() };
 
     // The title text (aka the purple ribbon on the top left of the screen) doesn't run

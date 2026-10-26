@@ -389,6 +389,10 @@ fn get_or_store_original_position(rect_transform: *mut Il2CppObject, current_x: 
     (base_pos_ref.position.x, base_pos_ref.position.y)
 }
 
+pub fn clear_original_positions() {
+    ORIGINAL_POSITIONS.lock().unwrap().clear();
+}
+
 pub fn init(umamusume: *const Il2CppImage) {
     get_class_or_return!(umamusume, Gallop, PartsGachaButton);
 

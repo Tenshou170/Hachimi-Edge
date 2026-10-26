@@ -1,8 +1,16 @@
 use crate::{
     core::{hachimi::UITextConfig, Hachimi},
     il2cpp::{
-    ext::StringExt, hook::{UnityEngine_CoreModule::{Component, GameObject, RectTransform}, UnityEngine_TextRenderingModule::TextAnchor, UnityEngine_UI::Text}, symbols::get_method_addr, types::*
-}};
+        ext::StringExt,
+        hook::{
+            UnityEngine_CoreModule::{Component, GameObject, Object, RectTransform},
+            UnityEngine_TextRenderingModule::TextAnchor,
+            UnityEngine_UI::Text,
+        },
+        symbols::get_method_addr,
+        types::*,
+    },
+};
 
 use super::{ButtonCommon, CharacterNoteTopView, TextCommon, ViewControllerBase};
 use std::collections::HashMap;
@@ -30,22 +38,26 @@ extern "C" fn InitializeView(this: *mut Il2CppObject) -> *mut Il2CppObject {
 }
 
 fn apply_gallery_button_config(button: *mut Il2CppObject, config: &UITextConfig) {
-    if button.is_null() {
+    if button.is_null() || !Object::op_Implicit(button) {
         return;
     }
     let target_text = ButtonCommon::get_TargetText(button);
-    if target_text.is_null() {
+    if target_text.is_null() || !Object::op_Implicit(target_text) {
         return;
     }
 
     if let Some(text) = config.text.as_ref() {
         let game_object = Component::get_gameObject(button);
-        let text_objects = GameObject::GetComponentsInChildren(game_object, TextCommon::type_object(), true);
+        if !game_object.is_null() && Object::op_Implicit(game_object) {
+            let text_objects = GameObject::GetComponentsInChildren(game_object, TextCommon::type_object(), true);
 
-        let empty_str = "".to_il2cpp_string();
-        for text_object in unsafe { text_objects.as_slice().iter() } {
-            if *text_object != target_text {
-                Text::set_text(*text_object, empty_str);
+            if !text_objects.this.is_null() {
+                let empty_str = "".to_il2cpp_string();
+                for text_object in unsafe { text_objects.as_slice().iter() } {
+                    if !text_object.is_null() && Object::op_Implicit(*text_object) && *text_object != target_text {
+                        Text::set_text(*text_object, empty_str);
+                    }
+                }
             }
         }
 
@@ -64,36 +76,27 @@ fn apply_gallery_button_config(button: *mut Il2CppObject, config: &UITextConfig)
     
     // Apply position offset
     if config.position_offset_x.is_some() || config.position_offset_y.is_some() {
-        let text_go = Component::get_gameObject(target_text);
-        if !text_go.is_null() {
-            let rt_type = RectTransform::type_object();
-            if rt_type.is_null() {
-                error!("  RectTransform type object is null!");
-                return;
-            }
+        let rect_transform = Component::get_transform(target_text);
+        if !rect_transform.is_null() && Object::op_Implicit(rect_transform) {
+            let mut anchored_pos = RectTransform::get_anchoredPosition(rect_transform);
 
-            let rect_transform = GameObject::GetComponentInChildren(text_go, rt_type, true);
-            if !rect_transform.is_null() {
-                let mut anchored_pos = RectTransform::get_anchoredPosition(rect_transform);
+            let mut original_pos_map = ORIGINAL_POSITIONS.lock().unwrap();
+            let base_pos_ref = original_pos_map.entry(rect_transform as usize).or_insert_with(|| {
+                Vector2_t { x: anchored_pos.x, y: anchored_pos.y }
+            });
+            let (base_x, base_y) = (base_pos_ref.x, base_pos_ref.y);
+            drop(original_pos_map);
 
-                let mut original_pos_map = ORIGINAL_POSITIONS.lock().unwrap();
-                // Evict stale entries (dead Unity objects) to prevent unbounded growth.
-                original_pos_map.retain(|&ptr, _| {
-                    crate::il2cpp::hook::UnityEngine_CoreModule::Object::IsNativeObjectAlive(ptr as *mut _)
-                });
-                let base_pos_ref = original_pos_map.entry(rect_transform as usize).or_insert_with(|| {
-                    Vector2_t { x: anchored_pos.x, y: anchored_pos.y }
-                });
-                let (base_x, base_y) = (base_pos_ref.x, base_pos_ref.y);
-                drop(original_pos_map);
+            anchored_pos.x = config.position_offset_x.map(|ox| base_x + ox).unwrap_or(base_x);
+            anchored_pos.y = config.position_offset_y.map(|oy| base_y + oy).unwrap_or(base_y);
 
-                anchored_pos.x = config.position_offset_x.map(|ox| base_x + ox).unwrap_or(base_x);
-                anchored_pos.y = config.position_offset_y.map(|oy| base_y + oy).unwrap_or(base_y);
-
-                RectTransform::set_anchoredPosition(rect_transform, anchored_pos);
-            }
+            RectTransform::set_anchoredPosition(rect_transform, anchored_pos);
         }
     }
+}
+
+pub fn clear_original_positions() {
+    ORIGINAL_POSITIONS.lock().unwrap().clear();
 }
 
 pub fn init(umamusume: *const Il2CppImage) {

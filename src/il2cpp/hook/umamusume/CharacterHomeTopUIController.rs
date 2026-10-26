@@ -41,7 +41,11 @@ extern "C" fn UpdateView(this: *mut Il2CppObject) {
     apply_button_configs(this);
 }
 
-fn is_valid_enhancement_context(this: *mut Il2CppObject) -> bool {    
+fn is_valid_enhancement_context(this: *mut Il2CppObject) -> bool {
+    if this.is_null() || !Object::op_Implicit(this) {
+        return false;
+    }
+
     let card_button = CharacterHomeTopUI::get_cardRootButton(this);
     // op_Implicit also rejects destroyed Unity objects, which field getters can
     // still hand back during scene teardown (e.g. returning home from the
@@ -51,7 +55,7 @@ fn is_valid_enhancement_context(this: *mut Il2CppObject) -> bool {
     }
     
     let game_object = Component::get_gameObject(card_button);
-    if game_object.is_null() {
+    if game_object.is_null() || !Object::op_Implicit(game_object) {
         return false;
     }
     
@@ -75,8 +79,7 @@ fn is_valid_enhancement_context(this: *mut Il2CppObject) -> bool {
         }
     }
     
-    // only proceed if we're in enhance menu
-    button_name_lower.contains("umamusume")
+    true
 }
 
 fn apply_button_configs(this: *mut Il2CppObject) {
@@ -193,7 +196,7 @@ fn collect_text_components(button: *mut Il2CppObject, config_name: &str) -> Vec<
     
     let text_slice = unsafe { text_objects.as_slice() };
     for text_obj in text_slice.iter() {
-        if !text_components.contains(text_obj) {
+        if !text_obj.is_null() && Object::op_Implicit(*text_obj) && !text_components.contains(text_obj) {
             text_components.push(*text_obj);
         }
     }
@@ -248,18 +251,12 @@ fn apply_position_offset(text_component: *mut Il2CppObject, config: &UITextConfi
 }
 
 fn get_rect_transform(text_component: *mut Il2CppObject) -> Option<*mut Il2CppObject> {
-    let text_go = Component::get_gameObject(text_component);
-    if text_go.is_null() || !Object::op_Implicit(text_go) {
+    if text_component.is_null() || !Object::op_Implicit(text_component) {
         return None;
     }
 
-    let rt_type = RectTransform::type_object();
-    if rt_type.is_null() {
-        return None;
-    }
-
-    let rect_transform = GameObject::GetComponentInChildren(text_go, rt_type, true);
-    if rect_transform.is_null() {
+    let rect_transform = Component::get_transform(text_component);
+    if rect_transform.is_null() || !Object::op_Implicit(rect_transform) {
         None
     } else {
         Some(rect_transform)
@@ -268,14 +265,14 @@ fn get_rect_transform(text_component: *mut Il2CppObject) -> Option<*mut Il2CppOb
 
 fn get_or_store_original_position(rect_transform: *mut Il2CppObject, current_x: f32, current_y: f32) -> (f32, f32) {
     let mut original_pos_map = ORIGINAL_POSITIONS.lock().unwrap();
-    // Evict stale entries (dead Unity objects) to prevent unbounded growth.
-    original_pos_map.retain(|&ptr, _| {
-        crate::il2cpp::hook::UnityEngine_CoreModule::Object::IsNativeObjectAlive(ptr as *mut _)
-    });
     let base_pos_ref = original_pos_map.entry(rect_transform as usize).or_insert_with(|| {
         Vector2_t { x: current_x, y: current_y }
     });
     (base_pos_ref.x, base_pos_ref.y)
+}
+
+pub fn clear_original_positions() {
+    ORIGINAL_POSITIONS.lock().unwrap().clear();
 }
 
 pub fn init(Plugins: *const Il2CppImage) {

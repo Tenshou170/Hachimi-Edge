@@ -25,6 +25,9 @@ fn ChangeViewCommon(next_view_id: i32) {
     // Clear stale raw pointers to destroyed Unity UI objects so they don't
     // accumulate across scene transitions and cause use-after-free on iteration.
     crate::core::gui::clear_disabled_game_uis();
+    crate::il2cpp::hook::umamusume::CharacterHomeTopUIController::clear_original_positions();
+    crate::il2cpp::hook::umamusume::CharacterNoteTopViewController::clear_original_positions();
+    crate::il2cpp::hook::umamusume::PartsGachaButton::clear_original_positions();
 }
 
 type ChangeViewJpfn = extern "C" fn(
