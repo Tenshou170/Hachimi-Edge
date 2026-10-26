@@ -247,6 +247,8 @@ config_editor:
   live_theater_allow_same_chara: "Live theater allow same chara"
   disable_tap_effect: "Disable Tap Effect"
   live_vocals_swap: "Live Vocals Swap"
+  live_vocals_swap_all_songs: "All Songs"
+  live_vocals_swap_concert: "Song"
   live_vocals_swap_character_n: "Character %{index}"
   free_camera: "Free Camera"
   homescreen_bgseason: "Homescreen Background Season"

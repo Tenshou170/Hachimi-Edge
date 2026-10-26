@@ -253,6 +253,8 @@ config_editor:
   live_theater_allow_same_chara: "Izinkan karakter yang sama untuk konser"
   disable_tap_effect: "Nonaktifkan Efek Ketukan"
   live_vocals_swap: "Tukar vokal konser"
+  live_vocals_swap_all_songs: "Semua Lagu"
+  live_vocals_swap_concert: "Lagu"
   live_vocals_swap_character_n: "Karakter %{index}"
   free_camera: "Kamera Bebas"
   homescreen_bgseason: "Latar musim di beranda"

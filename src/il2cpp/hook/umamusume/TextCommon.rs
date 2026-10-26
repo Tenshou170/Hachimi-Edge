@@ -1,5 +1,5 @@
 use crate::{
-    core::Hachimi,
+    core::{game::Region, Hachimi},
     il2cpp::{
         api::{il2cpp_class_get_type, il2cpp_type_get_object},
         ext::{Il2CppObjectExt, LocalizedDataExt},
@@ -118,14 +118,16 @@ pub fn init(umamusume: *const Il2CppImage) {
     let Awake_addr = get_method_addr(TextCommon, c"Awake", 0);
     new_hook!(Awake_addr, Awake);
 
-    let SetSystemTextWithLineHeadWrap_addr = get_method_addr(TextCommon, c"SetSystemTextWithLineHeadWrap", 2);
-    new_hook!(SetSystemTextWithLineHeadWrap_addr, SetSystemTextWithLineHeadWrap);
+    if Hachimi::instance().game.region == Region::Japan {
+        let SetSystemTextWithLineHeadWrap_addr = get_method_addr(TextCommon, c"SetSystemTextWithLineHeadWrap", 2);
+        new_hook!(SetSystemTextWithLineHeadWrap_addr, SetSystemTextWithLineHeadWrap);
 
-    let SetTextWithLineHeadWrap_addr = get_method_addr(TextCommon, c"SetTextWithLineHeadWrap", 2);
-    new_hook!(SetTextWithLineHeadWrap_addr, SetTextWithLineHeadWrap);
+        let SetTextWithLineHeadWrap_addr = get_method_addr(TextCommon, c"SetTextWithLineHeadWrap", 2);
+        new_hook!(SetTextWithLineHeadWrap_addr, SetTextWithLineHeadWrap);
 
-    let SetTextWithLineHeadWrapWithColorTag_addr = get_method_addr(TextCommon, c"SetTextWithLineHeadWrapWithColorTag", 2);
-    new_hook!(SetTextWithLineHeadWrapWithColorTag_addr, SetTextWithLineHeadWrapWithColorTag);
+        let SetTextWithLineHeadWrapWithColorTag_addr = get_method_addr(TextCommon, c"SetTextWithLineHeadWrapWithColorTag", 2);
+        new_hook!(SetTextWithLineHeadWrapWithColorTag_addr, SetTextWithLineHeadWrapWithColorTag);
+    }
 
     unsafe {
         TYPE_OBJECT = il2cpp_type_get_object(il2cpp_class_get_type(TextCommon));

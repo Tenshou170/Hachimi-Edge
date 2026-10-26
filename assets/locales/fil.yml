@@ -256,6 +256,8 @@ config_editor:
   live_theater_allow_same_chara: "Payagan ang katulad na character sa live theater"
   disable_tap_effect: "I-disable ang particle effect sa pag-tap"
   live_vocals_swap: "Pagpalit ng Vocals sa Live Theater"
+  live_vocals_swap_all_songs: "Lahat ng Kanta"
+  live_vocals_swap_concert: "Kanta"
   live_vocals_swap_character_n: "Karakter %{index}"
   free_camera: "Free Camera"
   homescreen_bgseason: "Panahon ng Homescreen Background"

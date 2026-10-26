@@ -253,6 +253,8 @@ config_editor:
   live_theater_allow_same_chara: "在 Live 剧场中允许设置多个相同角色"
   disable_tap_effect: "禁用点击特效"
   live_vocals_swap: "Live 剧场音轨替换"
+  live_vocals_swap_all_songs: "所有歌曲"
+  live_vocals_swap_concert: "演唱会"
   live_vocals_swap_character_n: "角色 %{index}"
   free_camera: "自由视角"
   homescreen_bgseason: "主界面背景季节"

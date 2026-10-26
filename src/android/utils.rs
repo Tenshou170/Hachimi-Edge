@@ -715,3 +715,54 @@ pub fn get_game_dir() -> PathBuf {
     let package_name = game_impl::get_package_name();
     game_impl::get_data_dir(&package_name)
 }
+
+pub fn set_clipboard_text(text: &str) -> bool {
+    let vm = match java_vm() {
+        Some(v) => v,
+        None => return false,
+    };
+    let mut env = match vm.attach_current_thread() {
+        Ok(e) => e,
+        Err(_) => return false,
+    };
+
+    let result = (|| -> jni::errors::Result<()> {
+        let activity = get_activity(unsafe { env.unsafe_clone() })
+            .ok_or(jni::errors::Error::JavaException)?;
+
+        let context_class = env.find_class("android/content/Context")?;
+        let clip_service_name = env.get_static_field(context_class, "CLIPBOARD_SERVICE", "Ljava/lang/String;")?.l()?;
+
+        let clipboard = env.call_method(
+            &activity,
+            "getSystemService",
+            "(Ljava/lang/String;)Ljava/lang/Object;",
+            &[jni::objects::JValue::from(&clip_service_name)]
+        )?.l()?;
+
+        let jtext = env.new_string(text)?;
+        let clip_data_class = env.find_class("android/content/ClipData")?;
+        let clip = env.call_static_method(
+            clip_data_class,
+            "newPlainText",
+            "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Landroid/content/ClipData;",
+            &[jni::objects::JValue::from(&jtext), jni::objects::JValue::from(&jtext)]
+        )?.l()?;
+
+        env.call_method(&clipboard, "setPrimaryClip", "(Landroid/content/ClipData;)V", &[jni::objects::JValue::from(&clip)])?;
+
+        Ok(())
+    })();
+
+    match result {
+        Ok(()) => true,
+        Err(e) => {
+            if env.exception_check().unwrap_or(false) {
+                let _ = env.exception_describe();
+                let _ = env.exception_clear();
+            }
+            info!("JNI Clipboard Error: {:?}", e);
+            false
+        }
+    }
+}

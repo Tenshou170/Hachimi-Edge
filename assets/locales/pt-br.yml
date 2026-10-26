@@ -253,6 +253,8 @@ config_editor:
   live_theater_allow_same_chara: "Permitir personagens repetidos nos shows"
   disable_tap_effect: "Desativar efeito de toque"
   live_vocals_swap: "Vozes dos shows"
+  live_vocals_swap_all_songs: "Todas as músicas"
+  live_vocals_swap_concert: "Música"
   live_vocals_swap_character_n: "Personagem %{index}"
   free_camera: "Câmera livre"
   homescreen_bgseason: "Estação da tela de início"

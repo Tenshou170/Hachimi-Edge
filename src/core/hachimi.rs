@@ -19,7 +19,7 @@ use crate::{
     il2cpp::{
         self,
         hook::umamusume::CySpringController::SpringUpdateMode,
-        sql::CharacterData,
+        sql::{CharacterData, LiveData},
     },
 };
 
@@ -91,6 +91,7 @@ pub struct Hachimi {
 
     // Character data
     pub chara_data: ArcSwap<CharacterData>,
+    pub live_data: ArcSwap<LiveData>,
 
     // Shared properties
     pub game: Game,
@@ -190,6 +191,7 @@ impl Hachimi {
 
             // Same with these
             chara_data: ArcSwap::default(),
+            live_data: ArcSwap::default(),
 
             game,
             template_parser: template::Parser::new(&template_filters::LIST),
@@ -673,6 +675,23 @@ impl Hachimi {
         }
     }
 
+    pub fn init_live_data(&self) {
+        if self.live_data.load().live_ids.is_empty() {
+            std::thread::Builder::new()
+                .name("live_data_loader".into())
+                .spawn(|| {
+                    let thread = crate::il2cpp::symbols::attach_current_thread();
+                    let data = LiveData::load_from_db();
+                    Hachimi::instance().live_data.store(Arc::new(data));
+                    info!("Live database loaded successfully.");
+                    if let Some(t) = thread {
+                        crate::il2cpp::symbols::detach_current_thread(t);
+                    }
+                })
+                .ok();
+        }
+    }
+
     pub fn on_dlopen(&self, filename: &str, handle: usize) -> bool {
         let filename_lower = filename.to_lowercase();
         #[cfg(target_os = "windows")]
@@ -1132,6 +1151,8 @@ pub struct Config {
     pub live_theater_allow_same_chara: bool,
     #[serde(default = "Config::default_live_vocals_swap")]
     pub live_vocals_swap: [i32; 6],
+    #[serde(default)]
+    pub live_vocals_swap_presets: std::collections::BTreeMap<i32, [i32; 6]>,
     #[serde(default)]
     pub homescreen_bgseason: crate::il2cpp::hook::umamusume::TimeUtil::BgSeason,
     #[serde(default)]

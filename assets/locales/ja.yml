@@ -247,6 +247,8 @@ config_editor:
   live_theater_allow_same_chara: "ライブシアターで同一キャラを許可"
   disable_tap_effect: "タップエフェクトを無効化"
   live_vocals_swap: "ライブボーカルの入れ替え"
+  live_vocals_swap_all_songs: "すべての曲"
+  live_vocals_swap_concert: "楽曲"
   live_vocals_swap_character_n: "キャラクター %{index}"
   free_camera: "フリーカメラ"
   homescreen_bgseason: "ホーム画面の背景シーズン"

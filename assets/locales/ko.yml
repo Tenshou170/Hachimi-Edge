@@ -254,6 +254,8 @@ config_editor:
   live_theater_allow_same_chara: "라이브 시어터 동일 캐릭터 중복 허용"
   disable_tap_effect: "클릭/터치 효과 비활성화"
   live_vocals_swap: "라이브 보컬 교체"
+  live_vocals_swap_all_songs: "모든 곡"
+  live_vocals_swap_concert: "곡"
   live_vocals_swap_character_n: "캐릭터 %{index}"
   free_camera: "프리 카메라"
   homescreen_bgseason: "홈 화면 배경 계절"

@@ -255,6 +255,8 @@ config_editor:
   live_theater_allow_same_chara: "Permitir personajes duplicados en el Live Theater"
   disable_tap_effect: "Desactivar efecto de toque"
   live_vocals_swap: "Cambiar vocalistas"
+  live_vocals_swap_all_songs: "Todas las canciones"
+  live_vocals_swap_concert: "Canción"
   live_vocals_swap_character_n: "Personaje %{index}"
   free_camera: "Cámara Libre"
   homescreen_bgseason: "Estación en el menú principal"
