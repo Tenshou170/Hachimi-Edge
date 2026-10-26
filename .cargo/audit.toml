@@ -37,4 +37,19 @@ ignore = [
     # portal) and are never compiled into the Android or Windows production targets. Not exploitable
     # in this project. Patched in >=5.4.2; will be resolved automatically when upstream updates zbus.
     "RUSTSEC-2026-0221",
+
+    # Crate: zvariant
+    # Warning: unmaintained (merged into zbus starting with v3.0 as its zvariant module)
+    # Reason: Pulled in transitively by accesskit_unix and ashpd for Linux desktop accessibility/portal; not compiled into Windows or Android targets.
+    "RUSTSEC-2026-0370",
+
+    # Crate: zbus_names
+    # Warning: unmaintained (merged into zbus starting with v0.10 as its names module)
+    # Reason: Pulled in transitively by accesskit_unix and ashpd for Linux desktop accessibility/portal; not compiled into Windows or Android targets.
+    "RUSTSEC-2026-0371",
+
+    # Crate: zvariant_derive
+    # Warning: unmaintained (derive macros provided by zbus starting with v3.0)
+    # Reason: Pulled in transitively by accesskit_unix and ashpd for Linux desktop accessibility/portal; not compiled into Windows or Android targets.
+    "RUSTSEC-2026-0372",
 ]
