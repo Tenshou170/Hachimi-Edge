@@ -1,9 +1,6 @@
 use crate::{
     windows::free_camera::{self, CameraScene, FreeCameraMode},
-    il2cpp::{
-        symbols::get_method_addr,
-        types::*,
-    },
+    il2cpp::types::*,
 };
 
 use super::LiveTimelineControl;
@@ -93,6 +90,11 @@ extern "C" fn GetCharacterWorldPos(
 pub fn init(umamusume: *const Il2CppImage) {
     get_class_or_return!(umamusume, "Gallop.Live.Cutt", LiveTimelineKeyCameraLookAtData);
 
-    let GetCharacterWorldPos_addr = get_method_addr(LiveTimelineKeyCameraLookAtData, c"GetCharacterWorldPos", 8);
-    new_hook!(GetCharacterWorldPos_addr, GetCharacterWorldPos);
+    // Global ships a 5-parameter overload; the selfie-stick override needs the
+    // JP 8-parameter shape, so leave it unbound there.
+    if let Some(addr) = crate::il2cpp::symbols::get_method_addr_opt(
+        LiveTimelineKeyCameraLookAtData, c"GetCharacterWorldPos", 8
+    ) {
+        new_hook!(addr, GetCharacterWorldPos);
+    }
 }

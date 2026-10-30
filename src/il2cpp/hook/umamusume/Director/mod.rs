@@ -1,12 +1,12 @@
 use crate::{
-    core::{game::Region, gui::IS_LIVE_SCENE, Hachimi},
+    core::{capabilities::{self, Capability}, game::Region, gui::IS_LIVE_SCENE, Hachimi},
     il2cpp::{
         ext::StringExt,
         hook::UnityEngine_CoreModule::Camera,
         sql,
         symbols::{
-            get_assembly_image, get_class, get_field_from_name,
-            get_method_addr, Array, IList, SingletonLike
+            get_assembly_image, get_class, get_field_from_name, get_field_from_name_opt,
+            get_method_addr, get_method_addr_opt, Array, IList, SingletonLike
         },
         types::*,
     },
@@ -538,7 +538,22 @@ type AlterUpdateFn = extern "C" fn(this: *mut Il2CppObject, delta_time: f32, is_
 extern "C" fn AlterUpdate(this: *mut Il2CppObject, delta_time: f32, is_update_delta_time: bool) {
     free_camera::begin_live_director_update();
     get_orig_fn!(AlterUpdate, AlterUpdateFn)(this, delta_time, is_update_delta_time);
+    alter_update_common(this);
+}
 
+// The Global client's `Director.AlterUpdate` takes no arguments. The override
+// logic below never used them, so the same body is shared between both shapes.
+#[cfg(target_os = "windows")]
+type AlterUpdateNoArgsFn = extern "C" fn(this: *mut Il2CppObject);
+#[cfg(target_os = "windows")]
+extern "C" fn AlterUpdateNoArgs(this: *mut Il2CppObject) {
+    free_camera::begin_live_director_update();
+    get_orig_fn!(AlterUpdateNoArgs, AlterUpdateNoArgsFn)(this);
+    alter_update_common(this);
+}
+
+#[cfg(target_os = "windows")]
+fn alter_update_common(this: *mut Il2CppObject) {
     if !free_camera::is_scene_enabled(CameraScene::Live)
         && is_trainer_live_director(this)
         && Hachimi::instance().config.load().trainer_live_landscape
@@ -610,10 +625,13 @@ pub fn init(umamusume: *const Il2CppImage) {
 
         _LIVECURRENTTIME_FIELD = get_field_from_name(Director, c"_liveCurrentTime");
         _STATE_FIELD = get_field_from_name(Director, c"_state");
-        _TRAINERCAMERAFOVRATE_FIELD = get_field_from_name(Director, c"_trainerCameraFovRate");
-        _TRAINERCAMERAFOVRATESTART_FIELD = get_field_from_name(Director, c"_trainerCameraFovRateStart");
-        _TRAINERCAMERATARGETCAMERA_FIELD = get_field_from_name(Director, c"_trainerCameraTargetCamera");
-        _TRAINERCAMERATARGETCAMERATRANSFORM_FIELD = get_field_from_name(Director, c"_trainerCameraTargetCameraTransform");
+
+        // Trainer-camera overrides are a JP-only mechanism: the Global Director
+        // has none of these fields, so probe instead of warning.
+        _TRAINERCAMERAFOVRATE_FIELD = get_field_from_name_opt(Director, c"_trainerCameraFovRate").unwrap_or(null_mut());
+        _TRAINERCAMERAFOVRATESTART_FIELD = get_field_from_name_opt(Director, c"_trainerCameraFovRateStart").unwrap_or(null_mut());
+        _TRAINERCAMERATARGETCAMERA_FIELD = get_field_from_name_opt(Director, c"_trainerCameraTargetCamera").unwrap_or(null_mut());
+        _TRAINERCAMERATARGETCAMERATRANSFORM_FIELD = get_field_from_name_opt(Director, c"_trainerCameraTargetCameraTransform").unwrap_or(null_mut());
 
         #[cfg(target_os = "windows")]
         {
@@ -637,15 +655,34 @@ pub fn init(umamusume: *const Il2CppImage) {
     
     new_hook!(pause_live_addr, PauseLive);
 
-    let ApplyTrainerCameraFov_addr = get_method_addr(Director, c"ApplyTrainerCameraFov", 0);
-    new_hook!(ApplyTrainerCameraFov_addr, ApplyTrainerCameraFov);
+    let apply_trainer_fov_addr = get_method_addr_opt(Director, c"ApplyTrainerCameraFov", 0);
+    if let Some(addr) = apply_trainer_fov_addr {
+        new_hook!(addr, ApplyTrainerCameraFov);
+    }
+
+    // Only offer the trainer-live landscape option where the FOV override and
+    // the camera it drives actually exist.
+    if apply_trainer_fov_addr.is_some() && unsafe { !_TRAINERCAMERATARGETCAMERA_FIELD.is_null() } {
+        capabilities::set(Capability::TrainerLiveFov);
+    }
 
     #[cfg(target_os = "windows")]
     {
         let setup_orientation_addr = get_method_addr(Director, c"SetupOrientation", 1);
         new_hook!(setup_orientation_addr, SetupOrientation);
 
-        let AlterUpdate_addr = get_method_addr(Director, c"AlterUpdate", 2);
-        new_hook!(AlterUpdate_addr, AlterUpdate);
+        // JP passes (delta_time, is_update_delta_time); the Global client's
+        // AlterUpdate takes no arguments.
+        match get_method_addr_opt(Director, c"AlterUpdate", 2) {
+            Some(addr) => { new_hook!(addr, AlterUpdate); }
+            None => {
+                if let Some(addr) = get_method_addr_opt(Director, c"AlterUpdate", 0) {
+                    new_hook!(addr, AlterUpdateNoArgs);
+                }
+                else {
+                    error!("Director::AlterUpdate not found (neither 2- nor 0-argument form)");
+                }
+            }
+        }
     }
 }

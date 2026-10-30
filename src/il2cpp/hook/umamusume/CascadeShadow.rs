@@ -1,6 +1,6 @@
 use crate::{
-    core::{game::Region, Hachimi},
-    il2cpp::{symbols::get_method_addr, types::*}
+    core::Hachimi,
+    il2cpp::{symbols::{get_class_opt, get_method_addr}, types::*}
 };
 
 use super::CameraData::ShadowResolution;
@@ -20,11 +20,9 @@ extern "C" fn CascadeShadow_GetShadowResolution(this: *mut Il2CppObject, default
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if Hachimi::instance().game.region != Region::Japan {
+    let Some(CascadeShadow) = get_class_opt(umamusume, c"Gallop.RenderPipeline", c"CascadeShadow") else {
         return;
-    }
-
-    get_class_or_return!(umamusume, "Gallop.RenderPipeline", CascadeShadow);
+    };
 
     let CascadeShadow_GetShadowResolution_addr = get_method_addr(CascadeShadow, c"GetShadowResolution", 1);
     new_hook!(CascadeShadow_GetShadowResolution_addr, CascadeShadow_GetShadowResolution);

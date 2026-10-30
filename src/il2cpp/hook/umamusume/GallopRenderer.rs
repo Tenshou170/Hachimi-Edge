@@ -1,8 +1,7 @@
 use crate::{
-    core::{game::Region, Hachimi},
     il2cpp::{
         hook::Unity_RenderPipelines_Universal_Runtime::UniversalRenderPipelineAsset,
-        symbols::get_method_addr,
+        symbols::{get_class_opt, get_method_addr},
         types::*
     }
 };
@@ -14,11 +13,9 @@ extern "C" fn UpdateShadowSettings(this: *mut Il2CppObject, rendering_data: *mut
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if Hachimi::instance().game.region != Region::Japan {
+    let Some(GallopRenderer) = get_class_opt(umamusume, c"Gallop.RenderPipeline", c"GallopRenderer") else {
         return;
-    }
-
-    get_class_or_return!(umamusume, "Gallop.RenderPipeline", GallopRenderer);
+    };
 
     let UpdateShadowSettings_addr = get_method_addr(GallopRenderer, c"UpdateShadowSettings", 1);
     new_hook!(UpdateShadowSettings_addr, UpdateShadowSettings);

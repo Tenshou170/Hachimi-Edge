@@ -10,7 +10,7 @@ use std::ptr::null_mut;
 
 #[cfg(target_os = "windows")]
 use crate::{
-    core::{Hachimi, game::Region},
+    core::{Hachimi, capabilities::{self, Capability}, game::Region},
     il2cpp::{
         api::il2cpp_field_static_set_value,
         hook::UnityEngine_CoreModule::Screen as UnityScreen,
@@ -105,7 +105,7 @@ pub fn get_Width_orig() -> i32 {
 type GetHeightFn = extern "C" fn() -> i32;
 #[cfg(target_os = "windows")]
 extern "C" fn get_Height() -> i32 {
-    if Hachimi::instance().config.load().windows.freeform_window && Hachimi::instance().game.region != Region::Global {
+    if Hachimi::instance().config.load().windows.freeform_window && capabilities::has(Capability::FreeformWindow) {
         return UnityScreen::get_height();
     }
 
@@ -166,7 +166,7 @@ extern "C" fn SetResolution(
     force_update: bool,
     skip_keep_aspect: bool,
 ) {
-    if !Hachimi::instance().config.load().windows.freeform_window || Hachimi::instance().game.region == Region::Global {
+    if !Hachimi::instance().config.load().windows.freeform_window || !capabilities::has(Capability::FreeformWindow) {
         get_orig_fn!(SetResolution, SetResolutionFn)(
             width,
             height,
@@ -181,7 +181,7 @@ extern "C" fn SetResolution(
 type IsCurrentOrientationFn = extern "C" fn(target: ScreenOrientation) -> bool;
 #[cfg(target_os = "windows")]
 extern "C" fn IsCurrentOrientation(target: ScreenOrientation) -> bool {
-    if Hachimi::instance().config.load().windows.freeform_window && Hachimi::instance().game.region != Region::Global {
+    if Hachimi::instance().config.load().windows.freeform_window && capabilities::has(Capability::FreeformWindow) {
         return true;
     }
 
@@ -193,7 +193,7 @@ type WaitDeviceOrientationFn = extern "C" fn(target: ScreenOrientation) -> IEnum
 #[cfg(target_os = "windows")]
 extern "C" fn WaitDeviceOrientation(target: ScreenOrientation) -> IEnumerator {
     let enumerator = get_orig_fn!(WaitDeviceOrientation, WaitDeviceOrientationFn)(target);
-    if Hachimi::instance().config.load().windows.freeform_window && Hachimi::instance().game.region != Region::Global {
+    if Hachimi::instance().config.load().windows.freeform_window && capabilities::has(Capability::FreeformWindow) {
         if let Err(e) = enumerator.hook_move_next(WaitDeviceOrientation_MoveNext) {
             error!("Failed to stop WaitDeviceOrientation: {}", e);
         }
@@ -219,7 +219,7 @@ extern "C" fn ChangeScreenOrientation(target: ScreenOrientation, force: bool) ->
     #[cfg(target_os = "windows")]
     {
         let enumerator = get_orig_fn!(ChangeScreenOrientation, ChangeScreenOrientationFn)(target, force);
-        if Hachimi::instance().config.load().windows.freeform_window && Hachimi::instance().game.region != Region::Global {
+        if Hachimi::instance().config.load().windows.freeform_window && capabilities::has(Capability::FreeformWindow) {
             if let Err(e) = enumerator.hook_move_next(ChangeScreenOrientation_MoveNext) {
                 error!("Failed to stop ChangeScreenOrientation: {}", e);
             }
@@ -267,7 +267,7 @@ extern "C" fn ChangeScreenOrientationLandscapeAsyncWindows() -> IEnumerator {
         ChangeScreenOrientationLandscapeAsyncWindows,
         ChangeScreenOrientationAsyncFn
     )();
-    if Hachimi::instance().config.load().windows.freeform_window && Hachimi::instance().game.region != Region::Global {
+    if Hachimi::instance().config.load().windows.freeform_window && capabilities::has(Capability::FreeformWindow) {
         if let Err(e) =
             enumerator.hook_move_next(ChangeScreenOrientationLandscapeAsyncWindows_MoveNext)
         {
@@ -304,7 +304,7 @@ extern "C" fn ChangeScreenOrientationPortraitAsyncWindows() -> IEnumerator {
         ChangeScreenOrientationPortraitAsyncWindows,
         ChangeScreenOrientationAsyncFn
     )();
-    if Hachimi::instance().config.load().windows.freeform_window && Hachimi::instance().game.region != Region::Global {
+    if Hachimi::instance().config.load().windows.freeform_window && capabilities::has(Capability::FreeformWindow) {
         if let Err(e) =
             enumerator.hook_move_next(ChangeScreenOrientationPortraitAsyncWindows_MoveNext)
         {
@@ -398,6 +398,17 @@ pub fn init(umamusume: *const Il2CppImage) {
             GET_ISSPLITWINDOW_ADDR = get_method_addr(Screen, c"get_IsSplitWindow", 0);
             ORIGINAL_SCREEN_WIDTH_FIELD = get_field_from_name(Screen, c"_originalScreenWidth");
             ORIGINAL_SCREEN_HEIGHT_FIELD = get_field_from_name(Screen, c"_originalScreenHeight");
+        }
+
+        // Free-form windowing needs a `SetResolution` override and the game's own
+        // landscape flag. The Global client drives its own window (and exposes a
+        // 4-argument SetResolution), so the option is hidden there instead of
+        // being offered and ignored.
+        if !matches!(Hachimi::instance().game.region, Region::Global)
+            && SetResolution_addr != 0
+            && unsafe { GET_ISLANDSCAPE_MODE_ADDR } != 0
+        {
+            capabilities::set(Capability::FreeformWindow);
         }
     }
 

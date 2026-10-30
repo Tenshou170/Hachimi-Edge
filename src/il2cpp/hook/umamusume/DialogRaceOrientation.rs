@@ -1,4 +1,7 @@
-use crate::{core::{game::Region, Hachimi}, il2cpp::{symbols::get_method_addr, types::*}};
+use crate::{
+    core::Hachimi,
+    il2cpp::{symbols::{get_class_opt, get_method_addr_opt}, types::*}
+};
 
 use super::RaceInfo;
 
@@ -32,13 +35,14 @@ extern "C" fn SetupAndOpen(
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if Hachimi::instance().game.region != Region::Japan {
+    let Some(DialogRaceOrientation) = get_class_opt(umamusume, c"Gallop", c"DialogRaceOrientation") else {
         return;
+    };
+
+    // The JP overload passes the RaceInfo the dynamic-camera spoof needs. Other
+    // clients call a 4-argument overload without it, so there is nothing to
+    // spoof there and the hook is skipped.
+    if let Some(addr) = get_method_addr_opt(DialogRaceOrientation, c"SetupAndOpen", 5) {
+        new_hook!(addr, SetupAndOpen);
     }
-
-    get_class_or_return!(umamusume, Gallop, DialogRaceOrientation);
-
-    let SetupAndOpen_addr = get_method_addr(DialogRaceOrientation, c"SetupAndOpen", 5);
-
-    new_hook!(SetupAndOpen_addr, SetupAndOpen);
 }

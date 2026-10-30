@@ -535,8 +535,12 @@ pub fn init(umamusume: *const Il2CppImage) {
     let AlterUpdate_TiltShift_addr = get_method_addr(LiveTimelineControl, c"AlterUpdate_TiltShift", 2);
     new_hook!(AlterUpdate_TiltShift_addr, AlterUpdate_TiltShift);
 
-    let AlterUpdate_CameraLayer_addr = get_method_addr(LiveTimelineControl, c"AlterUpdate_CameraLayer", 2);
-    new_hook!(AlterUpdate_CameraLayer_addr, AlterUpdate_CameraLayer);
+    // The Global client's AlterUpdate_CameraLayer has a different parameter
+    // list (4 instead of 2); skip the override there instead of hooking a
+    // mismatched signature.
+    if let Some(addr) = crate::il2cpp::symbols::get_method_addr_opt(LiveTimelineControl, c"AlterUpdate_CameraLayer", 2) {
+        new_hook!(addr, AlterUpdate_CameraLayer);
+    }
 
     let AlterUpdate_CameraFov_addr = get_method_addr(LiveTimelineControl, c"AlterUpdate_CameraFov", 2);
     new_hook!(AlterUpdate_CameraFov_addr, AlterUpdate_CameraFov);

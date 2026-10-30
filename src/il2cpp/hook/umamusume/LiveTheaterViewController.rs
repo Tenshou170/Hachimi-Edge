@@ -26,13 +26,39 @@ pub fn init(umamusume: *const Il2CppImage) {
 
     let region = &Hachimi::instance().game.region;
     unsafe {
-        match region {
-            &Region::Japan | &Region::Taiwan => {
-                CHANGELIVE_ONSUCCESS_ADDR = get_method_addr(LiveTheaterViewController, c"<ChangeLive>b__48_1", 1);
-            }
-            _ => { // Global
-                CHANGELIVE_ONSUCCESS_ADDR = get_method_addr(LiveTheaterViewController, c"<ChangeLive>b__41_1", 1);
-            }
+        let known_name = match region {
+            &Region::Japan | &Region::Taiwan => c"<ChangeLive>b__48_1",
+            _ => c"<ChangeLive>b__41_1", // Global
+        };
+
+        CHANGELIVE_ONSUCCESS_ADDR = crate::il2cpp::symbols::get_method_addr_opt(
+            LiveTheaterViewController, known_name, 1
+        ).unwrap_or(0);
+
+        // The callback is a compiler-generated lambda, so its `b__N_1` ordinal
+        // changes whenever the client is recompiled. Fall back to matching the
+        // shape instead of the exact name.
+        if CHANGELIVE_ONSUCCESS_ADDR == 0 {
+            CHANGELIVE_ONSUCCESS_ADDR = find_change_live_on_success(LiveTheaterViewController);
         }
     }
+}
+
+/// Finds `<ChangeLive>b__*_1(res)` — the single-argument callback that receives
+/// `LiveTheaterLiveStartResponse`.
+fn find_change_live_on_success(class: *mut Il2CppClass) -> usize {
+    let mut iter: *mut std::ffi::c_void = std::ptr::null_mut();
+    loop {
+        let method = crate::il2cpp::api::il2cpp_class_get_methods(class, &mut iter);
+        if method.is_null() { break; }
+
+        let name = unsafe { std::ffi::CStr::from_ptr((*method).name) }.to_string_lossy();
+        if name.starts_with("<ChangeLive>b__")
+            && unsafe { (*method).is_generic() } == 0
+            && crate::il2cpp::api::il2cpp_method_get_param_count(method) == 1
+        {
+            return unsafe { (*method).methodPointer };
+        }
+    }
+    0
 }

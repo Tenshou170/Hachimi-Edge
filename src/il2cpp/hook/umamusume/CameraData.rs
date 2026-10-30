@@ -1,8 +1,8 @@
 use std::ptr::null_mut;
 use serde::{Serialize, Deserialize};
 use crate::{
-    core::{Hachimi, game::Region},
-    il2cpp::{symbols::get_method_addr, types::*}
+    core::{capabilities::{self, Capability}, Hachimi},
+    il2cpp::{symbols::{get_class_opt, get_method_addr}, types::*}
 };
 
 #[derive(Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -43,10 +43,14 @@ extern "C" fn set_MaxShadowDistance(this: *mut Il2CppObject, value: f32) {
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if Hachimi::instance().game.region != Region::Japan {
+    // `Gallop.RenderPipeline` does not exist on every client (the Global build
+    // renders through a different pipeline), so probe for it instead of
+    // hard-coding a region check: if a client ships it later, the shadow
+    // options light up on their own.
+    let Some(CameraData) = get_class_opt(umamusume, c"Gallop.RenderPipeline", c"CameraData") else {
         return;
-    }
-    get_class_or_return!(umamusume, "Gallop.RenderPipeline", CameraData);
+    };
+
     unsafe {
         CLASS = CameraData;
         SET_ISOVERRIDESHADOWRESOLUTION_ADDR = get_method_addr(CameraData, c"set_IsOverrideShadowResolution", 1);
@@ -55,4 +59,15 @@ pub fn init(umamusume: *const Il2CppImage) {
 
     let SetMaxShadowDistance_addr = get_method_addr(CameraData, c"set_MaxShadowDistance", 1);
     new_hook!(SetMaxShadowDistance_addr, set_MaxShadowDistance);
+
+    // The shadow options only make sense when the whole pipeline is present:
+    // resolution lives here, per-cascade resolution in CascadeShadow, and the
+    // distance/soft-shadow/bias overrides in GallopRenderer.
+    let pipeline_complete = ["CascadeShadow", "CascadeShadowForRace", "GallopRenderer"].iter().all(|name| {
+        let name = std::ffi::CString::new(*name).unwrap();
+        get_class_opt(umamusume, c"Gallop.RenderPipeline", &name).is_some()
+    });
+    if pipeline_complete {
+        capabilities::set(Capability::UrpShadowPipeline);
+    }
 }

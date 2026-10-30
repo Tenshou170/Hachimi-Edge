@@ -1,4 +1,4 @@
-use crate::il2cpp::{symbols::get_method_addr, types::*};
+use crate::il2cpp::{symbols::get_method_addr_opt, types::*};
 
 pub mod ScreenInfo;
 
@@ -22,8 +22,10 @@ pub fn init(umamusume: *const Il2CppImage) {
 
     ScreenInfo::init(LandscapeUIManager);
 
+    // Absent on the Global client, which has no free-form window layout to
+    // report. Both accessors degrade to `None` / 0.0.
     unsafe {
-        GET_GAMESCREENINFO_ADDR = get_method_addr(LandscapeUIManager, c"get_GameScreenInfo", 0);
-        GET_WINDOWSCALE_RATE_ADDR = get_method_addr(LandscapeUIManager, c"get_WindowScaleRate", 0);
+        GET_GAMESCREENINFO_ADDR = get_method_addr_opt(LandscapeUIManager, c"get_GameScreenInfo", 0).unwrap_or(0);
+        GET_WINDOWSCALE_RATE_ADDR = get_method_addr_opt(LandscapeUIManager, c"get_WindowScaleRate", 0).unwrap_or(0);
     }
 }

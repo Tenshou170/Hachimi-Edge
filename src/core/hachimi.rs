@@ -736,6 +736,10 @@ impl Hachimi {
         info!("GameAssembly finished loading");
         il2cpp::symbols::init();
         il2cpp::hook::init();
+
+        // One line instead of dozens of scattered warnings: what this client's
+        // assemblies do not provide, and therefore which features are hidden.
+        info!("Client capabilities unavailable: [{}]", crate::core::capabilities::unavailable_list());
         crate::il2cpp::hook::umamusume::GameSystem::on_game_initialized();
 
         let config = self.config.load();

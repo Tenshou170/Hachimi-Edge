@@ -50,7 +50,10 @@ pub fn init(umamusume: *const Il2CppImage) {
     );
 
     unsafe {
+        // Global exposes a 1-argument overload; the camera-attach override
+        // simply stays inactive there.
         GET_PREFAB_ATTACH_TRANSFORM_ADDR =
-            get_method_addr(RaceModelController, c"GetPrefabAttachTransform", 2);
+            crate::il2cpp::symbols::get_method_addr_opt(RaceModelController, c"GetPrefabAttachTransform", 2)
+                .unwrap_or(0);
     }
 }

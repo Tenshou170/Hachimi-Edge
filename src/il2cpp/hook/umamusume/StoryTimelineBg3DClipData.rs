@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::il2cpp::{symbols::{get_field_from_name}, types::*};
+use crate::{
+    core::capabilities::{self, Capability},
+    il2cpp::symbols::get_field_from_name_opt,
+    il2cpp::types::*,
+};
 
 #[derive(Default, Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Debug)]
 #[repr(i32)]
@@ -31,6 +35,9 @@ pub fn init(umamusume: *const Il2CppImage) {
 
     unsafe {
         CLASS = StoryTimelineBg3DClipData;
-        SHADOWTYPE_FIELD = get_field_from_name(StoryTimelineBg3DClipData, c"ShadowType");
+        if let Some(field) = get_field_from_name_opt(StoryTimelineBg3DClipData, c"ShadowType") {
+            SHADOWTYPE_FIELD = field;
+            capabilities::set(Capability::StoryShadowType);
+        }
     }
 }

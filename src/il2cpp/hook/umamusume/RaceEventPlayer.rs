@@ -42,6 +42,10 @@ pub fn init(umamusume: *const Il2CppImage) {
     unsafe {
         CLASS = RaceEventPlayer;
         CHANGE_LAST_EVENT_INDEX_BY_TIME_ADDR = get_method_addr(RaceEventPlayer, c"ChangeLastEventIndexByTime", 1);
-        GET_SKILL_EVENT_PARAM_ADDR = get_method_addr(RaceEventPlayer, c"GetSkillEventParam", 10);
+        // Global's overload takes 7 arguments instead of 10; the replay reader
+        // then gets no skill-event data and degrades to its defaults.
+        GET_SKILL_EVENT_PARAM_ADDR = crate::il2cpp::symbols::get_method_addr_opt(
+            RaceEventPlayer, c"GetSkillEventParam", 10
+        ).unwrap_or(0);
     }
 }

@@ -4,7 +4,7 @@ use crate::core::gui::utils::grid_control_w;
 #[allow(unused_imports)]
 use egui_material3::*;
 use rust_i18n::t;
-use crate::core::{Hachimi, game::Region};
+use crate::core::capabilities::{self, Capability};
 use crate::il2cpp::hook::umamusume::CameraData::ShadowResolution;
 use crate::il2cpp::hook::umamusume::GraphicSettings::{GraphicsQuality, MsaaQuality};
 use crate::il2cpp::hook::umamusume::StoryTimelineBg3DClipData::ShadowType3d;
@@ -38,13 +38,16 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
         (AnisoLevel::_2x, "2x"), (AnisoLevel::_4x, "4x"),
         (AnisoLevel::_8x, "8x"), (AnisoLevel::_16x, "16x"),
     ]);
-    ConfigEditor::list_tile_combo(ui, t!("config_editor.shadow_resolution"), "shadow_resolution", &mut config.shadow_resolution, &[
-        (ShadowResolution::Default, &t!("default")),
-        (ShadowResolution::_256, "256x"), (ShadowResolution::_512, "512x"),
-        (ShadowResolution::_1024, "1K"), (ShadowResolution::_2048, "2K"), (ShadowResolution::_4096, "4K"),
-    ]);
+    // Shadow controls only exist on clients that ship the Gallop RenderPipeline
+    // stack (see capabilities::Capability::UrpShadowPipeline). Elsewhere they
+    // would be controls that silently do nothing.
+    if capabilities::has(Capability::UrpShadowPipeline) {
+        ConfigEditor::list_tile_combo(ui, t!("config_editor.shadow_resolution"), "shadow_resolution", &mut config.shadow_resolution, &[
+            (ShadowResolution::Default, &t!("default")),
+            (ShadowResolution::_256, "256x"), (ShadowResolution::_512, "512x"),
+            (ShadowResolution::_1024, "1K"), (ShadowResolution::_2048, "2K"), (ShadowResolution::_4096, "4K"),
+        ]);
 
-    if Hachimi::instance().game.region == Region::Japan {
         ConfigEditor::list_tile_slider(ui, t!("config_editor.shadow_distance"), &mut config.shadow_distance, 0.0..=1000.0, 10.0, 0);
         ConfigEditor::list_tile_switch(ui, t!("config_editor.soft_shadows"), &mut config.soft_shadows, true);
         ConfigEditor::list_tile_combo(ui, t!("config_editor.soft_shadow_quality"), "soft_shadow_quality", &mut config.soft_shadow_quality, &[
@@ -57,6 +60,9 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
         ConfigEditor::list_tile_option_slider(ui, &t!("config_editor.shadow_depth_bias"), &mut config.shadow_depth_bias, 0.0..=5.0, 0.1, 1);
         ConfigEditor::list_tile_option_slider(ui, &t!("config_editor.shadow_normal_bias"), &mut config.shadow_normal_bias, 0.0..=10.0, 0.1, 1);
         ConfigEditor::list_tile_switch(ui, t!("config_editor.force_chara_shadows"), &mut config.force_chara_shadows, true);
+    }
+
+    if capabilities::has(Capability::StoryShadowType) {
         ConfigEditor::list_tile_combo(ui, t!("config_editor.story_shadow_type"), "story_shadow_type", &mut config.story_shadow_type, &[
             (ShadowType3d::Default, &t!("default")),
             (ShadowType3d::None, "None"),
@@ -92,11 +98,13 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
         ]);
         ConfigEditor::list_tile_switch(ui, t!("config_editor.window_always_on_top"), &mut config.windows.window_always_on_top, true);
 
-        ConfigEditor::list_tile_switch(ui, t!("config_editor.freeform_window"), &mut config.windows.freeform_window, true);
-        ConfigEditor::list_tile_switch(ui, t!("config_editor.freeform_ui_scale_auto"), &mut config.windows.freeform_ui_scale_auto, true);
-        if config.windows.freeform_ui_scale_auto {
-            ConfigEditor::list_tile_slider(ui, t!("config_editor.freeform_ui_scale_auto_ratio"),
-                &mut config.windows.freeform_ui_scale_auto_ratio, 0.25..=3.0, 0.05, 2);
+        if capabilities::has(Capability::FreeformWindow) {
+            ConfigEditor::list_tile_switch(ui, t!("config_editor.freeform_window"), &mut config.windows.freeform_window, true);
+            ConfigEditor::list_tile_switch(ui, t!("config_editor.freeform_ui_scale_auto"), &mut config.windows.freeform_ui_scale_auto, true);
+            if config.windows.freeform_ui_scale_auto {
+                ConfigEditor::list_tile_slider(ui, t!("config_editor.freeform_ui_scale_auto_ratio"),
+                    &mut config.windows.freeform_ui_scale_auto_ratio, 0.25..=3.0, 0.05, 2);
+            }
         }
 
         ConfigEditor::list_tile_switch(ui, t!("config_editor.ui_loading_show_orientation_guide"),

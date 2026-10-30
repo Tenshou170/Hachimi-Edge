@@ -6,6 +6,7 @@ pub use error::Error;
 
 pub mod ext;
 pub mod game;
+pub mod capabilities;
 pub mod template;
 
 pub mod gui;

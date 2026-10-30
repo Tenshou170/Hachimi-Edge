@@ -1,6 +1,6 @@
 use crate::il2cpp::{
     hook::umamusume::PartsSingleModeSkillListItem,
-    symbols::{get_field_from_name, get_field_object_value, get_method_addr},
+    symbols::{get_class_opt, get_field_from_name, get_field_object_value, get_method_addr},
     types::*,
 };
 
@@ -19,7 +19,10 @@ fn Setup(this: *mut Il2CppObject, list_item_model: *mut Il2CppObject) {
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
-    get_class_or_return!(umamusume, Gallop, PartsRaceAnalyzeRaceEventListItem);
+    // JP-only analysis screen; other clients do not ship the class at all.
+    let Some(PartsRaceAnalyzeRaceEventListItem) = get_class_opt(umamusume, c"Gallop", c"PartsRaceAnalyzeRaceEventListItem") else {
+        return;
+    };
 
     let setup_addr = get_method_addr(PartsRaceAnalyzeRaceEventListItem, c"Setup", 1);
     new_hook!(setup_addr, Setup);

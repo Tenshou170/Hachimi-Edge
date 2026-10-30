@@ -46,6 +46,13 @@ pub fn get_assembly_image(assembly_name: &CStr) -> Result<*const Il2CppImage, Er
     }
 }
 
+/// Like [`get_class`], but treats absence as an expected outcome instead of an
+/// error. Use this for classes that legitimately only exist on one client.
+pub fn get_class_opt(image: *const Il2CppImage, namespace: &CStr, class_name: &CStr) -> Option<*mut Il2CppClass> {
+    let class = il2cpp_class_from_name(image, namespace.as_ptr(), class_name.as_ptr());
+    if class.is_null() { None } else { Some(class) }
+}
+
 pub fn get_class(image: *const Il2CppImage, namespace: &CStr, class_name: &CStr) -> Result<*mut Il2CppClass, Error> {
     let class = il2cpp_class_from_name(image, namespace.as_ptr(), class_name.as_ptr());
     if class.is_null() {
@@ -63,6 +70,19 @@ pub fn get_method(class: *mut Il2CppClass, name: &CStr, args_count: i32) -> Resu
     }
     else {
         Ok(method)
+    }
+}
+
+/// Like [`get_method_addr`], but returns `None` without logging when the method
+/// does not exist. Use this for optional bindings whose absence is a known
+/// client difference, so real drift stays visible in the log.
+pub fn get_method_addr_opt(class: *mut Il2CppClass, name: &CStr, args_count: i32) -> Option<usize> {
+    let method = il2cpp_class_get_method_from_name(class, name.as_ptr(), args_count);
+    if method.is_null() {
+        None
+    } else {
+        let addr = unsafe { (*method).methodPointer };
+        if addr == 0 { None } else { Some(addr) }
     }
 }
 
@@ -235,6 +255,12 @@ pub fn set_field_object_value<T>(obj: *mut Il2CppObject, field: *mut FieldInfo, 
         return;
     }
     il2cpp_field_set_value(obj, field, value as _);
+}
+
+/// Like [`get_field_from_name`], but silent when the field is absent.
+pub fn get_field_from_name_opt(class: *mut Il2CppClass, name: &CStr) -> Option<*mut FieldInfo> {
+    let field = il2cpp_class_get_field_from_name(class, name.as_ptr());
+    if field.is_null() { None } else { Some(field) }
 }
 
 pub fn get_field_from_name(class: *mut Il2CppClass, name: &CStr) -> *mut FieldInfo {

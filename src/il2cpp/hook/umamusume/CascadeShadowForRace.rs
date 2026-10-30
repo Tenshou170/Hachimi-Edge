@@ -1,6 +1,5 @@
 use crate::{
-    core::{game::Region, Hachimi},
-    il2cpp::{symbols::get_method_addr, types::*}
+    il2cpp::{symbols::{get_class_opt, get_method_addr}, types::*}
 };
 use super::CascadeShadow;
 
@@ -11,11 +10,9 @@ extern "C" fn CascadeShadowForRace_GetShadowResolution(this: *mut Il2CppObject, 
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if Hachimi::instance().game.region != Region::Japan {
+    let Some(CascadeShadowForRace) = get_class_opt(umamusume, c"Gallop.RenderPipeline", c"CascadeShadowForRace") else {
         return;
-    }
-
-    get_class_or_return!(umamusume, "Gallop.RenderPipeline", CascadeShadowForRace);
+    };
 
     let CascadeShadowForRace_GetShadowResolution_addr = get_method_addr(CascadeShadowForRace, c"GetShadowResolution", 1);
     new_hook!(CascadeShadowForRace_GetShadowResolution_addr, CascadeShadowForRace_GetShadowResolution);

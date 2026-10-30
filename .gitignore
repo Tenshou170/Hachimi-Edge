@@ -54,5 +54,6 @@ Thumbs.db
 /*.bak
 
 # Dumps, for obvious reasons
+/.dump-analysis
 /dump.cs
 /*.cs

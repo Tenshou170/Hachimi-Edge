@@ -3,6 +3,7 @@ use crate::core::gui::Gui;
 use crate::core::gui::dialogs::SimpleOkDialog;
 use crate::core::gui::windows::live_vocals::LiveVocalsSwapWindow;
 use crate::core::Hachimi;
+use crate::core::capabilities::{self, Capability};
 #[allow(unused_imports)]
 use egui_material3::*;
 use rust_i18n::t;
@@ -29,7 +30,11 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
     }
     ConfigEditor::list_tile_slider(ui, t!("config_editor.story_choice_auto_select_delay"), &mut config.story_choice_auto_select_delay, 0.1..=10.0, 0.05, 2);
     ConfigEditor::list_tile_slider(ui, t!("config_editor.story_text_speed_multiplier"), &mut config.story_tcps_multiplier, 0.1..=10.0, 0.1, 1);
-    ConfigEditor::list_tile_switch(ui, t!("config_editor.force_allow_dynamic_camera"), &mut config.force_allow_dynamic_camera, true);
+    // Needs both the setting loader getter and the RaceUtil hook, which the
+    // Global client does not have.
+    if capabilities::race_dynamic_camera() {
+        ConfigEditor::list_tile_switch(ui, t!("config_editor.force_allow_dynamic_camera"), &mut config.force_allow_dynamic_camera, true);
+    }
     ConfigEditor::list_tile_switch(ui, t!("config_editor.live_theater_allow_same_chara"), &mut config.live_theater_allow_same_chara, true);
     ConfigEditor::list_tile_switch(ui, t!("config_editor.disable_tap_effect"), &mut config.disable_tap_effect, true);
 
@@ -167,7 +172,9 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
 
     ConfigEditor::list_tile_switch(ui, t!("config_editor.live_slider_always_show"), &mut config.live_slider_always_show, true);
     ConfigEditor::list_tile_switch(ui, t!("config_editor.live_playback_loop"), &mut config.live_playback_loop, true);
-    ConfigEditor::list_tile_switch(ui, t!("config_editor.trainer_live_landscape"), &mut config.trainer_live_landscape, true);
+    if capabilities::has(Capability::TrainerLiveFov) {
+        ConfigEditor::list_tile_switch(ui, t!("config_editor.trainer_live_landscape"), &mut config.trainer_live_landscape, true);
+    }
     ConfigEditor::list_tile_switch(ui, t!("config_editor.champions_live_show_text"), &mut config.champions_live_show_text, true);
 
     if config.champions_live_show_text {
