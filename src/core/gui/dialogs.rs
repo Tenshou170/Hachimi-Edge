@@ -127,7 +127,7 @@ impl AppWindow for SimpleYesNoDialog {
         MaterialDialog::new(self.id, &self.title, &mut open)
             .max_width(max_w)
             .min_width(200.0_f32.min(max_w))
-            .content(move |ui| {
+            .content(move |ui, _open| {
                 ui.label(&content);
             })
             .text_action(t!("no"), || {})
@@ -183,7 +183,7 @@ impl AppWindow for SimpleOkDialog {
         MaterialDialog::new(self.id, &self.title, &mut open)
             .max_width(max_w)
             .min_width(200.0_f32.min(max_w))
-            .content(move |ui| {
+            .content(move |ui, _open| {
                 ui.label(&content);
             })
             .filled_action(t!("ok"), || {

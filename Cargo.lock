@@ -871,7 +871,7 @@ checksum = "fe6d2e5af09e8c8ad56c969f2157a3d4238cebc7c55f0a517728c38f7b200f81"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.1.14",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]
@@ -1281,7 +1281,7 @@ dependencies = [
 [[package]]
 name = "egui-material3"
 version = "0.0.12"
-source = "git+https://github.com/Tenshou170/egui-material3.git#14e302e22143a592b95f86ec1b83a4c70672df6c"
+source = "git+https://github.com/Tenshou170/egui-material3.git#f5db8987683771419b10cad520d7b3e558f4bd43"
 dependencies = [
  "base64 0.22.1",
  "dark-light",
