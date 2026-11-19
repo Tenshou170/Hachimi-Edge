@@ -17,7 +17,13 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
 
-static ORIGINAL_POSITIONS: Lazy<Mutex<HashMap<usize, Vector2_t>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+#[derive(Clone, Copy)]
+struct StoredPosition {
+    base: Vector2_t,
+    applied: Vector2_t,
+}
+
+static ORIGINAL_POSITIONS: Lazy<Mutex<HashMap<i32, StoredPosition>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 type InitializeViewFn = extern "C" fn(this: *mut Il2CppObject) -> *mut Il2CppObject;
 extern "C" fn InitializeView(this: *mut Il2CppObject) -> *mut Il2CppObject {
@@ -78,25 +84,36 @@ fn apply_gallery_button_config(button: *mut Il2CppObject, config: &UITextConfig)
     if config.position_offset_x.is_some() || config.position_offset_y.is_some() {
         let rect_transform = Component::get_transform(target_text);
         if !rect_transform.is_null() && Object::op_Implicit(rect_transform) {
-            let mut anchored_pos = RectTransform::get_anchoredPosition(rect_transform);
+            let instance_id = Object::get_instanceID(rect_transform);
+            let current_pos = RectTransform::get_anchoredPosition(rect_transform);
 
-            let mut original_pos_map = ORIGINAL_POSITIONS.lock().unwrap();
-            let base_pos_ref = original_pos_map.entry(rect_transform as usize).or_insert_with(|| {
-                Vector2_t { x: anchored_pos.x, y: anchored_pos.y }
+            let mut map = ORIGINAL_POSITIONS.lock().unwrap();
+            let base_pos = match map.get(&instance_id) {
+                Some(stored) => {
+                    if (current_pos.x - stored.applied.x).abs() < 0.1 && (current_pos.y - stored.applied.y).abs() < 0.1 {
+                        stored.base
+                    } else {
+                        current_pos
+                    }
+                }
+                None => current_pos,
+            };
+
+            let target_x = config.position_offset_x.map(|ox| base_pos.x + ox).unwrap_or(base_pos.x);
+            let target_y = config.position_offset_y.map(|oy| base_pos.y + oy).unwrap_or(base_pos.y);
+            let target_pos = Vector2_t { x: target_x, y: target_y };
+
+            map.insert(instance_id, StoredPosition {
+                base: base_pos,
+                applied: target_pos,
             });
-            let (base_x, base_y) = (base_pos_ref.x, base_pos_ref.y);
-            drop(original_pos_map);
+            drop(map);
 
-            anchored_pos.x = config.position_offset_x.map(|ox| base_x + ox).unwrap_or(base_x);
-            anchored_pos.y = config.position_offset_y.map(|oy| base_y + oy).unwrap_or(base_y);
-
-            RectTransform::set_anchoredPosition(rect_transform, anchored_pos);
+            if (current_pos.x - target_pos.x).abs() >= 0.01 || (current_pos.y - target_pos.y).abs() >= 0.01 {
+                RectTransform::set_anchoredPosition(rect_transform, target_pos);
+            }
         }
     }
-}
-
-pub fn clear_original_positions() {
-    ORIGINAL_POSITIONS.lock().unwrap().clear();
 }
 
 pub fn init(umamusume: *const Il2CppImage) {

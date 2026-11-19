@@ -1,6 +1,5 @@
 use crate::{
     core::{hachimi::UITextConfig, Hachimi},
-    core::game::Region,
     il2cpp::{
         ext::{Il2CppStringExt, StringExt},
         symbols::get_method_addr,
@@ -17,7 +16,13 @@ use super::{ButtonCommon, CharacterHomeTopUI, TextCommon};
 use std::{collections::HashMap, sync::Mutex};
 use once_cell::sync::Lazy;
 
-static ORIGINAL_POSITIONS: Lazy<Mutex<HashMap<usize, Vector2_t>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+#[derive(Clone, Copy)]
+struct StoredPosition {
+    base: Vector2_t,
+    applied: Vector2_t,
+}
+
+static ORIGINAL_POSITIONS: Lazy<Mutex<HashMap<i32, StoredPosition>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 type UpdateViewFn = extern "C" fn(this: *mut Il2CppObject);
 
@@ -110,12 +115,17 @@ fn apply_button_configs(this: *mut Il2CppObject) {
     apply!(character_home_top_support_lv_up_button, get_supportLvUpButton);
     apply!(character_home_top_support_limit_break_button, get_supportLimitBreakButton);
     
-    // handle conditional layout difference between regions safely
-    if Hachimi::instance().game.region == Region::Japan {
-        apply!(character_home_top_new_team_edit_button, get_newTeamEditButton);
-    } else {
-        // fallback translation mapping for target layouts inside alternative regions
-        apply!(character_home_top_new_team_edit_button, get_teamEditButton);
+    // handle layout differences safely: new team edit button (JP) vs legacy team edit button (GLB/TW)
+    if let Some(c) = overrides.character_home_top_new_team_edit_button.as_ref() {
+        let b = CharacterHomeTopUI::get_newTeamEditButton(this);
+        if !b.is_null() && Object::op_Implicit(b) {
+            apply_button_config(b, c, "character_home_top_new_team_edit_button");
+        } else {
+            let b = CharacterHomeTopUI::get_teamEditButton(this);
+            if !b.is_null() && Object::op_Implicit(b) {
+                apply_button_config(b, c, "character_home_top_new_team_edit_button");
+            }
+        }
     }
     
     apply!(character_home_top_transfer_button, get_transferButton);
@@ -239,15 +249,35 @@ fn apply_position_offset(text_component: *mut Il2CppObject, config: &UITextConfi
 
     let Some(rect_transform) = get_rect_transform(text_component) else { return };
     if rect_transform.is_null() || !Object::op_Implicit(rect_transform) { return; }
-    
-    // use the native wrapper implementation directly
+
+    let instance_id = Object::get_instanceID(rect_transform);
     let current_pos = RectTransform::get_anchoredPosition(rect_transform);
-    let (base_x, base_y) = get_or_store_original_position(rect_transform, current_pos.x, current_pos.y);
 
-    let new_x = offset_x.map(|ox| base_x + ox).unwrap_or(base_x);
-    let new_y = offset_y.map(|oy| base_y + oy).unwrap_or(base_y);
+    let mut map = ORIGINAL_POSITIONS.lock().unwrap();
+    let base_pos = match map.get(&instance_id) {
+        Some(stored) => {
+            if (current_pos.x - stored.applied.x).abs() < 0.1 && (current_pos.y - stored.applied.y).abs() < 0.1 {
+                stored.base
+            } else {
+                current_pos
+            }
+        }
+        None => current_pos,
+    };
 
-    RectTransform::set_anchoredPosition(rect_transform, Vector2_t { x: new_x, y: new_y });
+    let target_x = offset_x.map(|ox| base_pos.x + ox).unwrap_or(base_pos.x);
+    let target_y = offset_y.map(|oy| base_pos.y + oy).unwrap_or(base_pos.y);
+    let target_pos = Vector2_t { x: target_x, y: target_y };
+
+    map.insert(instance_id, StoredPosition {
+        base: base_pos,
+        applied: target_pos,
+    });
+    drop(map);
+
+    if (current_pos.x - target_pos.x).abs() >= 0.01 || (current_pos.y - target_pos.y).abs() >= 0.01 {
+        RectTransform::set_anchoredPosition(rect_transform, target_pos);
+    }
 }
 
 fn get_rect_transform(text_component: *mut Il2CppObject) -> Option<*mut Il2CppObject> {
@@ -261,18 +291,6 @@ fn get_rect_transform(text_component: *mut Il2CppObject) -> Option<*mut Il2CppOb
     } else {
         Some(rect_transform)
     }
-}
-
-fn get_or_store_original_position(rect_transform: *mut Il2CppObject, current_x: f32, current_y: f32) -> (f32, f32) {
-    let mut original_pos_map = ORIGINAL_POSITIONS.lock().unwrap();
-    let base_pos_ref = original_pos_map.entry(rect_transform as usize).or_insert_with(|| {
-        Vector2_t { x: current_x, y: current_y }
-    });
-    (base_pos_ref.x, base_pos_ref.y)
-}
-
-pub fn clear_original_positions() {
-    ORIGINAL_POSITIONS.lock().unwrap().clear();
 }
 
 pub fn init(Plugins: *const Il2CppImage) {

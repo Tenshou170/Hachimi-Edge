@@ -3,7 +3,7 @@ use crate::{
     il2cpp::{
         ext::{Il2CppObjectExt, StringExt},
         hook::UnityEngine_CoreModule::Object,
-        symbols::{get_field_from_name, get_field_object_value, get_method_addr, GCHandle},
+        symbols::{get_field_from_name, get_field_object_value, get_method_addr},
         types::*
     }
 };
@@ -14,12 +14,13 @@ use std::sync::Mutex;
 use std::ptr::null_mut;
 use once_cell::sync::Lazy;
 
+#[derive(Clone, Copy)]
 struct StoredPosition {
-    handle: GCHandle,
-    position: Vector2_t
+    base: Vector2_t,
+    applied: Vector2_t,
 }
 
-static ORIGINAL_POSITIONS: Lazy<Mutex<HashMap<usize, StoredPosition>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static ORIGINAL_POSITIONS: Lazy<Mutex<HashMap<i32, StoredPosition>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 static mut DAILY_TEXT_SET_FIELD: *mut FieldInfo = null_mut();
 static mut DRAW_COUNT_TEXT_SET_FIELD: *mut FieldInfo = null_mut();
@@ -300,7 +301,7 @@ fn apply_position_offsets(
 }
 
 fn apply_rect_offset(obj: *mut Il2CppObject, config: &UITextConfig) {
-    if obj.is_null() { return; }
+    if obj.is_null() || !Object::op_Implicit(obj) { return; }
 
     let offset_x = config.position_offset_x;
     let offset_y = config.position_offset_y;
@@ -308,15 +309,37 @@ fn apply_rect_offset(obj: *mut Il2CppObject, config: &UITextConfig) {
     if offset_x.is_none() && offset_y.is_none() { return; }
 
     let Some(rect_transform) = get_rect_transform(obj) else { return; };
+    if rect_transform.is_null() || !Object::op_Implicit(rect_transform) { return; }
     let Some((get_pos_fn, set_pos_fn)) = get_position_functions(rect_transform) else { return; };
 
+    let instance_id = Object::get_instanceID(rect_transform);
     let current_pos = get_pos_fn(rect_transform);
-    let (base_x, base_y) = get_or_store_original_position(rect_transform, current_pos.x, current_pos.y);
 
-    set_pos_fn(rect_transform, Vector2_t {
-        x: base_x + offset_x.unwrap_or(0.0),
-        y: base_y + offset_y.unwrap_or(0.0)
+    let mut map = ORIGINAL_POSITIONS.lock().unwrap();
+    let base_pos = match map.get(&instance_id) {
+        Some(stored) => {
+            if (current_pos.x - stored.applied.x).abs() < 0.1 && (current_pos.y - stored.applied.y).abs() < 0.1 {
+                stored.base
+            } else {
+                current_pos
+            }
+        }
+        None => current_pos,
+    };
+
+    let target_x = base_pos.x + offset_x.unwrap_or(0.0);
+    let target_y = base_pos.y + offset_y.unwrap_or(0.0);
+    let target_pos = Vector2_t { x: target_x, y: target_y };
+
+    map.insert(instance_id, StoredPosition {
+        base: base_pos,
+        applied: target_pos,
     });
+    drop(map);
+
+    if (current_pos.x - target_pos.x).abs() >= 0.01 || (current_pos.y - target_pos.y).abs() >= 0.01 {
+        set_pos_fn(rect_transform, target_pos);
+    }
 }
 
 fn get_rect_transform(obj: *mut Il2CppObject) -> Option<*mut Il2CppObject> {
@@ -372,25 +395,6 @@ fn get_position_functions(rect_transform: *mut Il2CppObject) -> Option<(GetAncho
             std::mem::transmute(set_addr),
         ))
     }
-}
-
-fn get_or_store_original_position(rect_transform: *mut Il2CppObject, current_x: f32, current_y: f32) -> (f32, f32) {
-    let mut map = ORIGINAL_POSITIONS.lock().unwrap();
-    map.retain(|_, stored| {
-        let ptr = stored.handle.target();
-        !ptr.is_null() && Object::op_Implicit(ptr)
-    });
-    let base_pos_ref = map.entry(rect_transform as usize).or_insert_with(|| {
-        StoredPosition {
-            handle: GCHandle::new_weak_ref(rect_transform, false),
-            position: Vector2_t { x: current_x, y: current_y }
-        }
-    });
-    (base_pos_ref.position.x, base_pos_ref.position.y)
-}
-
-pub fn clear_original_positions() {
-    ORIGINAL_POSITIONS.lock().unwrap().clear();
 }
 
 pub fn init(umamusume: *const Il2CppImage) {

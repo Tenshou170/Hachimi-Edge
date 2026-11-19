@@ -2925,13 +2925,13 @@ impl Color32_t {
     }
 }
 #[repr(C)]
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Deserialize)]
 pub struct Vector2_t {
     pub x: f32,
     pub y: f32,
 }
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct Vector2Int_t {
     pub x: i32,
     pub y: i32

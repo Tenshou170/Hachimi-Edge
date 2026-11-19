@@ -32,7 +32,7 @@ struct StoredPosition {
     base: Vector2_t,
     applied: Vector2_t,
 }
-static ORIGINAL_POSITIONS: Lazy<Mutex<HashMap<usize, StoredPosition>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static ORIGINAL_POSITIONS: Lazy<Mutex<HashMap<i32, StoredPosition>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Clone)]
 enum ActionTarget {
@@ -451,13 +451,13 @@ fn find_sibling_by_name(anchor: *mut Il2CppObject, sibling_name: &str) -> Option
 fn apply_common_overrides(
     target: *mut Il2CppObject,
     props: &CommonOverrides,
-    pos_map: &mut HashMap<usize, StoredPosition>,
+    pos_map: &mut HashMap<i32, StoredPosition>,
     debug: bool,
 ) {
     if target.is_null() { return; }
     if !Object::IsNativeObjectAlive(target) { return; }
 
-    let key = target as usize;
+    let key = Object::get_instanceID(target);
 
     unsafe {
         let klass = (*target).klass();
