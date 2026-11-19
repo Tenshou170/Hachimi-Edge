@@ -716,10 +716,12 @@ impl Hachimi {
         if hachimi_impl::is_il2cpp_lib(filename) {
             info!("Got il2cpp handle");
             il2cpp::symbols::set_handle(handle);
-            if self.game.region != crate::core::game::Region::Japan {
-                self.on_hooking_finished();
-                return true;
-            }
+            // Hooking must NOT start here. At dlopen time il2cpp_init has not run yet
+            // and no assemblies are loaded, so il2cpp_domain_get()/class lookups fault
+            // inside the runtime (SEGV in libil2cpp/GameAssembly). This is what the
+            // previous region-gated early init did on Global Android builds, where
+            // GameAssembly loads before cri_ware_unity. Hooking is finished from
+            // on_dlopen of the criware library instead, after the runtime is up.
             false
         } else {
             false
