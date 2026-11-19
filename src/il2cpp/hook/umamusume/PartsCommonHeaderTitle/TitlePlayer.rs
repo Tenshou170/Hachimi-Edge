@@ -12,10 +12,14 @@ pub fn init(PartsCommonHeaderTitle: *mut Il2CppClass) {
     find_nested_class_or_return!(PartsCommonHeaderTitle, TitlePlayer);
 
     let GetInMotionName_addr = get_method_addr(TitlePlayer, c"GetInMotionName", 1);
-    new_hook!(GetInMotionName_addr, GetInMotionName);
+    if GetInMotionName_addr != 0 {
+        new_hook!(GetInMotionName_addr, GetInMotionName);
+    }
 
     let Play_addr = get_method_addr(TitlePlayer, c"Play", 2);
-    new_hook!(Play_addr, Play);
+    if Play_addr != 0 {
+        new_hook!(Play_addr, Play);
+    }
 }
 
 extern "C" fn GetInMotionName(_this: *mut Il2CppObject, text: *mut Il2CppString) -> *mut Il2CppString {

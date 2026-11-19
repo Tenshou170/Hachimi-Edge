@@ -1,9 +1,6 @@
-use crate::{
-    core::{game::Region, Hachimi},
-    il2cpp::{
-        symbols::{get_field_from_name, get_method_addr, Array},
-        types::*,
-    },
+use crate::il2cpp::{
+    symbols::{get_field_from_name, get_method_addr, Array},
+    types::*,
 };
 
 use super::{RaceInfo, RaceManager, RaceHorseManagerBase};
@@ -104,12 +101,10 @@ fn reached_course_end(player_info: *mut Il2CppObject) -> bool {
     let race_info = RaceManager::get_RaceInfo(race_manager);
     if race_info.is_null() { return false; }
 
-    let course_distance = if Hachimi::instance().game.region == Region::Global {
-        RaceInfo::course_distance(race_info) as f32
-    } else {
-        // JP/TW RaceInfo doesn't expose get_CourseDistance; sum its components.
-        RaceInfo::course_only_plus_run_up(race_info) as f32
-    };
+    let mut course_distance = RaceInfo::course_distance(race_info) as f32;
+    if course_distance <= 0.0 {
+        course_distance = RaceInfo::course_only_plus_run_up(race_info) as f32;
+    }
     if course_distance <= 0.0 { return false; }
 
     get__distance(player_info) >= course_distance

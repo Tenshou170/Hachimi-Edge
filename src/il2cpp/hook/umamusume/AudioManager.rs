@@ -172,8 +172,7 @@ pub fn resync_race_music(race_manager: *mut Il2CppObject, target_time: f32) -> b
             RaceBGMController::set_isPlayedSecondBGM(bgm_controller, false);
         }
 
-        if (crate::core::Hachimi::instance().game.region == crate::core::game::Region::Japan || crate::core::Hachimi::instance().game.region == crate::core::game::Region::Taiwan)
-            && RaceBGMController::is_played_first_trigger_bgm_field_valid() {
+        if RaceBGMController::is_played_first_trigger_bgm_field_valid() {
             let trigger_start = RaceBGMController::get_firstTriggerBgmPlayStartTime(bgm_controller);
             RaceBGMController::set_isPlayedFirstTriggerBgm(bgm_controller, target_time >= trigger_start);
         }

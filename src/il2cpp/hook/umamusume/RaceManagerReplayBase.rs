@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use crate::{
-    core::{Hachimi, game::Region, gui, utils::{clear_il2cpp_list, race_seek_seh, race_seek_stage}},
+    core::{capabilities::{self, Capability}, gui, utils::{clear_il2cpp_list, race_seek_seh, race_seek_stage}},
     il2cpp::{
         symbols::{get_field_from_name, get_method_addr, Array, IList},
         types::*
@@ -244,7 +244,7 @@ fn repair_horse_distances(race_manager: *mut Il2CppObject, target_time: f32) {
 }
 
 fn resync_used_skills(race_manager: *mut Il2CppObject, target_time: f32) {
-    if Hachimi::instance().game.region != Region::Japan {
+    if !capabilities::has(Capability::SkillManager) {
         return;
     }
 

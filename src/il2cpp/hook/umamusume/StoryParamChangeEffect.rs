@@ -5,7 +5,7 @@ use serde::Deserialize;
 use widestring::Utf16Str;
 
 use crate::{
-    core::{ext::Utf16StringExt, game::Region, hachimi::AssetInfo, Hachimi},
+    core::{ext::Utf16StringExt, hachimi::AssetInfo, Hachimi},
     il2cpp::{
         ext::StringExt,
         hook::UnityEngine_AssetBundleModule::AssetBundle::{self, ASSET_PATH_PREFIX},
@@ -152,10 +152,6 @@ pub fn patch_asset(
 
 pub fn init(umamusume: *const Il2CppImage) {
     // Put everything together since it's very basic.
-    if Hachimi::instance().game.region != Region::Japan {
-        return;
-    }
-
     get_class_or_return!(umamusume, "Gallop", StoryParamChangeEffectScriptableObject);
     get_class_or_return!(umamusume, "Gallop", StoryParamChangeEffectBlockData);
     get_class_or_return!(umamusume, "Gallop", StoryParamChangeEffectDataSet);

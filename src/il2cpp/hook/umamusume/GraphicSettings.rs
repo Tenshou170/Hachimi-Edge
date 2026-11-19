@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{game::Region, Hachimi}, il2cpp::{symbols::{SingletonLike, get_field_from_name, get_method_addr}, types::*}};
+use crate::{core::Hachimi, il2cpp::{symbols::{SingletonLike, get_field_from_name, get_method_addr}, types::*}};
 
 use super::{LowResolutionCamera, SingleModeStartResultCharaViewer};
 
@@ -171,8 +171,8 @@ pub fn init(umamusume: *const Il2CppImage) {
     new_hook!(SetResolutionScale2D_addr, set_ResolutionScale2D);
     new_hook!(Get3DAntiAliasingLevel_addr, Get3DAntiAliasingLevel);
 
-    if Hachimi::instance().game.region == Region::Japan {
-        let GetModelShadowType_addr = get_method_addr(GraphicSettings, c"GetModelShadowType", 0);
+    let GetModelShadowType_addr = get_method_addr(GraphicSettings, c"GetModelShadowType", 0);
+    if GetModelShadowType_addr != 0 {
         new_hook!(GetModelShadowType_addr, GetModelShadowType);
     }
 

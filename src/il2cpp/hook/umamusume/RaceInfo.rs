@@ -1,4 +1,4 @@
-use crate::{core::{game::Region, Hachimi}, il2cpp::{symbols::{get_field_from_name, get_method_addr}, types::*}};
+use crate::il2cpp::{symbols::{get_field_from_name, get_method_addr}, types::*};
 
 static mut GET_RACETYPE_ADDR: usize = 0;
 impl_addr_wrapper_fn!(get_RaceType, GET_RACETYPE_ADDR, i32, this: *mut Il2CppObject);
@@ -30,12 +30,8 @@ pub fn init(umamusume: *const Il2CppImage) {
         SET_RACETYPE_ADDR = get_method_addr(RaceInfo, c"set_RaceType", 1);
         GET_COURSE_DISTANCE_ADDR = get_method_addr(RaceInfo, c"get_CourseDistance", 0);
         GET_IS_STORY_RACE_ADDR = get_method_addr(RaceInfo, c"get_IsStoryRace", 0);
-
-        // JP/TW only; the Global RaceInfo doesn't expose these getters.
-        if Hachimi::instance().game.region != Region::Global {
-            GET_COURSE_ONLY_DISTANCE_ADDR = get_method_addr(RaceInfo, c"get_CourseOnlyDistance", 0);
-            GET_RUN_UP_DISTANCE_ADDR = get_method_addr(RaceInfo, c"get_RunUpDistance", 0);
-        }
+        GET_COURSE_ONLY_DISTANCE_ADDR = get_method_addr(RaceInfo, c"get_CourseOnlyDistance", 0);
+        GET_RUN_UP_DISTANCE_ADDR = get_method_addr(RaceInfo, c"get_RunUpDistance", 0);
         RACE_COURSE_SET_FIELD = get_field_from_name(RaceInfo, c"<RaceCourseSet>k__BackingField");
     }
 

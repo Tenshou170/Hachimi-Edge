@@ -2,10 +2,10 @@ use widestring::Utf16Str;
 use std::ffi::c_void;
 
 use crate::{
-    core::{game::Region, Hachimi, hachimi::CustomRubyBlock},
+    core::{Hachimi, hachimi::CustomRubyBlock},
     il2cpp::{
         api::{il2cpp_array_new, il2cpp_class_get_method_from_name, il2cpp_field_get_type, il2cpp_class_from_type, il2cpp_object_new, il2cpp_runtime_invoke, il2cpp_string_new_utf16},
-        symbols::{get_field_from_name, set_field_object_value, set_field_value},
+        symbols::{get_field_from_name, get_field_from_name_opt, set_field_object_value, set_field_value},
         types::*
     }
 };
@@ -118,10 +118,8 @@ pub fn init(umamusume: *const Il2CppImage) {
         RUBYBLOCKDATA_CLASS = RubyBlockData;
         RUBYDATA_CLASS = RubyData;
 
-        if Hachimi::instance().game.region == Region::Japan {
-            START_INDEX_FIELD = get_field_from_name(RUBYDATA_CLASS, c"StartIndex");
-            END_INDEX_FIELD = get_field_from_name(RUBYDATA_CLASS, c"EndIndex");
-        }
+        START_INDEX_FIELD = get_field_from_name_opt(RUBYDATA_CLASS, c"StartIndex").unwrap_or(std::ptr::null_mut());
+        END_INDEX_FIELD = get_field_from_name_opt(RUBYDATA_CLASS, c"EndIndex").unwrap_or(std::ptr::null_mut());
         CHAR_X_FIELD = get_field_from_name(RUBYDATA_CLASS, c"CharX");
         CHAR_Y_FIELD = get_field_from_name(RUBYDATA_CLASS, c"CharY");
         RUBY_TEXT_FIELD = get_field_from_name(RUBYDATA_CLASS, c"RubyText");

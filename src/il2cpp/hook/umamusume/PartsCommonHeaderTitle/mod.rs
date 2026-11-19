@@ -1,7 +1,7 @@
 mod TitlePlayer;
 
 use crate::{
-    core::{game::Region, Hachimi},
+    core::Hachimi,
     il2cpp::{
         ext::{Il2CppStringExt, StringExt},
         symbols::get_method_addr,
@@ -34,8 +34,8 @@ pub fn get_label(text: *mut Il2CppString) -> *mut Il2CppString {
     label.to_il2cpp_string()
 }
 
-type SetNextTextFn = extern "C" fn(this: *mut Il2CppObject, text: *mut Il2CppString, guide_id: i32, on_open_guide: *mut Il2CppObject, on_destroy: *mut Il2CppObject);
-extern "C" fn SetNextText(this: *mut Il2CppObject, text_: *mut Il2CppString, guide_id: i32, on_open_guide: *mut Il2CppObject, on_destroy: *mut Il2CppObject) {
+type SetNextText4Fn = extern "C" fn(this: *mut Il2CppObject, text: *mut Il2CppString, guide_id: i32, on_open_guide: *mut Il2CppObject, on_destroy: *mut Il2CppObject);
+extern "C" fn SetNextText4(this: *mut Il2CppObject, text_: *mut Il2CppString, guide_id: i32, on_open_guide: *mut Il2CppObject, on_destroy: *mut Il2CppObject) {
     let clean_text = if !text_.is_null() {
         let s = unsafe { (*text_).as_utf16str().to_string() };
         clean_template(&s).to_il2cpp_string()
@@ -43,17 +43,33 @@ extern "C" fn SetNextText(this: *mut Il2CppObject, text_: *mut Il2CppString, gui
         text_
     };
 
-    get_orig_fn!(SetNextText, SetNextTextFn)(this, clean_text, guide_id, on_open_guide, on_destroy);
+    get_orig_fn!(SetNextText4, SetNextText4Fn)(this, clean_text, guide_id, on_open_guide, on_destroy);
+}
+
+type SetNextText2Fn = extern "C" fn(this: *mut Il2CppObject, text: *mut Il2CppString, guide_id: i32);
+extern "C" fn SetNextText2(this: *mut Il2CppObject, text_: *mut Il2CppString, guide_id: i32) {
+    let clean_text = if !text_.is_null() {
+        let s = unsafe { (*text_).as_utf16str().to_string() };
+        clean_template(&s).to_il2cpp_string()
+    } else {
+        text_
+    };
+
+    get_orig_fn!(SetNextText2, SetNextText2Fn)(this, clean_text, guide_id);
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if Hachimi::instance().game.region != Region::Japan {
-        return;
-    }
     get_class_or_return!(umamusume, Gallop, PartsCommonHeaderTitle);
 
-    let SetNextText_addr = get_method_addr(PartsCommonHeaderTitle, c"SetNextText", 4);
-    new_hook!(SetNextText_addr, SetNextText);
+    let SetNextText4_addr = get_method_addr(PartsCommonHeaderTitle, c"SetNextText", 4);
+    if SetNextText4_addr != 0 {
+        new_hook!(SetNextText4_addr, SetNextText4);
+    } else {
+        let SetNextText2_addr = get_method_addr(PartsCommonHeaderTitle, c"SetNextText", 2);
+        if SetNextText2_addr != 0 {
+            new_hook!(SetNextText2_addr, SetNextText2);
+        }
+    }
 
     TitlePlayer::init(PartsCommonHeaderTitle);
 }

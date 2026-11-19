@@ -1,10 +1,7 @@
-use crate::{
-    core::{game::Region, Hachimi},
-    il2cpp::{
-        hook::{UnityEngine_CoreModule::Object, UnityEngine_UI::Text},
-        symbols::{get_field_from_name, get_field_object_value, get_method_addr},
-        types::*,
-    },
+use crate::il2cpp::{
+    hook::{UnityEngine_CoreModule::Object, UnityEngine_UI::Text},
+    symbols::{get_field_from_name, get_field_object_value, get_method_addr},
+    types::*,
 };
 
 static mut STORYTEXT_FIELD: *mut FieldInfo = 0 as _;
@@ -37,13 +34,14 @@ extern "C" fn SetupOther(this: *mut Il2CppObject, p1: *mut Il2CppObject, p2: boo
 pub fn init(image: *const Il2CppImage) {
     get_class_or_return!(image, Gallop, DialogSupportCardDetail);
 
-    if Hachimi::instance().game.region == Region::Japan {
-        let Setup_addr = get_method_addr(DialogSupportCardDetail, c"Setup", 10);
-        new_hook!(Setup_addr, SetupJp);
-    }
-    else {
-        let Setup_addr = get_method_addr(DialogSupportCardDetail, c"Setup", 6);
-        new_hook!(Setup_addr, SetupOther);
+    let Setup10_addr = get_method_addr(DialogSupportCardDetail, c"Setup", 10);
+    if Setup10_addr != 0 {
+        new_hook!(Setup10_addr, SetupJp);
+    } else {
+        let Setup6_addr = get_method_addr(DialogSupportCardDetail, c"Setup", 6);
+        if Setup6_addr != 0 {
+            new_hook!(Setup6_addr, SetupOther);
+        }
     }
 
     unsafe {

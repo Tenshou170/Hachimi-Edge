@@ -35,6 +35,12 @@ pub enum Capability {
     /// Trainer live FOV override: `Director.ApplyTrainerCameraFov` and the
     /// `_trainerCameraTargetCamera` field it drives.
     TrainerLiveFov = 1 << 5,
+    /// `SkillManager` and `GetUsedSkillIdList` / `GetSkills` / `AddUsedSkillId`.
+    SkillManager = 1 << 6,
+    /// `StoryTimelineLiveStreamingClipData` and `LiveStreamingCommentScriptableObject`.
+    LiveStreaming = 1 << 7,
+    /// `PartsScheduleBookAutoPlayScreen` taskbar integration.
+    ScheduleBookAutoPlay = 1 << 8,
 }
 
 static AVAILABLE: AtomicU32 = AtomicU32::new(0);
@@ -64,6 +70,9 @@ pub fn unavailable_list() -> String {
         (Capability::RaceDynamicCameraSetting, "race_dynamic_camera_setting"),
         (Capability::RaceDynamicCameraUtil, "race_dynamic_camera_util"),
         (Capability::TrainerLiveFov, "trainer_live_fov"),
+        (Capability::SkillManager, "skill_manager"),
+        (Capability::LiveStreaming, "live_streaming"),
+        (Capability::ScheduleBookAutoPlay, "schedule_book_auto_play"),
     ];
 
     ALL.iter()

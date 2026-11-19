@@ -1,15 +1,12 @@
-use crate::{
-    core::{game::Region, Hachimi},
-    il2cpp::{
-        hook::{
-            UnityEngine_CoreModule::{Behaviour, Component, GameObject},
-            UnityEngine_TextRenderingModule::TextAnchor,
-            UnityEngine_UI::{ContentSizeFitter, Text},
-        },
-        symbols::get_method_addr,
-        types::*,
-        utils,
+use crate::il2cpp::{
+    hook::{
+        UnityEngine_CoreModule::{Behaviour, Component, GameObject},
+        UnityEngine_TextRenderingModule::TextAnchor,
+        UnityEngine_UI::{ContentSizeFitter, Text},
     },
+    symbols::get_method_addr,
+    types::*,
+    utils,
 };
 
 const WIDTH: f32 = 320.0;
@@ -54,14 +51,12 @@ pub fn fit_text(ribbon: *mut Il2CppObject) {
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if Hachimi::instance().game.region != Region::Japan {
-        return;
-    }
-
     get_class_or_return!(umamusume, Gallop, PartsNickNameRibbon);
 
     let initialize_addr = get_method_addr(PartsNickNameRibbon, c"Initialize", 2);
-    new_hook!(initialize_addr, Initialize);
+    if initialize_addr != 0 {
+        new_hook!(initialize_addr, Initialize);
+    }
 
     unsafe {
         GET_LABEL_ADDR = get_method_addr(PartsNickNameRibbon, c"get_Label", 0);

@@ -1,10 +1,7 @@
-use crate::{
-    core::{Hachimi, game::Region},
-    il2cpp::{
-        hook::umamusume::SimulateEventType::SimulateEventType,
-        symbols::get_field_from_name,
-        types::*
-    }
+use crate::il2cpp::{
+    hook::umamusume::SimulateEventType::SimulateEventType,
+    symbols::get_field_from_name,
+    types::*
 };
 
 pub mod DistanceData;
@@ -15,17 +12,12 @@ def_field_object_accessors!(get_param, set_param, PARAM_FIELD, Il2CppArray);
 def_field_value_accessors!(get_frameTime, set_frameTime, FRAME_TIME_FIELD, f32);
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if !matches!(Hachimi::instance().game.region, Region::Japan | Region::Global) {
-        return;
-    }
+    let race_simulate_event_data = crate::il2cpp::symbols::get_class(umamusume, c"StandaloneSimulator", c"RaceSimulateEventData")
+        .or_else(|_| crate::il2cpp::symbols::get_class(umamusume, c"Gallop", c"RaceSimulateEventData"));
 
-    let namespace = if Hachimi::instance().game.region == Region::Global { c"Gallop" } else { c"StandaloneSimulator" };
-    let RaceSimulateEventData = match crate::il2cpp::symbols::get_class(umamusume, namespace, c"RaceSimulateEventData") {
+    let RaceSimulateEventData = match race_simulate_event_data {
         Ok(v) => v,
-        Err(e) => {
-            error!("{}", e);
-            return;
-        }
+        Err(_) => return,
     };
 
     unsafe {

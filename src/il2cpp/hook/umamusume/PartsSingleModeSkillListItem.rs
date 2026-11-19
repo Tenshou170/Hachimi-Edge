@@ -1,5 +1,5 @@
 use crate::{
-    core::{Hachimi, game::Region},
+    core::Hachimi,
     il2cpp::{
         hook::{
             UnityEngine_CoreModule::Object,
@@ -83,14 +83,13 @@ pub fn init(umamusume: *const Il2CppImage) {
     get_class_or_return!(umamusume, Gallop, PartsSingleModeSkillListItem);
     find_nested_class_or_return!(PartsSingleModeSkillListItem, Info);
 
-    match Hachimi::instance().game.region {
-        Region::Japan => {
-            let UpdateItem_addr = get_method_addr(PartsSingleModeSkillListItem, c"UpdateItem", 5);
-            new_hook!(UpdateItem_addr, UpdateItemJp);
-        }
-        _ => { // tw/global
-            let UpdateItem_addr = get_method_addr(PartsSingleModeSkillListItem, c"UpdateItem", 3);
-            new_hook!(UpdateItem_addr, UpdateItemGlobalTw);
+    let UpdateItem5_addr = get_method_addr(PartsSingleModeSkillListItem, c"UpdateItem", 5);
+    if UpdateItem5_addr != 0 {
+        new_hook!(UpdateItem5_addr, UpdateItemJp);
+    } else {
+        let UpdateItem3_addr = get_method_addr(PartsSingleModeSkillListItem, c"UpdateItem", 3);
+        if UpdateItem3_addr != 0 {
+            new_hook!(UpdateItem3_addr, UpdateItemGlobalTw);
         }
     }
 

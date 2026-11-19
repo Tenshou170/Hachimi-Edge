@@ -89,13 +89,13 @@ pub fn dump_strings() -> BTreeMap<String, String> {
 pub fn init(umamusume: *const Il2CppImage) {
     get_class_or_return!(umamusume, Gallop, Localize);
 
-    let Get_addr = if Hachimi::instance().game.region == crate::core::game::Region::Taiwan || Hachimi::instance().game.region == crate::core::game::Region::Global {
-        // Komoe/Taiwan and Global releases use the top-level Localize class directly
-        get_method_overload_addr(Localize, "Get", &[Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE])
+    let Get_addr = if let Ok(jp_class) = crate::il2cpp::symbols::find_nested_class(Localize, c"JP") {
+        get_method_overload_addr(jp_class, "Get", &[Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE])
     } else {
-        find_nested_class_or_return!(Localize, JP);
-        get_method_overload_addr(JP, "Get", &[Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE])
+        get_method_overload_addr(Localize, "Get", &[Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE])
     };
 
-    new_hook!(Get_addr, Get);
+    if Get_addr != 0 {
+        new_hook!(Get_addr, Get);
+    }
 }

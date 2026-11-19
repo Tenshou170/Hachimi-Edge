@@ -21,7 +21,7 @@ use windows::{core::{w, BOOL, HSTRING}, Win32::{
     }
 }};
 
-use crate::{core::{game::Region, gui, Gui, Hachimi}, il2cpp::{hook::{umamusume, UnityEngine_CoreModule}, symbols::{create_delegate, get_assembly_image, get_class, get_method_addr, Thread}, types::{Il2CppDelegate, RefreshRate}}, windows::utils};
+use crate::{core::{capabilities::{self, Capability}, gui, Gui, Hachimi}, il2cpp::{hook::{umamusume, UnityEngine_CoreModule}, symbols::{create_delegate, get_assembly_image, get_class, get_method_addr, Thread}, types::{Il2CppDelegate, RefreshRate}}, windows::utils};
 
 use super::{free_camera, gui_impl::input, discord, smtc, taskbar};
 
@@ -454,7 +454,7 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
         }
     }
 
-    if Hachimi::instance().game.region != Region::Global {
+    if capabilities::has(Capability::FreeformWindow) {
         if freeform_window {
             if umsg == WM_SYSKEYDOWN &&
                 wparam.0 == VK_RETURN.0 as usize &&
@@ -807,7 +807,7 @@ unsafe fn init_hwnd(hwnd: HWND) {
         };
 
         if subclass_ok {
-            if Hachimi::instance().game.region != Region::Global {
+            if capabilities::has(Capability::FreeformWindow) {
                 if let Ok(user32) = GetModuleHandleW(w!("user32.dll")) {
                     let set_window_long_ptr_w_addr = utils::get_proc_address(user32, c"SetWindowLongPtrW");
                     let set_window_long_ptr_a_addr = utils::get_proc_address(user32, c"SetWindowLongPtrA");
@@ -850,7 +850,7 @@ unsafe fn init_hwnd(hwnd: HWND) {
             _ = utils::set_window_topmost(hwnd, true);
         }
 
-        if Hachimi::instance().game.region != Region::Global && hachimi.config.load().windows.freeform_window {
+        if capabilities::has(Capability::FreeformWindow) && hachimi.config.load().windows.freeform_window {
             apply_freeform_window_config();
         }
 

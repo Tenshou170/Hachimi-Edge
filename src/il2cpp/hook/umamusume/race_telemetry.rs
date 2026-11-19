@@ -13,7 +13,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::core::{game::Region, race_director, Hachimi};
+use crate::core::{capabilities::{self, Capability}, game::Region, race_director, Hachimi};
 use crate::il2cpp::{
     ext::Il2CppStringExt,
     symbols::{Array, IList},
@@ -32,10 +32,6 @@ fn string_of(s: *mut Il2CppString) -> String {
         return String::new();
     }
     unsafe { (*s).as_utf16str().to_string() }
-}
-
-fn is_japan() -> bool {
-    Hachimi::instance().game.region == Region::Japan
 }
 
 fn is_replay_sim_supported() -> bool {
@@ -136,7 +132,6 @@ pub fn collect_frame() {
     let arr: Array<*mut Il2CppObject> = Array::from(horse_infos);
     let course = race_director::course_distance() as f32;
     let target = race_director::followed_gate();
-    let japan = is_japan();
 
     for info in unsafe { arr.as_slice() }.iter().copied() {
         if info.is_null() {
@@ -152,7 +147,7 @@ pub fn collect_frame() {
         race_director::record_horse(gate, telem, course);
 
         if gate == target
-            && std::panic::catch_unwind(move || update_followed(info, course, telem, japan)).is_err()
+            && std::panic::catch_unwind(move || update_followed(info, course, telem)).is_err()
         {
             error!("race_telemetry: update_followed PANICKED (caught)");
         }
@@ -264,7 +259,7 @@ fn identify_and_maybe_follow(gate: i32, hdata: *mut Il2CppObject, resp: *mut Il2
 }
 
 /// Followed-Uma-only extras: pace trace, AI state tags, spurt outlook, skill feed.
-fn update_followed(info: *mut Il2CppObject, course: f32, telem: race_director::HorseTelem, japan: bool) {
+fn update_followed(info: *mut Il2CppObject, course: f32, telem: race_director::HorseTelem) {
     if course > 0.0 && telem.speed > 0.5 {
         race_director::push_pace(telem.distance / course, telem.speed);
     }
@@ -281,9 +276,8 @@ fn update_followed(info: *mut Il2CppObject, course: f32, telem: race_director::H
         }
     }
 
-    // Skill activation data (SkillManager.GetUsedSkillIdList) only resolves on Japan -
-    // see SkillManager.rs's own Region::Japan init gate.
-    if japan {
+    // Skill activation data (SkillManager.GetUsedSkillIdList) resolves via Capability::SkillManager.
+    if capabilities::has(Capability::SkillManager) {
         update_skill_feed(info);
     }
 }

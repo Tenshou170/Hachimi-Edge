@@ -1,5 +1,5 @@
 use crate::{
-    core::{Hachimi, game::Region},
+    core::Hachimi,
     il2cpp::{
         ext::{Il2CppStringExt, StringExt}, hook::UnityEngine_TextRenderingModule::TextGenerator::IgnoreTGFiltersContext, symbols::get_method_addr, types::*
     }
@@ -34,12 +34,13 @@ extern "C" fn PlayTypeWriteOther(this: *mut Il2CppObject, mut message: *mut Il2C
 pub fn init(umamusume: *const Il2CppImage) {
     get_class_or_return!(umamusume, Gallop, TrainingParamChangePlate);
 
-    if Hachimi::instance().game.region == Region::Japan {
-        let PlayTypeWrite_addr = get_method_addr(TrainingParamChangePlate, c"PlayTypeWrite", 2);
-        new_hook!(PlayTypeWrite_addr, PlayTypeWriteJp);
-    }
-    else {
-        let PlayTypeWrite_addr = get_method_addr(TrainingParamChangePlate, c"PlayTypeWrite", 1);
-        new_hook!(PlayTypeWrite_addr, PlayTypeWriteOther);
+    let PlayTypeWrite2_addr = get_method_addr(TrainingParamChangePlate, c"PlayTypeWrite", 2);
+    if PlayTypeWrite2_addr != 0 {
+        new_hook!(PlayTypeWrite2_addr, PlayTypeWriteJp);
+    } else {
+        let PlayTypeWrite1_addr = get_method_addr(TrainingParamChangePlate, c"PlayTypeWrite", 1);
+        if PlayTypeWrite1_addr != 0 {
+            new_hook!(PlayTypeWrite1_addr, PlayTypeWriteOther);
+        }
     }
 }

@@ -1,9 +1,6 @@
-use crate::{
-    core::{Hachimi, game::Region},
-    il2cpp::{
-        symbols::get_field_from_name,
-        types::*
-    }
+use crate::il2cpp::{
+    symbols::get_field_from_name,
+    types::*
 };
 
 def_field_value_accessors!(get get__finishOrder, FINISH_ORDER_FIELD, i32);
@@ -13,17 +10,12 @@ def_field_value_accessors!(get get__finishDiffTime, FINISH_DIFF_TIME_FIELD, f32)
 def_field_value_accessors!(get get__defeat, DEFEAT_FIELD, i32);
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if !matches!(Hachimi::instance().game.region, Region::Japan | Region::Global) {
-        return;
-    }
+    let race_simulate_horse_result_data = crate::il2cpp::symbols::get_class(umamusume, c"StandaloneSimulator", c"RaceSimulateHorseResultData")
+        .or_else(|_| crate::il2cpp::symbols::get_class(umamusume, c"Gallop", c"RaceSimulateHorseResultData"));
 
-    let namespace = if Hachimi::instance().game.region == Region::Global { c"Gallop" } else { c"StandaloneSimulator" };
-    let RaceSimulateHorseResultData = match crate::il2cpp::symbols::get_class(umamusume, namespace, c"RaceSimulateHorseResultData") {
+    let RaceSimulateHorseResultData = match race_simulate_horse_result_data {
         Ok(v) => v,
-        Err(e) => {
-            error!("{}", e);
-            return;
-        }
+        Err(_) => return,
     };
 
     unsafe {

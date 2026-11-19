@@ -1,7 +1,6 @@
 use std::sync::RwLock;
 use once_cell::sync::Lazy;
 
-use crate::core::{Hachimi, game::Region};
 use crate::il2cpp::{
     ext::Il2CppStringExt,
     symbols::get_method_addr,
@@ -35,11 +34,13 @@ extern "C" fn PlayInOther(this: *mut Il2CppObject, title: *mut Il2CppString, eve
 pub fn init(umamusume: *const Il2CppImage) {
     get_class_or_return!(umamusume, Gallop, PartsSingleModeStoryEventTitle);
 
-    if Hachimi::instance().game.region == Region::Japan {
-        let PlayIn_addr = get_method_addr(PartsSingleModeStoryEventTitle, c"PlayIn", 1);
-        new_hook!(PlayIn_addr, PlayInJp);
+    let PlayIn1_addr = get_method_addr(PartsSingleModeStoryEventTitle, c"PlayIn", 1);
+    if PlayIn1_addr != 0 {
+        new_hook!(PlayIn1_addr, PlayInJp);
     } else {
-        let PlayIn_addr = get_method_addr(PartsSingleModeStoryEventTitle, c"PlayIn", 2);
-        new_hook!(PlayIn_addr, PlayInOther);
+        let PlayIn2_addr = get_method_addr(PartsSingleModeStoryEventTitle, c"PlayIn", 2);
+        if PlayIn2_addr != 0 {
+            new_hook!(PlayIn2_addr, PlayInOther);
+        }
     }
 }

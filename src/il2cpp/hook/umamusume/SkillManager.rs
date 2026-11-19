@@ -1,5 +1,5 @@
 use crate::{
-    core::{Hachimi, game::Region},
+    core::capabilities::{self, Capability},
     il2cpp::{
         symbols::get_method_addr,
         types::*
@@ -15,15 +15,15 @@ impl_addr_wrapper_fn!(GetSkills, GET_SKILLS_ADDR, *mut Il2CppArray, this: *mut I
 def_method_wrapper_fn!(AddUsedSkillId, ADD_USED_SKILL_ID_ADDR, (), this: *mut Il2CppObject, skill_id: i32);
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if Hachimi::instance().game.region != Region::Japan {
-        return;
-    }
-
     get_class_or_return!(umamusume, Gallop, SkillManager);
 
     unsafe {
         GET_USED_SKILL_ID_LIST_ADDR = get_method_addr(SkillManager, c"GetUsedSkillIdList", 0);
         GET_SKILLS_ADDR = get_method_addr(SkillManager, c"GetSkills", 0);
         ADD_USED_SKILL_ID_ADDR = get_method_addr(SkillManager, c"AddUsedSkillId", 1);
+
+        if GET_USED_SKILL_ID_LIST_ADDR != 0 && GET_SKILLS_ADDR != 0 && ADD_USED_SKILL_ID_ADDR != 0 {
+            capabilities::set(Capability::SkillManager);
+        }
     }
 }

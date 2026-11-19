@@ -1,4 +1,4 @@
-use crate::{core::{game::Region, Hachimi}, il2cpp::{ext::LocalizedDataExt, symbols::{get_method_addr, get_method_overload_addr}, types::*}};
+use crate::{core::Hachimi, il2cpp::{ext::LocalizedDataExt, symbols::{get_method_addr, get_method_overload_addr}, types::*}};
 
 use super::TextFormat;
 
@@ -26,16 +26,16 @@ extern "C" fn LoadResourcesFolderFont(this: *mut Il2CppObject, font_type: TextFo
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if Hachimi::instance().game.region != Region::Japan {
-        return;
-    }
-
     get_class_or_return!(umamusume, Gallop, TextFontManager);
     
     let GetChineseFont_addr = get_method_addr(TextFontManager, c"GetChineseFont", 0);
     let LoadResourcesFolderFont_addr = get_method_overload_addr(TextFontManager, "LoadResourcesFolderFont",
         &[Il2CppTypeEnum_IL2CPP_TYPE_VALUETYPE]);
 
-    new_hook!(GetChineseFont_addr, GetChineseFont);
-    new_hook!(LoadResourcesFolderFont_addr, LoadResourcesFolderFont);
+    if GetChineseFont_addr != 0 {
+        new_hook!(GetChineseFont_addr, GetChineseFont);
+    }
+    if LoadResourcesFolderFont_addr != 0 {
+        new_hook!(LoadResourcesFolderFont_addr, LoadResourcesFolderFont);
+    }
 }

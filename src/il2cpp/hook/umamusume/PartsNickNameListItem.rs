@@ -1,10 +1,7 @@
-use crate::{
-    core::{game::Region, Hachimi},
-    il2cpp::{
-        hook::umamusume::PartsNickNameRibbon,
-        symbols::{get_field_from_name, get_field_object_value, get_method_addr},
-        types::*,
-    },
+use crate::il2cpp::{
+    hook::umamusume::PartsNickNameRibbon,
+    symbols::{get_field_from_name, get_field_object_value, get_method_addr},
+    types::*,
 };
 
 static mut RIBBON_FIELD: *mut FieldInfo = 0 as _;
@@ -26,14 +23,12 @@ extern "C" fn Setup(this: *mut Il2CppObject, nickNameId: i32, onSelect: *mut Il2
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if Hachimi::instance().game.region != Region::Japan {
-        return;
-    }
-
     get_class_or_return!(umamusume, Gallop, PartsNickNameListItem);
 
     let initialize_addr = get_method_addr(PartsNickNameListItem, c"Setup", 2);
-    new_hook!(initialize_addr, Setup);
+    if initialize_addr != 0 {
+        new_hook!(initialize_addr, Setup);
+    }
 
     unsafe {
         RIBBON_FIELD = get_field_from_name(PartsNickNameListItem, c"_ribbon");

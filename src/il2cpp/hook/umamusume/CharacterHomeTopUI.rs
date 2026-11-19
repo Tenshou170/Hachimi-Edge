@@ -1,8 +1,4 @@
-use crate::{
-    core::game::Region,
-    core::Hachimi,
-    il2cpp::{symbols::{get_field_value, get_field_from_name}, types::*}
-};
+use crate::il2cpp::{symbols::{get_field_value, get_field_from_name, get_field_from_name_opt}, types::*};
 
 use std::ptr::null_mut;
 
@@ -78,75 +74,39 @@ pub fn get_trainedListButton(this: *mut Il2CppObject) -> *mut Il2CppObject {
 }
 
 pub fn get_supportLvUpButton(this: *mut Il2CppObject) -> *mut Il2CppObject {
-    if Hachimi::instance().game.region != Region::Japan {
-        get_field_value(this, unsafe { SUPPORT_LV_UP_BUTTON_FIELD })
-    } else {
-        std::ptr::null_mut()
-    }
+    get_field_value(this, unsafe { SUPPORT_LV_UP_BUTTON_FIELD })
 }
 
 pub fn get_supportLimitBreakButton(this: *mut Il2CppObject) -> *mut Il2CppObject {
-    if Hachimi::instance().game.region != Region::Japan {
-        get_field_value(this, unsafe { SUPPORT_LIMIT_BREAK_BUTTON_FIELD })
-    } else {
-        std::ptr::null_mut()
-    }
+    get_field_value(this, unsafe { SUPPORT_LIMIT_BREAK_BUTTON_FIELD })
 }
 
 pub fn get_newTeamEditButton(this: *mut Il2CppObject) -> *mut Il2CppObject {
-    if Hachimi::instance().game.region == Region::Japan {
-        get_field_value(this, unsafe { NEW_TEAM_EDIT_BUTTON_FIELD }) 
-    } else {
-        std::ptr::null_mut()
-    }
+    get_field_value(this, unsafe { NEW_TEAM_EDIT_BUTTON_FIELD }) 
 }
 
 pub fn get_teamEditButton(this: *mut Il2CppObject) -> *mut Il2CppObject {
-    if Hachimi::instance().game.region != Region::Japan {
-        get_field_value(this, unsafe { TEAM_EDIT_BUTTON_FIELD })
-    } else {
-        std::ptr::null_mut()
-    }
+    get_field_value(this, unsafe { TEAM_EDIT_BUTTON_FIELD })
 }
 
 pub fn get_transferButton(this: *mut Il2CppObject) -> *mut Il2CppObject {
-    if Hachimi::instance().game.region == Region::Japan {
-        get_field_value(this, unsafe { TRANSFER_BUTTON_FIELD }) 
-    } else {
-        std::ptr::null_mut()
-    }
+    get_field_value(this, unsafe { TRANSFER_BUTTON_FIELD }) 
 }
 
 pub fn get_trainedCharaRootShortButton(this: *mut Il2CppObject) -> *mut Il2CppObject {
-    if Hachimi::instance().game.region == Region::Japan {
-        get_field_value(this, unsafe { TRAINED_CHARA_ROOT_SHORT_BUTTON_FIELD }) 
-    } else {
-        std::ptr::null_mut()
-    }
+    get_field_value(this, unsafe { TRAINED_CHARA_ROOT_SHORT_BUTTON_FIELD }) 
 }
 
 pub fn get_successionOnlyCharaRootButton(this: *mut Il2CppObject) -> *mut Il2CppObject {
-    if Hachimi::instance().game.region == Region::Japan {
-        get_field_value(this, unsafe { SUCCESSION_ONLY_CHARA_ROOT_BUTTON_FIELD }) 
-    } else {
-        std::ptr::null_mut()
-    }
+    get_field_value(this, unsafe { SUCCESSION_ONLY_CHARA_ROOT_BUTTON_FIELD }) 
 }
 
 pub fn get_successionOnlyStartButton(this: *mut Il2CppObject) -> *mut Il2CppObject {
-    if Hachimi::instance().game.region == Region::Japan {
-        get_field_value(this, unsafe { SUCCESSION_ONLY_START_BUTTON_FIELD }) 
-    } else {
-        std::ptr::null_mut()
-    }
+    get_field_value(this, unsafe { SUCCESSION_ONLY_START_BUTTON_FIELD }) 
 }
 
 pub fn get_successionOnlyListButton(this: *mut Il2CppObject) -> *mut Il2CppObject {
-    if Hachimi::instance().game.region == Region::Japan {
-        get_field_value(this, unsafe { SUCCESSION_ONLY_LIST_BUTTON_FIELD }) 
-    } else {
-        std::ptr::null_mut()
-    }
+    get_field_value(this, unsafe { SUCCESSION_ONLY_LIST_BUTTON_FIELD }) 
 }
 
 pub fn init(Plugins: *const Il2CppImage) {
@@ -166,17 +126,14 @@ pub fn init(Plugins: *const Il2CppImage) {
         SUPPORT_LIST_BUTTON_FIELD = get_field_from_name(CharacterHomeTopUI, c"_supportListButton");
         TRAINED_LIST_BUTTON_FIELD = get_field_from_name(CharacterHomeTopUI, c"_trainedListButton");
 
-        if Hachimi::instance().game.region == Region::Japan {
-            NEW_TEAM_EDIT_BUTTON_FIELD = get_field_from_name(CharacterHomeTopUI, c"_newTeamEditButton");
-            TRANSFER_BUTTON_FIELD = get_field_from_name(CharacterHomeTopUI, c"_transferButton");
-            TRAINED_CHARA_ROOT_SHORT_BUTTON_FIELD = get_field_from_name(CharacterHomeTopUI, c"_trainedCharaRootShortButton");
-            SUCCESSION_ONLY_CHARA_ROOT_BUTTON_FIELD = get_field_from_name(CharacterHomeTopUI, c"_successionOnlyCharaRootButton");
-            SUCCESSION_ONLY_START_BUTTON_FIELD = get_field_from_name(CharacterHomeTopUI, c"_successionOnlyStartButton");
-            SUCCESSION_ONLY_LIST_BUTTON_FIELD = get_field_from_name(CharacterHomeTopUI, c"_successionOnlyListButton");
-        } else {
-            TEAM_EDIT_BUTTON_FIELD = get_field_from_name(CharacterHomeTopUI, c"_teamEditButton");
-            SUPPORT_LV_UP_BUTTON_FIELD = get_field_from_name(CharacterHomeTopUI, c"_supportLvUpButton");
-            SUPPORT_LIMIT_BREAK_BUTTON_FIELD = get_field_from_name(CharacterHomeTopUI, c"_supportLimitBreakButton");
-        }
+        NEW_TEAM_EDIT_BUTTON_FIELD = get_field_from_name_opt(CharacterHomeTopUI, c"_newTeamEditButton").unwrap_or(null_mut());
+        TRANSFER_BUTTON_FIELD = get_field_from_name_opt(CharacterHomeTopUI, c"_transferButton").unwrap_or(null_mut());
+        TRAINED_CHARA_ROOT_SHORT_BUTTON_FIELD = get_field_from_name_opt(CharacterHomeTopUI, c"_trainedCharaRootShortButton").unwrap_or(null_mut());
+        SUCCESSION_ONLY_CHARA_ROOT_BUTTON_FIELD = get_field_from_name_opt(CharacterHomeTopUI, c"_successionOnlyCharaRootButton").unwrap_or(null_mut());
+        SUCCESSION_ONLY_START_BUTTON_FIELD = get_field_from_name_opt(CharacterHomeTopUI, c"_successionOnlyStartButton").unwrap_or(null_mut());
+        SUCCESSION_ONLY_LIST_BUTTON_FIELD = get_field_from_name_opt(CharacterHomeTopUI, c"_successionOnlyListButton").unwrap_or(null_mut());
+        TEAM_EDIT_BUTTON_FIELD = get_field_from_name_opt(CharacterHomeTopUI, c"_teamEditButton").unwrap_or(null_mut());
+        SUPPORT_LV_UP_BUTTON_FIELD = get_field_from_name_opt(CharacterHomeTopUI, c"_supportLvUpButton").unwrap_or(null_mut());
+        SUPPORT_LIMIT_BREAK_BUTTON_FIELD = get_field_from_name_opt(CharacterHomeTopUI, c"_supportLimitBreakButton").unwrap_or(null_mut());
     }
 }

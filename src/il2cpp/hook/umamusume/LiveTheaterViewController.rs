@@ -1,4 +1,4 @@
-use crate::{core::{utils::notify_error, game::Region, Hachimi}, il2cpp::{symbols::get_method_addr, types::*}};
+use crate::{core::{utils::notify_error, Hachimi}, il2cpp::{symbols::get_method_addr, types::*}};
 
 static mut CHANGELIVE_ONSUCCESS_ADDR: usize = 0;
 impl_addr_wrapper_fn!(ChangeLive_onSuccess, CHANGELIVE_ONSUCCESS_ADDR, (), this: *mut Il2CppObject, res: *mut Il2CppObject);
@@ -24,16 +24,12 @@ pub fn init(umamusume: *const Il2CppImage) {
 
     new_hook!(ChangeLive_addr, ChangeLive);
 
-    let region = &Hachimi::instance().game.region;
     unsafe {
-        let known_name = match region {
-            &Region::Japan | &Region::Taiwan => c"<ChangeLive>b__48_1",
-            _ => c"<ChangeLive>b__41_1", // Global
-        };
-
         CHANGELIVE_ONSUCCESS_ADDR = crate::il2cpp::symbols::get_method_addr_opt(
-            LiveTheaterViewController, known_name, 1
-        ).unwrap_or(0);
+            LiveTheaterViewController, c"<ChangeLive>b__48_1", 1
+        ).or_else(|| {
+            crate::il2cpp::symbols::get_method_addr_opt(LiveTheaterViewController, c"<ChangeLive>b__41_1", 1)
+        }).unwrap_or(0);
 
         // The callback is a compiler-generated lambda, so its `b__N_1` ordinal
         // changes whenever the client is recompiled. Fall back to matching the

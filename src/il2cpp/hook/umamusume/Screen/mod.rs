@@ -10,7 +10,7 @@ use std::ptr::null_mut;
 
 #[cfg(target_os = "windows")]
 use crate::{
-    core::{Hachimi, capabilities::{self, Capability}, game::Region},
+    core::{Hachimi, capabilities::{self, Capability}},
     il2cpp::{
         api::il2cpp_field_static_set_value,
         hook::UnityEngine_CoreModule::Screen as UnityScreen,
@@ -373,7 +373,9 @@ pub fn init(umamusume: *const Il2CppImage) {
         new_hook!(get_Height_addr, get_Height);
 
         let SetResolution_addr = get_method_addr(Screen, c"SetResolution", 5);
-        new_hook!(SetResolution_addr, SetResolution);
+        if SetResolution_addr != 0 {
+            new_hook!(SetResolution_addr, SetResolution);
+        }
 
         let IsCurrentOrientation_addr = get_method_addr(Screen, c"IsCurrentOrientation", 1);
         new_hook!(IsCurrentOrientation_addr, IsCurrentOrientation);
@@ -400,14 +402,10 @@ pub fn init(umamusume: *const Il2CppImage) {
             ORIGINAL_SCREEN_HEIGHT_FIELD = get_field_from_name(Screen, c"_originalScreenHeight");
         }
 
-        // Free-form windowing needs a `SetResolution` override and the game's own
-        // landscape flag. The Global client drives its own window (and exposes a
-        // 4-argument SetResolution), so the option is hidden there instead of
-        // being offered and ignored.
-        if !matches!(Hachimi::instance().game.region, Region::Global)
-            && SetResolution_addr != 0
-            && unsafe { GET_ISLANDSCAPE_MODE_ADDR } != 0
-        {
+        // Free-form windowing needs a 5-param `SetResolution` override (JP/DMM) and the game's own
+        // landscape flag. On Global client where 5-param SetResolution doesn't exist, SetResolution_addr is 0,
+        // so Capability::FreeformWindow is not set and the option is hidden.
+        if SetResolution_addr != 0 && unsafe { GET_ISLANDSCAPE_MODE_ADDR } != 0 {
             capabilities::set(Capability::FreeformWindow);
         }
     }

@@ -1,4 +1,4 @@
-use crate::{core::{Hachimi, game::Region}, il2cpp::{symbols::{IEnumerator, MoveNextFn, SingletonLike, get_method_addr}, types::*}};
+use crate::{core::Hachimi, il2cpp::{symbols::{IEnumerator, MoveNextFn, SingletonLike, get_method_addr}, types::*}};
 #[cfg(target_os = "windows")]
 use crate::windows::free_camera::{self, CameraScene};
 #[cfg(target_os = "windows")]
@@ -127,13 +127,14 @@ extern "C" fn InitializeGameOther(this: *mut Il2CppObject) -> IEnumerator {
 pub fn init(umamusume: *const Il2CppImage) {
     get_class_or_return!(umamusume, Gallop, GameSystem);
 
-    if Hachimi::instance().game.region == Region::Japan {
-        let InitializeGame_addr = get_method_addr(GameSystem, c"InitializeGame", 1);
-        new_hook!(InitializeGame_addr, InitializeGameJp);
-    }
-    else {
-        let InitializeGame_addr = get_method_addr(GameSystem, c"InitializeGame", 0);
-        new_hook!(InitializeGame_addr, InitializeGameOther);
+    let InitializeGame1_addr = get_method_addr(GameSystem, c"InitializeGame", 1);
+    if InitializeGame1_addr != 0 {
+        new_hook!(InitializeGame1_addr, InitializeGameJp);
+    } else {
+        let InitializeGame0_addr = get_method_addr(GameSystem, c"InitializeGame", 0);
+        if InitializeGame0_addr != 0 {
+            new_hook!(InitializeGame0_addr, InitializeGameOther);
+        }
     }
 
     unsafe {

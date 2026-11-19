@@ -1,8 +1,8 @@
 use std::ptr::null_mut;
 
 use crate::{
-    core::{game::Region, Hachimi},
-    il2cpp::{ext::Il2CppObjectExt, symbols::{get_field_from_name, get_field_object_value, get_field_value, set_field_value, IList}, types::*}
+    core::capabilities::{self, Capability},
+    il2cpp::{ext::Il2CppObjectExt, symbols::{get_field_from_name, get_field_from_name_opt, get_field_object_value, get_field_value, set_field_value, IList}, types::*}
 };
 
 use super::{StoryTimelineLiveStreamingClipData, StoryTimelineTextClipData, StoryTimelineTrackData};
@@ -61,7 +61,7 @@ pub fn get_text_clip(this: *mut Il2CppObject) -> Option<*mut Il2CppObject> {
 }
 
 pub fn get_live_streaming_clip(this: *mut Il2CppObject) -> Option<*mut Il2CppObject> {
-    if Hachimi::instance().game.region != Region::Japan {
+    if !capabilities::has(Capability::LiveStreaming) {
         return None;
     }
 
@@ -94,8 +94,6 @@ pub fn init(umamusume: *const Il2CppImage) {
         CHARACTERTRACKLIST_FIELD = get_field_from_name(StoryTimelineBlockData, c"CharacterTrackList");
         SCREENEFFECTTRACKLIST_FIELD = get_field_from_name(StoryTimelineBlockData, c"ScreenEffectTrackList");
         BG3DTRACK_FIELD = get_field_from_name(StoryTimelineBlockData, c"Bg3DTrack");
-        if Hachimi::instance().game.region == Region::Japan {
-            LIVESTREAMINGTRACK_FIELD = get_field_from_name(StoryTimelineBlockData, c"LiveStreamingTrack");
-        }
+        LIVESTREAMINGTRACK_FIELD = get_field_from_name_opt(StoryTimelineBlockData, c"LiveStreamingTrack").unwrap_or(null_mut());
     }
 }

@@ -1,10 +1,7 @@
 use std::ptr::null_mut;
 
 use crate::{
-    core::{
-        Hachimi,
-        game::Region
-    },
+    core::Hachimi,
     il2cpp::{
         ext::Il2CppStringExt,
         hook::Plugins::AnimateToUnity::AnText,
@@ -145,12 +142,14 @@ fn reset_text_to_default(text_obj: *mut Il2CppObject) {
 pub fn init(umamusume: *const Il2CppImage) {
     get_class_or_return!(umamusume, Gallop, StoryChoiceButton);
 
-    if Hachimi::instance().game.region == Region::Japan {
-        let SetupButton_addr = get_method_addr(StoryChoiceButton, c"SetupButton", 7);
-        new_hook!(SetupButton_addr, SetupButtonJp);
+    let SetupButton7_addr = get_method_addr(StoryChoiceButton, c"SetupButton", 7);
+    if SetupButton7_addr != 0 {
+        new_hook!(SetupButton7_addr, SetupButtonJp);
     } else {
-        let SetupButton_addr = get_method_addr(StoryChoiceButton, c"SetupButton", 5);
-        new_hook!(SetupButton_addr, SetupButtonOther);
+        let SetupButton5_addr = get_method_addr(StoryChoiceButton, c"SetupButton", 5);
+        if SetupButton5_addr != 0 {
+            new_hook!(SetupButton5_addr, SetupButtonOther);
+        }
     }
 
     let SetupText_addr = get_method_addr(StoryChoiceButton, c"SetupText", 1);

@@ -3,7 +3,7 @@ use std::path::Path;
 use fnv::FnvHashMap;
 
 use crate::{
-    core::{ext::Utf16StringExt, Hachimi, game::Region},
+    core::{ext::Utf16StringExt, Hachimi},
     il2cpp::{
         ext::{Il2CppStringExt, StringExt},
         symbols::{get_field_from_name, get_field_object_value, get_method_addr, Array, Dictionary},
@@ -101,28 +101,18 @@ extern "C" fn LoadLyrics(this: *mut Il2CppObject, id: i32, path: *mut Il2CppStri
 
         let data_ptr = (raw_array as *mut u8).add(kIl2CppSizeOfArray);
 
-        match Hachimi::instance().game.region {
-            Region::Japan => {
-                if element_size != std::mem::size_of::<LyricsDataJP>() {
-                    return true;
-                }
-
-                for i in 0..length {
-                    let element_ptr = data_ptr.add(i * element_size) as *mut LyricsDataJP;
-                    process_element(&mut *element_ptr);
-                }
+        if element_size == std::mem::size_of::<LyricsDataJP>() {
+            for i in 0..length {
+                let element_ptr = data_ptr.add(i * element_size) as *mut LyricsDataJP;
+                process_element(&mut *element_ptr);
             }
-            _ => {
-                if element_size != std::mem::size_of::<LyricsDataGlobal>() {
-                    // Log an error.
-                    return true;
-                }
-
-                for i in 0..length {
-                    let element_ptr = data_ptr.add(i * element_size) as *mut LyricsDataGlobal;
-                    process_element(&mut *element_ptr);
-                }
+        } else if element_size == std::mem::size_of::<LyricsDataGlobal>() {
+            for i in 0..length {
+                let element_ptr = data_ptr.add(i * element_size) as *mut LyricsDataGlobal;
+                process_element(&mut *element_ptr);
             }
+        } else {
+            return true;
         }
     }
 

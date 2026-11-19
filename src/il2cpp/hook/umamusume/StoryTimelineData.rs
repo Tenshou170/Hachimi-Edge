@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use widestring::Utf16Str;
 
 use crate::{
-    core::{ext::Utf16StringExt, game::Region, utils, Error, Hachimi, SugoiClient},
+    core::{capabilities::{self, Capability}, ext::Utf16StringExt, utils, Error, Hachimi, SugoiClient},
     il2cpp::{
         ext::{Il2CppObjectExt, Il2CppStringExt, StringExt}, hook::{umamusume::{StoryTimelineBg3DClipData, StoryTimelineCharaTrackData, StoryTimelineClipData}, UnityEngine_AssetBundleModule::AssetBundle::ASSET_PATH_PREFIX}, symbols::{get_field_from_name, get_field_object_value, get_field_value, set_field_object_value, set_field_value, IList}, types::*
     }
@@ -322,10 +322,10 @@ fn get_typewrite_length(text_len: usize, tcps: f32) -> i32 {
 }
 
 fn rewrite_story_shadow_types(this: *mut Il2CppObject) {
-    let hachimi = Hachimi::instance();
-    if hachimi.game.region != Region::Japan {
+    if !capabilities::has(Capability::StoryShadowType) {
         return;
     }
+    let hachimi = Hachimi::instance();
     let shadow_type = hachimi.config.load().story_shadow_type;
     if !shadow_type.is_enabled() {
         return;

@@ -3,7 +3,7 @@ use widestring::Utf16Str;
 use std::ptr::null_mut;
 
 use crate::{
-    core::{ext::Utf16StringExt, game::Region, hachimi::AssetInfo, Hachimi},
+    core::{capabilities::{self, Capability}, ext::Utf16StringExt, hachimi::AssetInfo, Hachimi},
     il2cpp::{
         ext::StringExt,
         hook::UnityEngine_AssetBundleModule::AssetBundle::{self, ASSET_PATH_PREFIX},
@@ -110,10 +110,6 @@ pub fn patch_asset(this: *mut Il2CppObject, data_opt: Option<&LiveStreamingComme
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
-    if Hachimi::instance().game.region != Region::Japan {
-        return;
-    }
-
     get_class_or_return!(umamusume, Gallop, LiveStreamingCommentScriptableObject);
     get_class_or_return!(umamusume, Gallop, CommentSetting);
 
@@ -122,5 +118,9 @@ pub fn init(umamusume: *const Il2CppImage) {
         COMMENT_LIST_FIELD = get_field_from_name(LiveStreamingCommentScriptableObject, c"CommentList");
         COMMENT_PATTERN_ID_FIELD = get_field_from_name(CommentSetting, c"<CommentPattern_ID>k__BackingField");
         COMMENT_SETTING_COMMENT_LIST_FIELD = get_field_from_name(CommentSetting, c"<CommentList>k__BackingField");
+
+        if !COMMENT_LIST_FIELD.is_null() && !COMMENT_PATTERN_ID_FIELD.is_null() && !COMMENT_SETTING_COMMENT_LIST_FIELD.is_null() {
+            capabilities::set(Capability::LiveStreaming);
+        }
     }
 }
