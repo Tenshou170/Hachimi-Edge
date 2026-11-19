@@ -650,11 +650,11 @@ fn parse_data_map(data_map: &[(Value, Value)], config: &crate::core::hachimi::Co
 
                     if leader_card_id > 0 && !end_time_str.is_empty() {
                         let chara_id = (leader_card_id as f32 * 0.01).floor() as i32;
-                        use chrono::TimeZone;
+                        let format = time::macros::format_description!("[year]-[month]-[day] [hour]:[minute]:[second]");
 
-                        if let Ok(naive_dt) = chrono::NaiveDateTime::parse_from_str(end_time_str, "%Y-%m-%d %H:%M:%S") {
-                            if let Some(local_dt) = chrono::Local.from_local_datetime(&naive_dt).single() {
-                                let end_time_secs = local_dt.timestamp();
+                        if let Ok(naive_dt) = time::PrimitiveDateTime::parse(end_time_str, &format) {
+                            let offset = time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC);
+                            let end_time_secs = naive_dt.assume_offset(offset).unix_timestamp();
 
                                 if let Some((place_id, genre_id)) = crate::il2cpp::sql::get_jobs_info(reward_id) {
                                     if let Some(track_id) = crate::il2cpp::sql::get_jobs_place_race_track_id(place_id) {
@@ -674,7 +674,6 @@ fn parse_data_map(data_map: &[(Value, Value)], config: &crate::core::hachimi::Co
                             }
                         }
                     }
-                }
             }
         }
     }

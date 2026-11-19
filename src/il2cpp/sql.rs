@@ -908,8 +908,7 @@ pub fn get_champions_resources() -> Vec<String> {
 /// Queries the meta DB for the highest champions live year index present as an asset,
 /// falling back to the current calendar year if the DB is unavailable.
 pub fn get_champions_live_max_year() -> i32 {
-    use chrono::{Utc, Datelike};
-    let mut max_year = Utc::now().year(); // safe fallback
+    let mut max_year = time::OffsetDateTime::now_utc().year(); // safe fallback
     if !crate::il2cpp::hook::umamusume::SceneManager::is_home_init() {
         return max_year;
     }

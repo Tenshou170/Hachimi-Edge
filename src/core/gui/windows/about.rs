@@ -58,7 +58,7 @@ impl AppWindow for AboutWindow {
                         ui.add(
                             egui::Label::new(
                                 egui::RichText::new(
-                                    t!("about.copyright", year = Utc::now().year()),
+                                    t!("about.copyright", year = time::OffsetDateTime::now_utc().year()),
                                 )
                                 .size(12.0 * scale)
                                 .color(get_global_color("onSurfaceVariant")),
