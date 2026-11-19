@@ -122,50 +122,25 @@ extern "C" fn SetHeaderTitleText(this: *mut Il2CppObject, text_: *mut Il2CppStri
 type ChangeResizeUIForPCFn = extern "C" fn(this: *mut Il2CppObject, width: i32, height: i32);
 #[cfg(target_os = "windows")]
 extern "C" fn ChangeResizeUIForPC(this: *mut Il2CppObject, width: i32, height: i32) {
-    use super::GraphicSettings;
+    use super::{GraphicSettings, Screen};
 
     let windows_config = &Hachimi::instance().config.load().windows;
     // The game's PC relayout assumes its fixed-aspect window; running it with a
     // freeform size stretches the UI (e.g. the split-window control strip).
-    let mut relayout_called = !windows_config.freeform_window;
-    let mut orientation_mismatch = false;
     if !windows_config.freeform_window {
-        // The game can desync its internal orientation from the actual window:
-        // after a gacha pull (and some menu transitions) it relayouts the UI with
-        // portrait design dims while the OS window stays landscape, stretching
-        // the portrait layout (incl. the left window-control strip) over it.
-        // Nothing corrects it because no window resize ever follows. Skip
-        // relayouts that contradict the real client aspect; a genuine rotation
-        // resizes the window first, so its follow-up relayout still matches.
-        if let Some((client_w, client_h)) = crate::windows::wnd_hook::get_client_size() {
-            if width > 0 && height > 0 && client_w > 0 && client_h > 0 &&
-                (width > height) != (client_w > client_h)
-            {
-                relayout_called = false;
-                orientation_mismatch = true;
-            }
-        }
-
-        if relayout_called {
-            get_orig_fn!(ChangeResizeUIForPC, ChangeResizeUIForPCFn)(this, width, height);
-        }
-        else if orientation_mismatch {
-            debug!(
-                "ChangeResizeUIForPC: skipping orientation-mismatched relayout ({}x{})",
-                width, height
-            );
-        }
+        get_orig_fn!(ChangeResizeUIForPC, ChangeResizeUIForPCFn)(this, width, height);
     }
 
     crate::core::utils::size_trace::event_msg("ChangeResizeUIForPC", &format!(
-        "{}x{} freeform={} relayout_called={} mismatch={} rt_recreate={}",
-        width, height, windows_config.freeform_window, relayout_called, orientation_mismatch,
+        "{}x{} freeform={} rt_recreate={}",
+        width, height, windows_config.freeform_window,
         windows_config.freeform_window || windows_config.resolution_scaling.is_not_default()
     ));
 
     // Recreate the render texture so it scales with the resolution
-    if windows_config.freeform_window ||
-        windows_config.resolution_scaling.is_not_default()
+    if (windows_config.freeform_window ||
+        windows_config.resolution_scaling.is_not_default())
+        && !Screen::get_IsSplitWindow()
     {
         CreateRenderTextureFromScreen(this);
         let graphic_settings = GraphicSettings::instance();
@@ -203,10 +178,12 @@ pub fn refresh_after_window_resize(width: i32, height: i32) {
 
     let this = instance();
     if !this.is_null() {
-        CreateRenderTextureFromScreen(this);
-        let graphic_settings = GraphicSettings::instance();
-        if !graphic_settings.is_null() {
-            GraphicSettings::Update3DRenderTexture(graphic_settings);
+        if !Screen::get_IsSplitWindow() {
+            CreateRenderTextureFromScreen(this);
+            let graphic_settings = GraphicSettings::instance();
+            if !graphic_settings.is_null() {
+                GraphicSettings::Update3DRenderTexture(graphic_settings);
+            }
         }
         apply_ui_scale();
     }
