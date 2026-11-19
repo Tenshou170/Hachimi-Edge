@@ -1663,32 +1663,33 @@ impl Gui {
                     .corner_radius(corner_radius)
                     .shadow(egui::Shadow {
                         spread: 0,
-                        blur: (12.0 * scale) as u8,
-                        offset: [0, (3.0 * scale) as i8],
+                        blur: (10.0 * scale) as u8,
+                        offset: [0, (2.0 * scale) as i8],
                         color: egui::Color32::from_black_alpha(45),
                     })
                     .inner_margin(egui::Margin::symmetric(
-                        (14.0 * scale) as i8,
-                        (10.0 * scale) as i8,
+                        (12.0 * scale) as i8,
+                        (8.0 * scale) as i8,
                     ))
                     .show(ui, |ui| {
-                        let card_w = 320.0 * scale;
+                        let screen_w = ctx.content_rect().width();
+                        let card_w = (screen_w * 0.78).min(260.0 * scale);
                         ui.set_width(card_w);
 
                         // Use centered layout so logo stays vertically centered
                         // regardless of how many hint lines the platform produces.
                         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            ui.spacing_mut().item_spacing.x = 10.0 * scale;
+                            ui.spacing_mut().item_spacing.x = 8.0 * scale;
 
-                            ui.add(Self::icon(ctx).fit_to_exact_size(egui::Vec2::new(36.0 * scale, 36.0 * scale)));
+                            ui.add(Self::icon(ctx).fit_to_exact_size(egui::Vec2::new(30.0 * scale, 30.0 * scale)));
 
                             ui.vertical(|ui| {
-                                ui.spacing_mut().item_spacing.y = 3.0 * scale;
+                                ui.spacing_mut().item_spacing.y = 2.0 * scale;
 
                                 ui.horizontal(|ui| {
                                     ui.add(egui::Label::new(
                                         egui::RichText::new("Hachimi Edge")
-                                            .size(15.0 * scale)
+                                            .size(13.5 * scale)
                                             .strong()
                                             .color(get_global_color("onSurface")),
                                     ));
@@ -1701,16 +1702,16 @@ impl Gui {
                                             .fill(egui::Color32::from_rgba_unmultiplied(
                                                 version_bg.r(), version_bg.g(), version_bg.b(), 180,
                                             ))
-                                            .corner_radius((10.0 * scale) as u8)
+                                            .corner_radius((8.0 * scale) as u8)
                                             .inner_margin(egui::Margin::symmetric(
-                                                (7.0 * scale) as i8,
+                                                (6.0 * scale) as i8,
                                                 (2.0 * scale) as i8,
                                             ))
                                             .show(ui, |ui| {
                                                 ui.add(egui::Label::new(
                                                     egui::RichText::new(env!("HACHIMI_DISPLAY_VERSION"))
                                                         .color(version_fg)
-                                                        .size(10.0 * scale)
+                                                        .size(9.5 * scale)
                                                         .strong(),
                                                 ));
                                             });
@@ -1724,7 +1725,7 @@ impl Gui {
                                     ui.add(egui::Label::new(
                                         egui::RichText::new(line)
                                             .color(hint_color)
-                                            .size(11.5 * scale),
+                                            .size(10.5 * scale),
                                     ));
                                 }
                             });
@@ -1747,8 +1748,8 @@ impl Gui {
             let salt = self.finalized_scale;
 
             let screen_w = ctx.content_rect().width();
-            let mut min_w = 120.0 * scale;
-            let mut max_w = (screen_w * 0.85).min(300.0 * scale);
+            let mut min_w = 96.0 * scale;
+            let mut max_w = (screen_w * 0.85).min(260.0 * scale);
 
             if let Ok(mut lock) = REQUESTED_WIDTH.lock() {
                 if let Some(w) = lock.take() {
@@ -1761,7 +1762,7 @@ impl Gui {
                 egui::SidePanel::left(egui::Id::new("hachimi_menu").with(salt.to_bits()))
                     .min_width(min_w)
                     .max_width(max_w)
-                    .default_width((240.0 * scale).min(screen_w * 0.75))
+                    .default_width((200.0 * scale).min(screen_w * 0.75))
                     .show_animated(ctx, self.show_menu, |ui| {
 
                         let (safe_top, _) = get_safe_insets(ctx);
@@ -1770,24 +1771,24 @@ impl Gui {
                         }
 
                         ui.with_layout(egui::Layout::top_down_justified(egui::Align::TOP), |ui| {
-                            ui.spacing_mut().item_spacing.y = 8.0 * scale;
+                            ui.spacing_mut().item_spacing.y = 6.0 * scale;
 
-                            ui.add_space(8.0 * scale);
+                            ui.add_space(4.0 * scale);
 
                             ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 12.0 * scale;
+                                ui.spacing_mut().item_spacing.x = 10.0 * scale;
 
-                                let logo_size = 52.0 * scale;
+                                let logo_size = 40.0 * scale;
                                 ui.add(Self::icon_2x(ctx).fit_to_exact_size(
                                     egui::Vec2::splat(logo_size),
                                 ));
 
                                 ui.vertical(|ui| {
-                                    ui.spacing_mut().item_spacing.y = 5.0 * scale;
+                                    ui.spacing_mut().item_spacing.y = 3.0 * scale;
 
                                     ui.add(egui::Label::new(
                                         egui::RichText::new("Hachimi Edge")
-                                            .size(17.0 * scale)
+                                            .size(15.0 * scale)
                                             .strong()
                                             .color(get_global_color("onSurface")),
                                     ));
@@ -1799,16 +1800,16 @@ impl Gui {
                                             .fill(egui::Color32::from_rgba_unmultiplied(
                                                 version_bg.r(), version_bg.g(), version_bg.b(), 180,
                                             ))
-                                            .corner_radius((10.0 * scale) as u8)
+                                            .corner_radius((8.0 * scale) as u8)
                                             .inner_margin(egui::Margin::symmetric(
-                                                (8.0 * scale) as i8,
-                                                (3.0 * scale) as i8,
+                                                (6.0 * scale) as i8,
+                                                (2.0 * scale) as i8,
                                             ))
                                             .show(ui, |ui| {
                                                 ui.add(egui::Label::new(
                                                     egui::RichText::new(env!("HACHIMI_DISPLAY_VERSION"))
                                                         .color(version_fg)
-                                                        .size(11.5 * scale)
+                                                        .size(10.0 * scale)
                                                         .strong(),
                                                 ));
                                             });
@@ -1817,7 +1818,7 @@ impl Gui {
                                       ui.horizontal(|ui| {
                                           ui.spacing_mut().item_spacing.x = 4.0 * scale;
                                           let icon_rt = |glyph: &str| {
-                                              egui::RichText::new(glyph).size(22.0 * scale)
+                                              egui::RichText::new(glyph).size(18.0 * scale)
                                           };
                                           if ui.add(MaterialButton::text(icon_rt("\u{e887}"))).clicked() {
                                               show_window = Some(Box::new(AboutWindow::new()));
@@ -1830,7 +1831,7 @@ impl Gui {
                                  });
                             });
 
-                            ui.add_space(8.0 * scale);
+                            ui.add_space(4.0 * scale);
 
                             if ui
                                 .add(MaterialButton::filled(t!("menu.check_for_updates")))
@@ -1842,7 +1843,7 @@ impl Gui {
                                     .check_for_updates(|_| {});
                             }
 
-                            ui.add_space(8.0 * scale);
+                            ui.add_space(4.0 * scale);
 
                             egui::ScrollArea::vertical().show(ui, |ui| {
                                 ui.set_width(ui.available_width());
@@ -2610,11 +2611,12 @@ impl Gui {
             .constrain(false)
             .interactable(false)
             .show(ctx, |ui| {
-                let card_width = 320.0 * scale; // Locked size so it doesn't stretch in landscape
+                let screen_w = ctx.content_rect().width();
+                let card_width = (screen_w * 0.78).min(260.0 * scale);
                 let rounding = Hachimi::instance().config.load().ui_window_rounding;
                 let corner_radius = rounding * scale;
-                let pad_h = 16.0 * scale;
-                let pad_v = 10.0 * scale; // Align with splash card
+                let pad_h = 12.0 * scale;
+                let pad_v = 8.0 * scale; // Align with splash card
                 let is_downloading = Hachimi::instance().tl_updater.is_downloading();
                 let title = if progress.phase == UpdatePhase::Extracting {
                     t!("tl_updater.extracting")
@@ -3046,10 +3048,10 @@ impl ConfigEditor {
             d.insert_temp(egui::Id::new("grid_control_w"), avail_w - LIST_TILE_PAD_H * 2.0 * scale);
         });
 
-        let tab_h = 48.0 * scale;
-        let action_bar_h = 48.0 * scale;
-        let search_h = 44.0 * scale;
-        let scroll_h = (ui.available_height() - action_bar_h - tab_h - search_h - 7.0 * scale).max(40.0);
+        let tab_h = 40.0 * scale;
+        let action_bar_h = 40.0 * scale;
+        let search_h = 38.0 * scale;
+        let scroll_h = (ui.available_height() - action_bar_h - tab_h - search_h - 6.0 * scale).max(40.0);
 
         Self::run_search_bar(ui, &mut self.search_term, scale);
 
@@ -3124,12 +3126,12 @@ impl ConfigEditor {
         save_clicked:  &mut bool,
         open2: &mut bool,
     ) {
-        let action_bar_h = 48.0 * scale;
+        let action_bar_h = 40.0 * scale;
         let content_h    = ui.available_height();
-        let search_h     = 44.0 * scale;
-        let body_h       = (content_h - action_bar_h - 16.0 * scale).max(40.0);
+        let search_h     = 38.0 * scale;
+        let body_h       = (content_h - action_bar_h - 12.0 * scale).max(40.0);
 
-        let rail_w = MaterialNavigationRail::WIDTH * scale;
+        let rail_w = 68.0 * scale;
         let body_w = content_w - rail_w;
 
         let body_rect = egui::Rect::from_min_size(
@@ -3143,6 +3145,7 @@ impl ConfigEditor {
                 // Left — NavigationRail
                 let mut tab_idx = self.current_tab.as_index();
                 let (_, changed) = MaterialNavigationRail::new(&mut tab_idx, CONFIG_NAV_ITEMS)
+                    .compact(true)
                     .width(rail_w)
                     .show(ui);
                 if changed {

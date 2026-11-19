@@ -13,7 +13,7 @@ use log::error;
 
 use egui_material3::theme::{
     apply_theme, get_global_theme, load_theme_from_json_str, set_global_corner_radius,
-    ContrastLevel, ThemeMode,
+    set_global_density, ContrastLevel, Density, ThemeMode,
 };
 
 use material_colors::{
@@ -152,6 +152,7 @@ pub fn apply_seed(
     if let Ok(mut theme) = get_global_theme().lock() {
         theme.theme_mode = egui_mode;
         theme.contrast_level = egui_contrast;
+        theme.density = Density::Compact;
         theme.selected_colors.clear();
 
         if params.scheme_mode == UiColorSchemeMode::Manual {
@@ -172,9 +173,10 @@ pub fn apply_seed(
     }
 
     let mode_clone = egui_mode;
-    // Set global corner radius for MD3 widgets BEFORE apply_theme so buttons/dialogs
+    // Set global corner radius and density for MD3 widgets BEFORE apply_theme so buttons/dialogs
     // pick it up during their own rendering. None = use each widget's MD3 spec default.
     set_global_corner_radius(Some(params.window_rounding));
+    set_global_density(Density::Compact);
     apply_theme(ctx, Some(move || mode_clone));
 
     // Apply surface_alpha to panel_fill only (sidebar panel).

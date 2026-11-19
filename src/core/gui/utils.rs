@@ -516,10 +516,8 @@ pub fn async_request_ui_content<T: Send + Sync + 'static>(
 pub const STANDARD_SLIDER_WIDTH: f32 = 140.0;
 
 /// Minimum row height for a settings list-tile row.
-/// 36dp gives comfortable padding around a 28dp switch without the
-/// wasted space that the full MD3 48dp touch-target spec adds in a
-/// dense settings list context.
-pub const LIST_TILE_H: f32 = 36.0;
+/// 34dp gives comfortable padding around controls in a compact overlay.
+pub const LIST_TILE_H: f32 = 34.0;
 
 /// Horizontal padding inside each list-tile row and the settings card.
 pub const LIST_TILE_PAD_H: f32 = 16.0;
@@ -527,7 +525,7 @@ pub const LIST_TILE_PAD_H: f32 = 16.0;
 /// Renders an MD3-styled section heading using the `primary` color token.
 ///
 /// Used above `settings_card` groups. Draws the label in primary color with
-/// a `12sp` bold-weight font and a thin `outlineVariant` divider underneath.
+/// an M3 TitleSmall/LabelLarge proportional font and a thin `outlineVariant` divider underneath.
 pub fn section_heading(ui: &mut egui::Ui, text: impl Into<String>) {
     if crate::core::gui::config::ConfigEditor::is_searching() {
         return;
@@ -537,16 +535,16 @@ pub fn section_heading(ui: &mut egui::Ui, text: impl Into<String>) {
 
     // Extra gap above — visually closes the separator of the last item in the
     // preceding section before this heading appears.
-    ui.add_space(12.0);
+    ui.add_space(8.0);
 
     let galley = ui.painter().layout_no_wrap(
         text,
-        egui::FontId::proportional(17.0),  // larger — prominent section header
+        egui::FontId::proportional(14.0),
         primary,
     );
 
     let (resp, painter) = ui.allocate_painter(
-        egui::vec2(ui.available_width(), galley.size().y + 8.0),
+        egui::vec2(ui.available_width(), galley.size().y + 4.0),
         egui::Sense::hover(),
     );
     let rect = resp.rect;
