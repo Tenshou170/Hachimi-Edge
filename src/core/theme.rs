@@ -13,16 +13,18 @@ use log::error;
 
 use egui_material3::theme::{
     apply_theme, get_global_theme, load_theme_from_json_str, set_global_corner_radius,
-    set_global_density, ContrastLevel, Density, ThemeMode,
+    set_global_corner_scope, set_global_density, ContrastLevel, Density, ShapeCornerScope,
+    ThemeMode,
 };
 
 use material_colors::{
     color::Argb,
     dynamic_color::{dynamic_scheme::DynamicScheme, variant::Variant},
+    palette::CorePalette,
     scheme::Scheme,
 };
 
-use crate::core::hachimi::{UiColorSchemeMode, UiContrastLevel, UiThemeMode};
+use crate::core::hachimi::{UiColorSchemeMode, UiContrastLevel, UiRoundingMode, UiThemeMode};
 
 // Cache key — re-apply whenever any theme-affecting field changes
 
@@ -34,6 +36,7 @@ struct CacheKey {
     scheme_mode: UiColorSchemeMode,
     surface_alpha: u8,
     rounding_bits: u32,
+    rounding_mode: UiRoundingMode,
 }
 
 static CURRENT_KEY: Mutex<Option<CacheKey>> = Mutex::new(None);
@@ -58,6 +61,7 @@ pub struct ThemeParams<'a> {
     pub surface_alpha: u8,
     /// Window/widget corner radius in logical pixels.
     pub window_rounding: f32,
+    pub rounding_mode: UiRoundingMode,
 }
 
 /// Apply the theme to `ctx` from the given parameters.
@@ -92,6 +96,7 @@ pub fn apply_seed(
         scheme_mode: params.scheme_mode,
         surface_alpha: params.surface_alpha,
         rounding_bits: params.window_rounding.to_bits(),
+        rounding_mode: params.rounding_mode,
     };
     if let Ok(guard) = CURRENT_KEY.lock() {
         if *guard == Some(cache_key) {
@@ -152,7 +157,6 @@ pub fn apply_seed(
     if let Ok(mut theme) = get_global_theme().lock() {
         theme.theme_mode = egui_mode;
         theme.contrast_level = egui_contrast;
-        theme.density = Density::Compact;
         theme.selected_colors.clear();
 
         if params.scheme_mode == UiColorSchemeMode::Manual {
@@ -176,7 +180,16 @@ pub fn apply_seed(
     // Set global corner radius and density for MD3 widgets BEFORE apply_theme so buttons/dialogs
     // pick it up during their own rendering. None = use each widget's MD3 spec default.
     set_global_corner_radius(Some(params.window_rounding));
-    set_global_density(Density::Compact);
+    let scope = match params.rounding_mode {
+        UiRoundingMode::All => ShapeCornerScope::All,
+        UiRoundingMode::Cards => ShapeCornerScope::WindowsAndCards,
+        UiRoundingMode::Windows => ShapeCornerScope::Windows,
+    };
+    set_global_corner_scope(scope);
+    #[cfg(target_os = "android")]
+    set_global_density(Density::Touch);
+    #[cfg(not(target_os = "android"))]
+    set_global_density(Density::Desktop);
     apply_theme(ctx, Some(move || mode_clone));
 
     // Apply surface_alpha to panel_fill only (sidebar panel).
@@ -194,14 +207,22 @@ pub fn apply_seed(
 
     {
         let r = params.window_rounding;
+        let cr = egui::CornerRadius::same(r.round() as u8);
         ctx.style_mut(|style| {
-            let cr = egui::CornerRadius::same(r.round() as u8);
             style.visuals.window_corner_radius = cr;
-            style.visuals.widgets.noninteractive.corner_radius = cr;
-            style.visuals.widgets.inactive.corner_radius = cr;
-            style.visuals.widgets.hovered.corner_radius = cr;
-            style.visuals.widgets.active.corner_radius = cr;
-            style.visuals.widgets.open.corner_radius = cr;
+            match params.rounding_mode {
+                UiRoundingMode::All => {
+                    style.visuals.widgets.noninteractive.corner_radius = cr;
+                    style.visuals.widgets.inactive.corner_radius = cr;
+                    style.visuals.widgets.hovered.corner_radius = cr;
+                    style.visuals.widgets.active.corner_radius = cr;
+                    style.visuals.widgets.open.corner_radius = cr;
+                }
+                UiRoundingMode::Cards => {
+                    style.visuals.widgets.noninteractive.corner_radius = cr;
+                }
+                UiRoundingMode::Windows => {}
+            }
         });
     }
 
@@ -361,9 +382,28 @@ pub fn generate_theme_json(seed: Color32) -> String {
         serde_json::Value::Array(vec![]),
     );
     theme.insert("schemes".to_string(), serde_json::Value::Object(schemes));
+    let core = CorePalette::of(argb);
+    let mut palettes = serde_json::Map::new();
+    let add_tonal_palette = |m: &mut serde_json::Map<String, serde_json::Value>, name: &str, p: &material_colors::palette::TonalPalette| {
+        const TONES: &[i32] = &[0, 5, 10, 15, 20, 25, 30, 35, 40, 50, 60, 70, 80, 90, 95, 98, 99, 100];
+        let mut tone_map = serde_json::Map::new();
+        for &tone in TONES {
+            let hex = p.tone(tone).to_hex_with_pound();
+            tone_map.insert(tone.to_string(), serde_json::Value::String(hex));
+        }
+        m.insert(name.to_string(), serde_json::Value::Object(tone_map));
+    };
+
+    add_tonal_palette(&mut palettes, "primary", &core.primary);
+    add_tonal_palette(&mut palettes, "secondary", &core.secondary);
+    add_tonal_palette(&mut palettes, "tertiary", &core.tertiary);
+    add_tonal_palette(&mut palettes, "neutral", &core.neutral);
+    add_tonal_palette(&mut palettes, "neutralVariant", &core.neutral_variant);
+    add_tonal_palette(&mut palettes, "error", &core.error);
+
     theme.insert(
         "palettes".to_string(),
-        serde_json::Value::Object(serde_json::Map::new()),
+        serde_json::Value::Object(palettes),
     );
 
     serde_json::to_string_pretty(&serde_json::Value::Object(theme)).unwrap_or_default()

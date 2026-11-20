@@ -99,6 +99,7 @@ pub struct Gui {
     pub context: egui::Context,
     pub input: egui::RawInput,
     pub gui_scale: f32,
+    pub window_rounding: f32,
 
     pub finalized_scale: f32,
     pub start_time: Instant,
@@ -392,7 +393,6 @@ impl Gui {
 
         // Apply spacing/interaction style before theme so that theme visuals
         context.style_mut(|style| {
-            style.spacing.button_padding = egui::Vec2::new(8.0, 5.0);
             style.interaction.selectable_labels = false;
         });
 
@@ -409,6 +409,7 @@ impl Gui {
             manual_colors: &config.ui_manual_colors,
             surface_alpha: config.ui_surface_alpha,
             window_rounding: config.ui_window_rounding,
+            rounding_mode: config.ui_rounding_mode,
         };
         if let Some(json) = crate::core::theme::apply_seed(&context, params, &hachimi.game.data_dir) {
             let mut updated_config = config.clone();
@@ -434,6 +435,7 @@ impl Gui {
             context,
             input: egui::RawInput::default(),
             gui_scale: 1.0,
+            window_rounding: config.ui_window_rounding,
             finalized_scale: 1.0,
             start_time: now,
             prev_main_axis_size: 1,
@@ -1275,6 +1277,7 @@ impl Gui {
                     manual_colors: &config.ui_manual_colors,
                     surface_alpha: config.ui_surface_alpha,
                     window_rounding: config.ui_window_rounding,
+                    rounding_mode: config.ui_rounding_mode,
                 };
                 crate::core::theme::apply_seed(
                     &self.context,
@@ -1295,26 +1298,26 @@ impl Gui {
             }
 
             self.context.style_mut(|style| {
-                style.spacing.button_padding = egui::Vec2::new(8.0, 5.0);
                 style.interaction.selectable_labels = false;
                 if live_scale != 1.0 {
                     style.scale(live_scale);
                 }
             });
+        }
 
-            // Re-apply corner radius after style mutation (scale change may affect it)
-            let rounding = Hachimi::instance().config.load().ui_window_rounding;
-            {
-                let cr = egui::CornerRadius::same(rounding.round() as u8);
-                self.context.style_mut(|s| {
-                    s.visuals.window_corner_radius = cr;
-                    s.visuals.widgets.noninteractive.corner_radius = cr;
-                    s.visuals.widgets.inactive.corner_radius = cr;
-                    s.visuals.widgets.hovered.corner_radius = cr;
-                    s.visuals.widgets.active.corner_radius = cr;
-                    s.visuals.widgets.open.corner_radius = cr;
-                });
-            }
+        let live_rounding = Hachimi::instance().config.load().ui_window_rounding;
+        if (self.window_rounding - live_rounding).abs() > f32::EPSILON || self.gui_scale != live_scale {
+            self.window_rounding = live_rounding;
+            egui_material3::theme::set_global_corner_radius(Some(live_rounding));
+            let cr = egui::CornerRadius::same(live_rounding.round() as u8);
+            self.context.style_mut(|s| {
+                s.visuals.window_corner_radius = cr;
+                s.visuals.widgets.noninteractive.corner_radius = cr;
+                s.visuals.widgets.inactive.corner_radius = cr;
+                s.visuals.widgets.hovered.corner_radius = cr;
+                s.visuals.widgets.active.corner_radius = cr;
+                s.visuals.widgets.open.corner_radius = cr;
+            });
         }
 
         // Only update egui temp data when the values actually changed to avoid
@@ -1522,6 +1525,8 @@ impl Gui {
             && !over_race_slider && !over_live_slider && !over_playback_btn;
 
         let is_hovering_window = pointer_layer.map(|l| l.order == egui::Order::Middle).unwrap_or(false);
+        let is_hovering_sidebar = self.show_menu && pointer_pos.map_or(false, |pos| pos.x <= get_menu_width());
+        let is_hovering_gui = is_hovering_window || is_hovering_sidebar;
         let has_scroll = self.context.input(|i| {
             i.smooth_scroll_delta != egui::Vec2::ZERO || i.raw_scroll_delta != egui::Vec2::ZERO
         });
@@ -1551,9 +1556,9 @@ impl Gui {
         // WANTS_INPUT: fine gate — only true when the game should NOT also receive this
         // input. Overlay elements only block game input when the pointer is directly over
         // them. Sidebar/app windows block when actively processing any pointer/keyboard,
-        // or hovering/scrolling within a window.
+        // or hovering/scrolling within a window or sidebar.
         let overlay_captured = over_race_slider || over_live_slider || over_playback_btn || over_hud;
-        let window_captured = self.is_consuming_input() && (actively_using_pointer || is_hovering_window || has_scroll);
+        let window_captured = self.is_consuming_input() && (actively_using_pointer || is_hovering_gui || has_scroll);
         WANTS_INPUT.store(
             window_captured
                 || overlay_captured
@@ -1630,14 +1635,17 @@ impl Gui {
             .constrain(false)
             .interactable(false)
             .show(ctx, |ui| {
-                let rounding = Hachimi::instance().config.load().ui_window_rounding;
-                let corner_radius = rounding * scale;
+                let cfg = Hachimi::instance().config.load();
+                let rounding = cfg.ui_window_rounding;
+                let corner_radius = match cfg.ui_rounding_mode {
+                    hachimi::UiRoundingMode::All | hachimi::UiRoundingMode::Cards => rounding * scale,
+                    hachimi::UiRoundingMode::Windows => 12.0 * scale,
+                };
 
                 let splash_base = get_global_color("surfaceContainerHigh");
                 let outline_color = get_global_color("outlineVariant");
 
                 let splash_fill = {
-                    let cfg = Hachimi::instance().config.load();
                     match cfg.ui_translucency_mode {
                         hachimi::UiTranslucencyMode::None => splash_base,
                         hachimi::UiTranslucencyMode::Overlay | hachimi::UiTranslucencyMode::Full => {
@@ -1701,7 +1709,7 @@ impl Gui {
                                             .fill(egui::Color32::from_rgba_unmultiplied(
                                                 version_bg.r(), version_bg.g(), version_bg.b(), 180,
                                             ))
-                                            .corner_radius((8.0 * scale) as u8)
+                                            .corner_radius(egui::CornerRadius::same(99))
                                             .inner_margin(egui::Margin::symmetric(
                                                 (6.0 * scale) as i8,
                                                 (2.0 * scale) as i8,
@@ -1747,8 +1755,15 @@ impl Gui {
             let salt = self.finalized_scale;
 
             let screen_w = ctx.content_rect().width();
-            let mut min_w = 96.0 * scale;
-            let mut max_w = (screen_w * 0.85).min(260.0 * scale);
+            let screen_h = ctx.content_rect().height();
+            let is_portrait = screen_w < screen_h;
+            let (def_w, max_cap) = if is_portrait {
+                ((screen_w * 0.82).clamp(240.0 * scale, 320.0 * scale), 320.0 * scale)
+            } else {
+                (240.0 * scale, 300.0 * scale)
+            };
+            let mut min_w = (120.0 * scale).min(screen_w * 0.6);
+            let mut max_w = (screen_w * 0.88).min(max_cap);
 
             if let Ok(mut lock) = REQUESTED_WIDTH.lock() {
                 if let Some(w) = lock.take() {
@@ -1761,7 +1776,7 @@ impl Gui {
                 egui::SidePanel::left(egui::Id::new("hachimi_menu").with(salt.to_bits()))
                     .min_width(min_w)
                     .max_width(max_w)
-                    .default_width((200.0 * scale).min(screen_w * 0.75))
+                    .default_width(def_w.min(max_w))
                     .show_animated(ctx, self.show_menu, |ui| {
 
                         let (safe_top, _) = get_safe_insets(ctx);
@@ -1799,7 +1814,7 @@ impl Gui {
                                             .fill(egui::Color32::from_rgba_unmultiplied(
                                                 version_bg.r(), version_bg.g(), version_bg.b(), 180,
                                             ))
-                                            .corner_radius((8.0 * scale) as u8)
+                                            .corner_radius(egui::CornerRadius::same(99))
                                             .inner_margin(egui::Margin::symmetric(
                                                 (6.0 * scale) as i8,
                                                 (2.0 * scale) as i8,
@@ -1844,7 +1859,7 @@ impl Gui {
 
                             ui.add_space(4.0 * scale);
 
-                            egui::ScrollArea::vertical().show(ui, |ui| {
+                            egui::ScrollArea::vertical().id_salt("sidebar_menu_scroll").show(ui, |ui| {
                                 ui.set_width(ui.available_width());
 
                                 section_heading(ui, t!("menu.stats_heading").into_owned());
@@ -2312,7 +2327,7 @@ impl Gui {
 
 
 
-    fn run_combo<T: PartialEq + Copy>(
+    pub fn run_combo<T: PartialEq + Copy>(
         ui: &mut egui::Ui,
         id_child: impl std::hash::Hash,
         value: &mut T,
@@ -2612,8 +2627,12 @@ impl Gui {
             .show(ctx, |ui| {
                 let screen_w = ctx.content_rect().width();
                 let card_width = (screen_w * 0.78).min(260.0 * scale);
-                let rounding = Hachimi::instance().config.load().ui_window_rounding;
-                let corner_radius = rounding * scale;
+                let cfg = Hachimi::instance().config.load();
+                let rounding = cfg.ui_window_rounding;
+                let corner_radius = match cfg.ui_rounding_mode {
+                    hachimi::UiRoundingMode::All | hachimi::UiRoundingMode::Cards => rounding * scale,
+                    hachimi::UiRoundingMode::Windows => 12.0 * scale,
+                };
                 let pad_h = 12.0 * scale;
                 let pad_v = 8.0 * scale; // Align with splash card
                 let is_downloading = Hachimi::instance().tl_updater.is_downloading();
@@ -2634,7 +2653,6 @@ impl Gui {
                 };
                 let progress_base = get_global_color("surfaceContainerHigh");
                 let progress_fill = {
-                    let cfg = Hachimi::instance().config.load();
                     match cfg.ui_translucency_mode {
                         hachimi::UiTranslucencyMode::None => progress_base,
                         hachimi::UiTranslucencyMode::Overlay | hachimi::UiTranslucencyMode::Full => {
@@ -2726,8 +2744,12 @@ impl Gui {
             // Floating behavior with center-bottom positioning per MD3 snackbar spec.
             // Max-width is capped so long text wraps rather than the bar overflowing.
             let max_w = (ctx.content_rect().width() - 32.0 * scale).max(120.0 * scale);
-            let rounding = Hachimi::instance().config.load().ui_window_rounding;
-            let corner_radius = rounding * scale;
+            let cfg = Hachimi::instance().config.load();
+            let rounding = cfg.ui_window_rounding;
+            let corner_radius = match cfg.ui_rounding_mode {
+                hachimi::UiRoundingMode::All | hachimi::UiRoundingMode::Cards => rounding * scale,
+                hachimi::UiRoundingMode::Windows => 4.0 * scale,
+            };
             let (_, safe_bottom) = get_safe_insets(ctx);
             let inner = egui::Area::new(egui::Id::new("snackbar").with(s.id))
                 .order(egui::Order::Foreground)

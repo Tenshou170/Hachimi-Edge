@@ -937,6 +937,23 @@ impl Default for UiTranslucencyMode {
     }
 }
 
+/// Controls which UI elements are affected by the corner radius setting.
+///
+/// - `All`     — all elements (windows, cards, and buttons) follow corner radius.
+/// - `Cards`   — windows and floating cards follow corner radius; buttons remain pill-shaped.
+/// - `Windows` — only modal windows and dialogs follow corner radius.
+#[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum UiRoundingMode {
+    All,
+    Cards,
+    Windows,
+}
+impl Default for UiRoundingMode {
+    fn default() -> Self {
+        Self::All
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, Default)]
 pub struct RaceDirectorWindowState {
     #[serde(default)]
@@ -1098,6 +1115,8 @@ pub struct Config {
     pub ui_surface_alpha: u8,
     #[serde(default = "Config::default_ui_window_rounding")]
     pub ui_window_rounding: f32,
+    #[serde(default = "Config::default_ui_rounding_mode")]
+    pub ui_rounding_mode: UiRoundingMode,
     /// Translucency scope.  The old `ui_translucent_windows: true` serialises
     /// as `"ui_translucency_mode": "Full"` going forward; existing configs that
     /// only have the legacy bool key are migrated by the custom deserialiser below.
@@ -1341,6 +1360,9 @@ impl Config {
     }
     pub fn default_ui_window_rounding() -> f32 {
         10.0
+    }
+    pub fn default_ui_rounding_mode() -> UiRoundingMode {
+        UiRoundingMode::All
     }
     fn default_config_schema_version() -> u32 {
         2

@@ -22,6 +22,8 @@ pub struct ThemeEditorWindow {
     old_surface_alpha: u8,
     window_rounding: f32,
     old_window_rounding: f32,
+    rounding_mode: hachimi::UiRoundingMode,
+    old_rounding_mode: hachimi::UiRoundingMode,
     translucency_mode: hachimi::UiTranslucencyMode,
     old_translucency_mode: hachimi::UiTranslucencyMode,
     // Manual color editing state
@@ -29,6 +31,8 @@ pub struct ThemeEditorWindow {
     old_manual_colors: std::collections::HashMap<String, [u8; 3]>,
     /// Editable primary override for Manual mode
     manual_primary: egui::Color32,
+    manual_secondary: egui::Color32,
+    manual_tertiary: egui::Color32,
     manual_surface: egui::Color32,
     manual_on_surface: egui::Color32,
 }
@@ -42,6 +46,16 @@ impl ThemeEditorWindow {
             .get("primary")
             .map(|&[r, g, b]| egui::Color32::from_rgb(r, g, b))
             .unwrap_or(egui_material3::theme::get_global_color("primary"));
+        let manual_secondary = cfg
+            .ui_manual_colors
+            .get("secondary")
+            .map(|&[r, g, b]| egui::Color32::from_rgb(r, g, b))
+            .unwrap_or(egui_material3::theme::get_global_color("secondary"));
+        let manual_tertiary = cfg
+            .ui_manual_colors
+            .get("tertiary")
+            .map(|&[r, g, b]| egui::Color32::from_rgb(r, g, b))
+            .unwrap_or(egui_material3::theme::get_global_color("tertiary"));
         let manual_surface = cfg
             .ui_manual_colors
             .get("surface")
@@ -66,11 +80,15 @@ impl ThemeEditorWindow {
             old_surface_alpha: cfg.ui_surface_alpha,
             window_rounding: cfg.ui_window_rounding,
             old_window_rounding: cfg.ui_window_rounding,
+            rounding_mode: cfg.ui_rounding_mode,
+            old_rounding_mode: cfg.ui_rounding_mode,
             translucency_mode: cfg.ui_translucency_mode,
             old_translucency_mode: cfg.ui_translucency_mode,
             manual_colors: cfg.ui_manual_colors.clone(),
             old_manual_colors: cfg.ui_manual_colors,
             manual_primary,
+            manual_secondary,
+            manual_tertiary,
             manual_surface,
             manual_on_surface,
         }
@@ -86,6 +104,7 @@ impl ThemeEditorWindow {
         cfg.ui_manual_colors = self.manual_colors.clone();
         cfg.ui_surface_alpha = self.surface_alpha;
         cfg.ui_window_rounding = self.window_rounding;
+        cfg.ui_rounding_mode = self.rounding_mode;
         cfg.ui_translucency_mode = self.translucency_mode;
         cfg
     }
@@ -132,94 +151,51 @@ impl AppWindow for ThemeEditorWindow {
                             // ── Theme Mode ──────────────────────────────────────
                             ui.label(t!("theme_editor.theme_mode"));
                             ui.add_space(2.0);
-                            section_frame.show(ui, |ui| {
-                                ui.horizontal_wrapped(|ui| {
-                                    if ui
-                                        .add(
-                                            MaterialButton::filled_tonal(t!("theme_editor.dark"))
-                                                .selected(
-                                                    self.theme_mode == hachimi::UiThemeMode::Dark,
-                                                ),
-                                        )
-                                        .clicked()
-                                    {
-                                        self.theme_mode = hachimi::UiThemeMode::Dark;
-                                        preview_dirty = true;
-                                    }
-                                    if ui
-                                        .add(
-                                            MaterialButton::filled_tonal(t!("theme_editor.light"))
-                                                .selected(
-                                                    self.theme_mode == hachimi::UiThemeMode::Light,
-                                                ),
-                                        )
-                                        .clicked()
-                                    {
-                                        self.theme_mode = hachimi::UiThemeMode::Light;
-                                        preview_dirty = true;
-                                    }
-                                });
-                            });
+                            let avail = ui.available_width();
+                            ui.data_mut(|d| d.insert_temp(egui::Id::new("grid_control_w"), avail));
+                            let dark_str = t!("theme_editor.dark");
+                            let light_str = t!("theme_editor.light");
+                            let theme_mode_choices = [
+                                (hachimi::UiThemeMode::Dark, dark_str.as_ref()),
+                                (hachimi::UiThemeMode::Light, light_str.as_ref()),
+                            ];
+                            if Gui::run_combo(ui, "theme_mode_combo", &mut self.theme_mode, &theme_mode_choices) {
+                                preview_dirty = true;
+                            }
                             ui.add_space(8.0);
 
                             // ── Contrast Level ───────────────────────────────────
                             ui.label(t!("theme_editor.contrast_level"));
                             ui.add_space(2.0);
-                            section_frame.show(ui, |ui| {
-                                ui.horizontal_wrapped(|ui| {
-                                    for (label_key, val) in [
-                                        ("theme_editor.normal", hachimi::UiContrastLevel::Normal),
-                                        ("theme_editor.medium", hachimi::UiContrastLevel::Medium),
-                                        ("theme_editor.high", hachimi::UiContrastLevel::High),
-                                    ] {
-                                        if ui
-                                            .add(
-                                                MaterialButton::filled_tonal(t!(label_key))
-                                                    .selected(self.contrast_level == val),
-                                            )
-                                            .clicked()
-                                        {
-                                            self.contrast_level = val;
-                                            preview_dirty = true;
-                                        }
-                                    }
-                                });
-                            });
+                            let avail = ui.available_width();
+                            ui.data_mut(|d| d.insert_temp(egui::Id::new("grid_control_w"), avail));
+                            let normal_str = t!("theme_editor.normal");
+                            let medium_str = t!("theme_editor.medium");
+                            let high_str = t!("theme_editor.high");
+                            let contrast_choices = [
+                                (hachimi::UiContrastLevel::Normal, normal_str.as_ref()),
+                                (hachimi::UiContrastLevel::Medium, medium_str.as_ref()),
+                                (hachimi::UiContrastLevel::High, high_str.as_ref()),
+                            ];
+                            if Gui::run_combo(ui, "contrast_level_combo", &mut self.contrast_level, &contrast_choices) {
+                                preview_dirty = true;
+                            }
                             ui.add_space(8.0);
 
                             // ── Color Scheme Mode ────────────────────────────────
                             ui.label(t!("theme_editor.scheme_mode"));
                             ui.add_space(2.0);
-                            section_frame.show(ui, |ui| {
-                                ui.horizontal_wrapped(|ui| {
-                                    if ui
-                                        .add(
-                                            MaterialButton::filled_tonal(t!("theme_editor.auto"))
-                                                .selected(
-                                                    self.scheme_mode
-                                                        == hachimi::UiColorSchemeMode::Auto,
-                                                ),
-                                        )
-                                        .clicked()
-                                    {
-                                        self.scheme_mode = hachimi::UiColorSchemeMode::Auto;
-                                        preview_dirty = true;
-                                    }
-                                    if ui
-                                        .add(
-                                            MaterialButton::filled_tonal(t!("theme_editor.manual"))
-                                                .selected(
-                                                    self.scheme_mode
-                                                        == hachimi::UiColorSchemeMode::Manual,
-                                                ),
-                                        )
-                                        .clicked()
-                                    {
-                                        self.scheme_mode = hachimi::UiColorSchemeMode::Manual;
-                                        preview_dirty = true;
-                                    }
-                                });
-                            });
+                            let avail = ui.available_width();
+                            ui.data_mut(|d| d.insert_temp(egui::Id::new("grid_control_w"), avail));
+                            let auto_str = t!("theme_editor.auto");
+                            let manual_str = t!("theme_editor.manual");
+                            let scheme_choices = [
+                                (hachimi::UiColorSchemeMode::Auto, auto_str.as_ref()),
+                                (hachimi::UiColorSchemeMode::Manual, manual_str.as_ref()),
+                            ];
+                            if Gui::run_combo(ui, "scheme_mode_combo", &mut self.scheme_mode, &scheme_choices) {
+                                preview_dirty = true;
+                            }
                             ui.add_space(8.0);
 
                             // ── Seed Color ───────────────────────────────────────
@@ -249,6 +225,32 @@ impl AppWindow for ThemeEditorWindow {
                                             let c = self.manual_primary;
                                             self.manual_colors
                                                 .insert("primary".into(), [c.r(), c.g(), c.b()]);
+                                            preview_dirty = true;
+                                        }
+                                    });
+                                    ui.add_space(4.0);
+                                    // Secondary
+                                    ui.horizontal(|ui| {
+                                        ui.label(t!("theme_editor.secondary"));
+                                        let res = custom_color_button_with_close(ui, &mut self.manual_secondary, "manual_secondary_popup_custom");
+                                        if res.changed()
+                                        {
+                                            let c = self.manual_secondary;
+                                            self.manual_colors
+                                                .insert("secondary".into(), [c.r(), c.g(), c.b()]);
+                                            preview_dirty = true;
+                                        }
+                                    });
+                                    ui.add_space(4.0);
+                                    // Tertiary
+                                    ui.horizontal(|ui| {
+                                        ui.label(t!("theme_editor.tertiary"));
+                                        let res = custom_color_button_with_close(ui, &mut self.manual_tertiary, "manual_tertiary_popup_custom");
+                                        if res.changed()
+                                        {
+                                            let c = self.manual_tertiary;
+                                            self.manual_colors
+                                                .insert("tertiary".into(), [c.r(), c.g(), c.b()]);
                                             preview_dirty = true;
                                         }
                                     });
@@ -299,40 +301,40 @@ impl AppWindow for ThemeEditorWindow {
                             {
                                 preview_dirty = true;
                             }
+                            ui.add_space(4.0);
+                            ui.label(t!("theme_editor.rounding_mode"));
+                            ui.add_space(2.0);
+                            let avail = ui.available_width();
+                            ui.data_mut(|d| d.insert_temp(egui::Id::new("grid_control_w"), avail));
+                            let round_all = t!("theme_editor.rounding_all");
+                            let round_cards = t!("theme_editor.rounding_cards");
+                            let round_windows = t!("theme_editor.rounding_windows");
+                            let rounding_mode_choices = [
+                                (hachimi::UiRoundingMode::All, round_all.as_ref()),
+                                (hachimi::UiRoundingMode::Cards, round_cards.as_ref()),
+                                (hachimi::UiRoundingMode::Windows, round_windows.as_ref()),
+                            ];
+                            if Gui::run_combo(ui, "rounding_mode_combo", &mut self.rounding_mode, &rounding_mode_choices) {
+                                preview_dirty = true;
+                            }
                             ui.add_space(8.0);
 
                             // ── Translucency Method ───────────────────────────────
                             ui.label(t!("theme_editor.translucency_method"));
                             ui.add_space(2.0);
-                            section_frame.show(ui, |ui| {
-                                ui.horizontal_wrapped(|ui| {
-                                    for (label_key, val) in [
-                                        (
-                                            "theme_editor.translucency_none",
-                                            hachimi::UiTranslucencyMode::None,
-                                        ),
-                                        (
-                                            "theme_editor.translucency_overlay",
-                                            hachimi::UiTranslucencyMode::Overlay,
-                                        ),
-                                        (
-                                            "theme_editor.translucency_full",
-                                            hachimi::UiTranslucencyMode::Full,
-                                        ),
-                                    ] {
-                                        if ui
-                                            .add(
-                                                MaterialButton::filled_tonal(t!(label_key))
-                                                    .selected(self.translucency_mode == val),
-                                            )
-                                            .clicked()
-                                        {
-                                            self.translucency_mode = val;
-                                            preview_dirty = true;
-                                        }
-                                    }
-                                });
-                            });
+                            let avail = ui.available_width();
+                            ui.data_mut(|d| d.insert_temp(egui::Id::new("grid_control_w"), avail));
+                            let trans_none = t!("theme_editor.translucency_none");
+                            let trans_overlay = t!("theme_editor.translucency_overlay");
+                            let trans_full = t!("theme_editor.translucency_full");
+                            let translucency_choices = [
+                                (hachimi::UiTranslucencyMode::None, trans_none.as_ref()),
+                                (hachimi::UiTranslucencyMode::Overlay, trans_overlay.as_ref()),
+                                (hachimi::UiTranslucencyMode::Full, trans_full.as_ref()),
+                            ];
+                            if Gui::run_combo(ui, "translucency_mode_combo", &mut self.translucency_mode, &translucency_choices) {
+                                preview_dirty = true;
+                            }
                             ui.add_space(8.0);
                         });
                     },
@@ -380,6 +382,7 @@ impl AppWindow for ThemeEditorWindow {
                 manual_colors: &manual,
                 surface_alpha: cfg.ui_surface_alpha,
                 window_rounding: cfg.ui_window_rounding,
+                rounding_mode: cfg.ui_rounding_mode,
             };
             if let Some(json) = crate::core::theme::apply_seed(ctx, save_params, &data_dir) {
                 cfg.ui_theme_json = serde_json::from_str(&json).ok();
@@ -394,6 +397,7 @@ impl AppWindow for ThemeEditorWindow {
             self.scheme_mode = self.old_scheme_mode;
             self.surface_alpha = self.old_surface_alpha;
             self.window_rounding = self.old_window_rounding;
+            self.rounding_mode = self.old_rounding_mode;
             self.translucency_mode = self.old_translucency_mode;
             self.manual_colors = self.old_manual_colors.clone();
             enqueue_theme_preview(self.build_preview_config());
@@ -405,9 +409,12 @@ impl AppWindow for ThemeEditorWindow {
             self.scheme_mode = hachimi::UiColorSchemeMode::Auto;
             self.surface_alpha = hachimi::Config::default_ui_surface_alpha();
             self.window_rounding = hachimi::Config::default_ui_window_rounding();
+            self.rounding_mode = hachimi::UiRoundingMode::All;
             self.translucency_mode = hachimi::UiTranslucencyMode::None;
             self.manual_colors.clear();
             self.manual_primary = hachimi::Config::default_ui_theme_seed();
+            self.manual_secondary = egui_material3::theme::get_global_color("secondary");
+            self.manual_tertiary = egui_material3::theme::get_global_color("tertiary");
             self.manual_surface = egui::Color32::from_rgb(22, 18, 13);
             self.manual_on_surface = egui::Color32::from_rgb(238, 225, 212);
             enqueue_theme_preview(self.build_preview_config());

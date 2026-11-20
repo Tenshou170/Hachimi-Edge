@@ -308,7 +308,7 @@ pub fn new_window<'a>(
             ctx.style().spacing.window_margin.left as i8,
         ))
         .corner_radius(egui::CornerRadius::same(
-            cr.unwrap_or(8.0).max(8.0) as u8,
+            cr.unwrap_or(8.0).max(0.0) as u8,
         ));
 
     let title = fit_window_title(ctx, title.into(), size.x, scale);
