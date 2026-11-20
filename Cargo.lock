@@ -766,7 +766,7 @@ checksum = "fe6d2e5af09e8c8ad56c969f2157a3d4238cebc7c55f0a517728c38f7b200f81"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.2.2",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]
@@ -1179,7 +1179,7 @@ dependencies = [
 [[package]]
 name = "egui-material3"
 version = "0.0.12"
-source = "git+https://github.com/Tenshou170/egui-material3.git#7b2d1eee82b995a4eaf287790e740ddd89981936"
+source = "git+https://github.com/Tenshou170/egui-material3.git#65909cf7315e6f8c322fb642fe5a2c733f6d919b"
 dependencies = [
  "base64 0.22.1",
  "dark-light",
@@ -5259,7 +5259,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

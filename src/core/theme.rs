@@ -186,10 +186,7 @@ pub fn apply_seed(
         UiRoundingMode::Windows => ShapeCornerScope::Windows,
     };
     set_global_corner_scope(scope);
-    #[cfg(target_os = "android")]
-    set_global_density(Density::Touch);
-    #[cfg(not(target_os = "android"))]
-    set_global_density(Density::Desktop);
+    set_global_density(Density::Compact);
     apply_theme(ctx, Some(move || mode_clone));
 
     // Apply surface_alpha to panel_fill only (sidebar panel).

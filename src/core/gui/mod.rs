@@ -393,6 +393,7 @@ impl Gui {
 
         // Apply spacing/interaction style before theme so that theme visuals
         context.style_mut(|style| {
+            style.spacing.button_padding = egui::Vec2::new(8.0, 5.0);
             style.interaction.selectable_labels = false;
         });
 
@@ -1298,6 +1299,7 @@ impl Gui {
             }
 
             self.context.style_mut(|style| {
+                style.spacing.button_padding = egui::Vec2::new(8.0, 5.0);
                 style.interaction.selectable_labels = false;
                 if live_scale != 1.0 {
                     style.scale(live_scale);
@@ -1755,15 +1757,8 @@ impl Gui {
             let salt = self.finalized_scale;
 
             let screen_w = ctx.content_rect().width();
-            let screen_h = ctx.content_rect().height();
-            let is_portrait = screen_w < screen_h;
-            let (def_w, max_cap) = if is_portrait {
-                ((screen_w * 0.82).clamp(240.0 * scale, 320.0 * scale), 320.0 * scale)
-            } else {
-                (240.0 * scale, 300.0 * scale)
-            };
-            let mut min_w = (120.0 * scale).min(screen_w * 0.6);
-            let mut max_w = (screen_w * 0.88).min(max_cap);
+            let mut min_w = 120.0 * scale;
+            let mut max_w = (screen_w * 0.85).min(300.0 * scale);
 
             if let Ok(mut lock) = REQUESTED_WIDTH.lock() {
                 if let Some(w) = lock.take() {
@@ -1776,7 +1771,7 @@ impl Gui {
                 egui::SidePanel::left(egui::Id::new("hachimi_menu").with(salt.to_bits()))
                     .min_width(min_w)
                     .max_width(max_w)
-                    .default_width(def_w.min(max_w))
+                    .default_width((240.0 * scale).min(screen_w * 0.75))
                     .show_animated(ctx, self.show_menu, |ui| {
 
                         let (safe_top, _) = get_safe_insets(ctx);
@@ -3069,10 +3064,10 @@ impl ConfigEditor {
             d.insert_temp(egui::Id::new("grid_control_w"), avail_w - LIST_TILE_PAD_H * 2.0 * scale);
         });
 
-        let tab_h = 40.0 * scale;
-        let action_bar_h = 40.0 * scale;
-        let search_h = 38.0 * scale;
-        let scroll_h = (ui.available_height() - action_bar_h - tab_h - search_h - 6.0 * scale).max(40.0);
+        let tab_h = 48.0 * scale;
+        let action_bar_h = 48.0 * scale;
+        let search_h = 44.0 * scale;
+        let scroll_h = (ui.available_height() - action_bar_h - tab_h - search_h - 7.0 * scale).max(40.0);
 
         Self::run_search_bar(ui, &mut self.search_term, scale);
 
@@ -3147,10 +3142,10 @@ impl ConfigEditor {
         save_clicked:  &mut bool,
         open2: &mut bool,
     ) {
-        let action_bar_h = 40.0 * scale;
+        let action_bar_h = 48.0 * scale;
         let content_h    = ui.available_height();
-        let search_h     = 38.0 * scale;
-        let body_h       = (content_h - action_bar_h - 12.0 * scale).max(40.0);
+        let search_h     = 44.0 * scale;
+        let body_h       = (content_h - action_bar_h - 16.0 * scale).max(40.0);
 
         let rail_w = 68.0 * scale;
         let body_w = content_w - rail_w;
