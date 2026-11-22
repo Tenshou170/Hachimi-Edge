@@ -94,6 +94,7 @@ mod DownloadView;
 mod HttpHelper;
 mod DownloadErrorProcessor;
 mod TitleViewController;
+pub mod TitleView;
 pub mod Director;
 mod CySpringNative;
 mod CySpringUpdater;
@@ -300,6 +301,7 @@ pub fn init() {
     HttpHelper::init(image);
     DownloadErrorProcessor::init(image);
     TitleViewController::init(image);
+    TitleView::init(image);
     Director::init(image);
     CySpringNative::init(image);
     CySpringUpdater::init(image);
