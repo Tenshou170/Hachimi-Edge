@@ -39,6 +39,10 @@ fn patch_title_logo(title_view_go: *mut Il2CppObject) {
         return;
     };
 
+    if !replace_path.is_file() {
+        return;
+    }
+
     let title_view = GameObject::GetComponentInChildren(title_view_go, TitleView::type_object(), true);
     if title_view.is_null() {
         return;
