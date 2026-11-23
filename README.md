@@ -46,7 +46,7 @@ This project modifies game runtime behavior and violates the target application'
 - **In-Game Configuration:** Embedded GUI configuration editor allows real-time tuning of settings without restarting the application.
 - **Automatic Localization Updates:** Integrated updater downloads and reloads updated translation packages directly within the game runtime.
 - **Graphics Enhancement:** Device optimization features including target frame rate unlocking (FPS unlock) and resolution scaling.
-- **Cross-Platform:** Native support for Windows (DirectX 11 proxy DLL) and Android (Zygisk / Dobby inline hooks).
+- **Cross-Platform:** Native support for Windows (DirectX 11 proxy DLL) and Android (Dobby inline hooks).
 - **Windows Desktop Integrations:** Discord Rich Presence, Windows Media Transport (SMTC) media controls with live jacket thumbnails, and taskbar progress reporting.
 
 ## Installation

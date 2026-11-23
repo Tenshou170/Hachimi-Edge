@@ -44,37 +44,6 @@ jobs:
             build/*.so
             build/sha256.json
 
-  build-zygisk:
-    runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[ci skip]')"
-    steps:
-      - uses: actions/checkout@v7
-      - name: Cache Rust dependencies
-        uses: swatinem/rust-cache@v2
-
-      - name: Grant execute permission to build scripts
-        run: chmod +x tools/android/*.sh tools/windows/*.sh
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Build Hachimi Zygisk Module
-        run: |
-          rustup target add aarch64-linux-android
-          RELEASE=1 ./tools/android/build_zygisk.sh
-        env:
-          HACHIMI_IGNORE_DIRTY: "true"
-
-      - name: Attest Zygisk Module
-        uses: actions/attest@v4
-        with:
-          subject-path: |
-            build/zygisk-*.zip
-
-      - name: Upload Zygisk Module
-        uses: actions/upload-artifact@v7
-        with:
-          name: zygisk
-          path: |
-            build/zygisk-*.zip
-
   build-windows:
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, '[ci skip]')"
@@ -185,7 +154,7 @@ jobs:
             build/hachimi_installer.exe
 
   create-release:
-    needs: [build-android, build-zygisk, build-windows]
+    needs: [build-android, build-windows]
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, '[ci skip]')"
     steps:
@@ -232,6 +201,5 @@ jobs:
           body_path: CHANGELOG.md
           files: |
             artifacts/android/*
-            artifacts/zygisk/*
             artifacts/windows/*
           tag_name: ${{ env.RELEASE_VERSION }}

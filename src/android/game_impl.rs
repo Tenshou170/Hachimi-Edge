@@ -8,7 +8,7 @@ use jni::{
 };
 use once_cell::sync::OnceCell;
 
-use crate::{android::zygisk, core::game::Region};
+use crate::core::game::Region;
 
 #[repr(C)]
 struct AAssetManager {
@@ -34,23 +34,18 @@ static INTERNAL_FILES_DIR: OnceCell<Option<PathBuf>> = OnceCell::new();
 const INTERNAL_FILES_MARKER: &CStr = c"hachimi_internal_files";
 
 pub fn get_package_name() -> String {
-    match zygisk::get_package_name() {
-        Some(name) => name.clone(),
-        None => {
-            let proc = Process::myself().unwrap_or_else(|_| {
-                error!("FATAL: Failed to read /proc/self");
-                process::exit(1);
-            });
-            let cmdline = proc.cmdline().unwrap_or_else(|_| {
-                error!("FATAL: Failed to read /proc/self/cmdline");
-                process::exit(1);
-            });
-            cmdline.first().unwrap_or_else(|| {
-                error!("FATAL: Invalid cmdline");
-                process::exit(1);
-            }).to_owned()
-        }
-    }
+    let proc = Process::myself().unwrap_or_else(|_| {
+        error!("FATAL: Failed to read /proc/self");
+        process::exit(1);
+    });
+    let cmdline = proc.cmdline().unwrap_or_else(|_| {
+        error!("FATAL: Failed to read /proc/self/cmdline");
+        process::exit(1);
+    });
+    cmdline.first().unwrap_or_else(|| {
+        error!("FATAL: Invalid cmdline");
+        process::exit(1);
+    }).to_owned()
 }
 
 pub fn get_region(package_name: &str) -> Region {

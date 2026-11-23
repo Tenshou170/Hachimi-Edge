@@ -16,7 +16,6 @@ git clone https://github.com/Tenshou170/Hachimi-Edge.git
 cd Hachimi-Edge
 ```
 
-git 작업 트리에 커밋되지 않은 변경 사항이 있으면 Zygisk 빌드는 모듈 버전에 `-dirty` 접미사를 붙입니다. 이를 숨기려면 `HACHIMI_IGNORE_DIRTY=true`로 설정하세요(CI는 `false`로 고정하여 로컬 수정 사항이 아티팩트에 표시되도록 합니다).
 
 ---
 
@@ -48,7 +47,6 @@ git 작업 트리에 커밋되지 않은 변경 사항이 있으면 Zygisk 빌�
   ```bash
   rustup target add aarch64-linux-android
   ```
-- Zygisk 모듈을 패키징할 때는 호스트에 `zip`이 필요합니다.
 
 ---
 
@@ -123,16 +121,6 @@ RELEASE=1 ./tools/android/build.sh
 **API 레벨 24**와 **16KB 페이지 크기 정렬**로 빌드되어 Android 7.0부터 Android 15+까지 완전히 호환됩니다.
 
 **출력:** `build/libmain-arm64-v8a.so`, 그리고 `build/sha256.json`(`sha256sum` 또는 `shasum`이 있는 경우 생성).
-
-### Zygisk 모듈 (Android)
-
-```bash
-RELEASE=1 ./tools/android/build_zygisk.sh
-```
-
-Android 릴리스 빌드를 실행하고, NDK의 `llvm-strip`으로 디버그 심볼을 제거하고, `tools/android/zygisk-template`에서 모듈을 패키징하며, 파일별 SHA-256 체크섬을 작성합니다.
-
-**출력:** `build/zygisk-hachimi-edge-v<버전>-<커밋>[-dirty]-release.zip`(Magisk/KernelSU에 설치 가능한 모듈). 호스트에 `zip`이 필요합니다.
 
 ### 추가 Cargo 인수
 

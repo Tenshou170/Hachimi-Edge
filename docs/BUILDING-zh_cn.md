@@ -16,7 +16,6 @@ git clone https://github.com/Tenshou170/Hachimi-Edge.git
 cd Hachimi-Edge
 ```
 
-如果 git 工作区存在未提交的改动，Zygisk 构建会在模块版本号后附加 `-dirty` 后缀。设置 `HACHIMI_IGNORE_DIRTY=true` 可禁用该行为（CI 固定为 `false`，以便在构建产物中保留本地修改的标记）。
 
 ---
 
@@ -48,7 +47,6 @@ cd Hachimi-Edge
   ```bash
   rustup target add aarch64-linux-android
   ```
-- 打包 Zygisk 模块时，主机需要安装 `zip`。
 
 ---
 
@@ -123,16 +121,6 @@ RELEASE=1 ./tools/android/build.sh
 使用 **API 级别 24** 及 **16KB 内存页面大小对齐** 进行构建，完全兼容 Android 7.0 至 Android 15+。
 
 **构建产物：** `build/libmain-arm64-v8a.so`，以及 `build/sha256.json`（有 `sha256sum` 或 `shasum` 时生成）。
-
-### Zygisk 模块（Android）
-
-```bash
-RELEASE=1 ./tools/android/build_zygisk.sh
-```
-
-该脚本会执行 Android 发布构建，用 NDK 自带的 `llvm-strip` 去除调试符号，从 `tools/android/zygisk-template` 打包模块，并为每个文件写入 SHA-256 校验和。
-
-**构建产物：** `build/zygisk-hachimi-edge-v<版本>-<提交>[-dirty]-release.zip`（可用于 Magisk/KernelSU 安装的模块）。主机需要安装 `zip`。
 
 ### 额外的 Cargo 参数
 

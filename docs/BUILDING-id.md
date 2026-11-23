@@ -16,7 +16,6 @@ git clone https://github.com/Tenshou170/Hachimi-Edge.git
 cd Hachimi-Edge
 ```
 
-Jika pohon kerja git memiliki perubahan yang belum dikomit, build Zygisk menambahkan akhiran `-dirty` ke versi modul. Tetapkan `HACHIMI_IGNORE_DIRTY=true` untuk menonaktifkannya (CI menguncinya ke `false` agar modifikasi lokal tetap terlihat di artefak).
 
 ---
 
@@ -48,7 +47,6 @@ Instal toolchain Rust stable terbaru melalui [rustup.rs](https://rustup.rs/).
   ```bash
   rustup target add aarch64-linux-android
   ```
-- `zip` diperlukan pada host saat mengemas modul Zygisk.
 
 ---
 
@@ -123,16 +121,6 @@ RELEASE=1 ./tools/android/build.sh
 Membangun dengan **API level 24** dan **penyelarasan ukuran halaman 16 KB**, memberikan kompatibilitas penuh dari Android 7.0 hingga Android 15+.
 
 **Keluaran:** `build/libmain-arm64-v8a.so`, ditambah `build/sha256.json` (dibuat saat `sha256sum` atau `shasum` tersedia).
-
-### Modul Zygisk (Android)
-
-```bash
-RELEASE=1 ./tools/android/build_zygisk.sh
-```
-
-Menjalankan build rilis Android, menghapus simbol debug dengan `llvm-strip` milik NDK, mengemas modul dari `tools/android/zygisk-template`, dan menulis checksum SHA-256 untuk setiap berkas.
-
-**Keluaran:** `build/zygisk-hachimi-edge-v<versi>-<commit>[-dirty]-release.zip` (modul yang dapat diinstal di Magisk/KernelSU). Memerlukan `zip` pada host.
 
 ### Argumen Cargo Tambahan
 

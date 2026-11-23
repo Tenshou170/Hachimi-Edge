@@ -16,7 +16,6 @@ git clone https://github.com/Tenshou170/Hachimi-Edge.git
 cd Hachimi-Edge
 ```
 
-Nếu cây làm việc của git có thay đổi chưa commit, bản build Zygisk sẽ thêm hậu tố `-dirty` vào phiên bản module. Đặt `HACHIMI_IGNORE_DIRTY=true` để tắt hành vi này (CI cố định là `false` để các chỉnh sửa cục bộ hiện rõ trong sản phẩm build).
 
 ---
 
@@ -48,7 +47,6 @@ Cài bộ công cụ Rust stable mới nhất qua [rustup.rs](https://rustup.rs/
   ```bash
   rustup target add aarch64-linux-android
   ```
-- Cần `zip` trên máy khi đóng gói module Zygisk.
 
 ---
 
@@ -123,16 +121,6 @@ RELEASE=1 ./tools/android/build.sh
 Build với **API level 24** và **căn chỉnh kích thước trang 16 KB**, tương thích hoàn toàn từ Android 7.0 đến Android 15+.
 
 **Kết quả:** `build/libmain-arm64-v8a.so`, cùng với `build/sha256.json` (tạo khi có `sha256sum` hoặc `shasum`).
-
-### Module Zygisk (Android)
-
-```bash
-RELEASE=1 ./tools/android/build_zygisk.sh
-```
-
-Chạy bản build release của Android, gỡ ký hiệu debug bằng `llvm-strip` của NDK, đóng gói module từ `tools/android/zygisk-template`, và ghi checksum SHA-256 cho từng tệp.
-
-**Kết quả:** `build/zygisk-hachimi-edge-v<phiên bản>-<commit>[-dirty]-release.zip` (module cài được qua Magisk/KernelSU). Cần `zip` trên máy chủ.
 
 ### Tham số Cargo bổ sung
 

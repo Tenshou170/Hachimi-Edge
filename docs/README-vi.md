@@ -46,7 +46,7 @@ Dự án này sửa đổi hành vi runtime của trò chơi và vi phạm Đi�
 - **Cấu hình ngay trong game:** Trình chỉnh sửa cấu hình GUI tích hợp cho phép tinh chỉnh cài đặt theo thời gian thực mà không cần khởi động lại ứng dụng.
 - **Tự động cập nhật bản địa hóa:** Trình cập nhật tích hợp tải về và nạp lại các gói dịch thuật mới ngay khi trò chơi đang chạy.
 - **Cải thiện đồ họa:** Các tính năng tối ưu thiết bị, bao gồm mở khóa giới hạn tốc độ khung hình (FPS unlock) và co giãn độ phân giải.
-- **Đa nền tảng:** Hỗ trợ gốc trên Windows (DLL proxy DirectX 11) và Android (hook nội tuyến Zygisk / Dobby).
+- **Đa nền tảng:** Hỗ trợ gốc trên Windows (DLL proxy DirectX 11) và Android (hook nội tuyến Dobby).
 - **Tích hợp desktop Windows:** Discord Rich Presence, điều khiển đa phương tiện Windows Media Transport (SMTC) với hình thu nhỏ bìa bài hát trực tiếp, và báo cáo tiến trình trên thanh tác vụ.
 
 ## Cài đặt

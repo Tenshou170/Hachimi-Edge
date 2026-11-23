@@ -16,8 +16,6 @@ git clone https://github.com/Tenshou170/Hachimi-Edge.git
 cd Hachimi-Edge
 ```
 
-If the git working tree has uncommitted changes, the Zygisk build appends a `-dirty` suffix to the module version. Set `HACHIMI_IGNORE_DIRTY=true` to suppress this (CI pins it to `false` so local modifications stay visible in artifacts).
-
 ---
 
 ## 2. Prerequisites
@@ -48,7 +46,6 @@ Install the latest stable Rust toolchain via [rustup.rs](https://rustup.rs/).
   ```bash
   rustup target add aarch64-linux-android
   ```
-- `zip` is required on the host when packaging the Zygisk module.
 
 ---
 
@@ -124,19 +121,9 @@ Builds against **API level 24** with **16 KB page-size alignment**, giving full 
 
 **Output:** `build/libmain-arm64-v8a.so`, plus `build/sha256.json` (generated when `sha256sum` or `shasum` is available).
 
-### Zygisk Module (Android)
-
-```bash
-RELEASE=1 ./tools/android/build_zygisk.sh
-```
-
-Runs the Android release build, strips debug symbols with the NDK's `llvm-strip`, packages the module from `tools/android/zygisk-template`, and writes per-file SHA-256 checksums.
-
-**Output:** `build/zygisk-hachimi-edge-v<version>-<commit>[-dirty]-release.zip` (a Magisk/KernelSU-installable module). Requires `zip` on the host.
-
 ### Extra Cargo Arguments
 
-Both build scripts forward additional arguments to cargo via `CARGOARGS`:
+The build scripts forward additional arguments to cargo via `CARGOARGS`:
 
 ```bash
 RELEASE=1 CARGOARGS="--features some_feature" ./tools/windows/build.sh

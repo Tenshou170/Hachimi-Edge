@@ -16,7 +16,6 @@ git clone https://github.com/Tenshou170/Hachimi-Edge.git
 cd Hachimi-Edge
 ```
 
-git ワーキングツリーに未コミットの変更がある場合、Zygisk のビルドではモジュールのバージョンに `-dirty` 接尾辞が付きます。`HACHIMI_IGNORE_DIRTY=true` を設定するとこれを抑制できます（CI では `false` 固定で、ローカルの変更は成果物に反映されます）。
 
 ---
 
@@ -48,7 +47,6 @@ git ワーキングツリーに未コミットの変更がある場合、Zygisk 
   ```bash
   rustup target add aarch64-linux-android
   ```
-- Zygisk モジュールのパッケージングにはホスト側に `zip` が必要です。
 
 ---
 
@@ -123,16 +121,6 @@ RELEASE=1 ./tools/android/build.sh
 **API レベル 24** と **16 KB ページサイズアラインメント** でビルドされ、Android 7.0 から Android 15+ まで完全に互換性があります。
 
 **出力：** `build/libmain-arm64-v8a.so`、および `build/sha256.json`（`sha256sum` または `shasum` がある場合に生成）。
-
-### Zygisk モジュール（Android）
-
-```bash
-RELEASE=1 ./tools/android/build_zygisk.sh
-```
-
-Android のリリースビルドを実行し、NDK の `llvm-strip` でデバッグシンボルを除去、`tools/android/zygisk-template` からモジュールをパッケージングし、ファイルごとの SHA-256 チェックサムを書き出します。
-
-**出力：** `build/zygisk-hachimi-edge-v<バージョン>-<コミット>[-dirty]-release.zip`（Magisk/KernelSU にインストール可能なモジュール）。ホストには `zip` が必要です。
 
 ### 追加の Cargo 引数
 

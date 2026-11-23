@@ -16,7 +16,6 @@ git clone https://github.com/Tenshou170/Hachimi-Edge.git
 cd Hachimi-Edge
 ```
 
-Если в рабочем дереве git есть незакоммиченные изменения, сборка Zygisk добавит суффикс `-dirty` к версии модуля. Задайте `HACHIMI_IGNORE_DIRTY=true`, чтобы отключить это (в CI зафиксировано `false`, чтобы локальные изменения были видны в артефактах).
 
 ---
 
@@ -48,7 +47,6 @@ cd Hachimi-Edge
   ```bash
   rustup target add aarch64-linux-android
   ```
-- Для упаковки Zygisk-модуля на хосте требуется `zip`.
 
 ---
 
@@ -123,16 +121,6 @@ RELEASE=1 ./tools/android/build.sh
 Сборка выполняется для **API уровня 24** с **выравниванием по страницам 16 КБ**, что обеспечивает полную совместимость от Android 7.0 до Android 15+.
 
 **Результат:** `build/libmain-arm64-v8a.so`, а также `build/sha256.json` (создаётся при наличии `sha256sum` или `shasum`).
-
-### Zygisk-модуль (Android)
-
-```bash
-RELEASE=1 ./tools/android/build_zygisk.sh
-```
-
-Запускает релизную сборку Android, убирает отладочные символы через `llvm-strip` из NDK, упаковывает модуль из `tools/android/zygisk-template` и записывает SHA-256 контрольные суммы для каждого файла.
-
-**Результат:** `build/zygisk-hachimi-edge-v<версия>-<коммит>[-dirty]-release.zip` (модуль, устанавливаемый через Magisk/KernelSU). Требуется `zip` на хосте.
 
 ### Дополнительные аргументы Cargo
 

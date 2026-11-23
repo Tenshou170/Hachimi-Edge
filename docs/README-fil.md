@@ -46,7 +46,7 @@ Binabago ng proyektong ito ang pag-uugali ng laro sa runtime at lumalabag sa Mga
 - **Configuration sa Loob ng Laro:** Naka-embed na GUI configuration editor na nagbibigay-daan sa real-time na pagbabago ng mga setting nang hindi nagre-restart ng aplikasyon.
 - **Awtomatikong Update ng Lokalisasyon:** Ang built-in na updater ay nagda-download at nagre-reload ng mga napabantaying translation package nang direkta habang tumatakbo ang laro.
 - **Pagpapahusay sa Graphics:** Mga tampok na pag-optimize ng device, kabilang ang pag-unlock ng target frame rate (FPS unlock) at resolution scaling.
-- **Cross-Platform:** Native na suporta para sa Windows (DirectX 11 proxy DLL) at Android (Zygisk / Dobby inline hooks).
+- **Cross-Platform:** Native na suporta para sa Windows (DirectX 11 proxy DLL) at Android (Dobby inline hooks).
 - **Mga Integration sa Windows Desktop:** Discord Rich Presence, mga control ng media ng Windows Media Transport (SMTC) na may live na jacket thumbnail, at pag-uulat ng progreso sa taskbar.
 
 ## Pag-install

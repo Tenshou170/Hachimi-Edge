@@ -46,7 +46,7 @@ Proyek ini memodifikasi perilaku runtime game dan melanggar Ketentuan Layanan (T
 - **Konfigurasi Dalam Game:** Editor konfigurasi GUI tersemat memungkinkan penyesuaian pengaturan secara real-time tanpa memulai ulang aplikasi.
 - **Pembaruan Lokalisasi Otomatis:** Pembaru terintegrasi mengunduh dan memuat ulang paket terjemahan terbaru langsung saat game berjalan.
 - **Peningkatan Grafis:** Fitur optimisasi perangkat termasuk membuka kunci target frame rate (unlock FPS) dan penskalaan resolusi.
-- **Lintas Platform:** Dukungan native untuk Windows (proxy DLL DirectX 11) dan Android (inline hook Zygisk / Dobby).
+- **Lintas Platform:** Dukungan native untuk Windows (proxy DLL DirectX 11) dan Android (inline hook Dobby).
 - **Integrasi Desktop Windows:** Discord Rich Presence, kontrol media Windows Media Transport (SMTC) dengan thumbnail sampul live, dan pelaporan kemajuan di taskbar.
 
 ## Instalasi

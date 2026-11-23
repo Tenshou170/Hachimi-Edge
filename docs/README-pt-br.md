@@ -46,7 +46,7 @@ Este projeto modifica o comportamento do jogo em tempo de execução e viola os 
 - **Configuração no jogo:** O editor de configurações com GUI integrado permite ajustes em tempo real sem reiniciar o aplicativo.
 - **Atualizações automáticas de localização:** O atualizador integrado baixa e recarrega pacotes de tradução atualizados diretamente durante a execução do jogo.
 - **Aprimoramentos gráficos:** Recursos de otimização do dispositivo, incluindo desbloqueio de taxa de quadros (FPS unlock) e escalonamento de resolução.
-- **Multiplataforma:** Suporte nativo para Windows (DLL proxy DirectX 11) e Android (hooks inline Zygisk / Dobby).
+- **Multiplataforma:** Suporte nativo para Windows (DLL proxy DirectX 11) e Android (hooks inline Dobby).
 - **Integrações com a área de trabalho do Windows:** Discord Rich Presence, controles de mídia do Windows Media Transport (SMTC) com miniaturas de capas ao vivo e relatório de progresso na barra de tarefas.
 
 ## Instalação

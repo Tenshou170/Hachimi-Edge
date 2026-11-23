@@ -1,5 +1,4 @@
 mod main;
-mod zygisk;
 mod hook;
 pub mod utils;
 mod plugin_loader;

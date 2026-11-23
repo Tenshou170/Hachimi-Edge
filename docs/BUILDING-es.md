@@ -16,7 +16,6 @@ git clone https://github.com/Tenshou170/Hachimi-Edge.git
 cd Hachimi-Edge
 ```
 
-Si el árbol de trabajo de git tiene cambios sin confirmar, la compilación de Zygisk añade un sufijo `-dirty` a la versión del módulo. Establece `HACHIMI_IGNORE_DIRTY=true` para suprimirlo (CI lo fija en `false` para que las modificaciones locales se reflejen en los artefactos).
 
 ---
 
@@ -48,7 +47,6 @@ Instala la última versión estable de Rust a través de [rustup.rs](https://rus
   ```bash
   rustup target add aarch64-linux-android
   ```
-- Se requiere `zip` en el host al empaquetar el módulo Zygisk.
 
 ---
 
@@ -123,16 +121,6 @@ RELEASE=1 ./tools/android/build.sh
 Compila contra el **nivel de API 24** con **alineación de páginas de 16 KB**, ofreciendo compatibilidad completa desde Android 7.0 hasta Android 15+.
 
 **Salida:** `build/libmain-arm64-v8a.so`, además de `build/sha256.json` (generado si hay `sha256sum` o `shasum` disponible).
-
-### Módulo Zygisk (Android)
-
-```bash
-RELEASE=1 ./tools/android/build_zygisk.sh
-```
-
-Ejecuta la compilación de lanzamiento de Android, elimina los símbolos de depuración con `llvm-strip` del NDK, empaqueta el módulo desde `tools/android/zygisk-template` y escribe sumas de verificación SHA-256 por archivo.
-
-**Salida:** `build/zygisk-hachimi-edge-v<versión>-<commit>[-dirty]-release.zip` (módulo instalable en Magisk/KernelSU). Requiere `zip` en el host.
 
 ### Argumentos adicionales de Cargo
 

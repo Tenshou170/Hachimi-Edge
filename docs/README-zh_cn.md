@@ -46,7 +46,7 @@
 - **内置控制面板：** 内置 GUI 配置编辑器，支持在游戏运行时即时调整设置，无需重启游戏。
 - **自动更新机制：** 内置更新器可在游戏运行期间后台下载并实时加载最新翻译包。
 - **画质与性能优化：** 提供解锁帧率限制（FPS Unlock）及分辨率缩放等图形配置项。
-- **跨平台支持：** 原生支持 Windows（DirectX 11 代理 DLL）与 Android（Zygisk / Dobby 内联 Hook）。
+- **跨平台支持：** 原生支持 Windows（DirectX 11 代理 DLL）与 Android（Dobby 内联 Hook）。
 - **Windows 桌面集成：** Discord Rich Presence、Windows 媒体传输控制（SMTC，含实时歌曲封面缩略图）以及任务栏进度显示。
 
 ## 安装指南
