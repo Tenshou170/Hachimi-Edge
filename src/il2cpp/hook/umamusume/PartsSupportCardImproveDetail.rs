@@ -1,11 +1,14 @@
-use crate::il2cpp::{
-    hook::{
-        UnityEngine_CoreModule::{Component, GameObject, Object},
-        UnityEngine_UI::Text,
+use crate::{
+    core::{game::Region, Hachimi},
+    il2cpp::{
+        hook::{
+            UnityEngine_CoreModule::{Component, GameObject, Object},
+            UnityEngine_UI::Text,
+        },
+        symbols::{get_field_from_name, get_method_addr},
+        types::*,
+        utils,
     },
-    symbols::{get_field_from_name, get_method_addr},
-    types::*,
-    utils,
 };
 
 def_field_object_accessors!(get get_titleNameText, TITLENAME_TEXT_FIELD, Il2CppObject);
@@ -41,6 +44,9 @@ extern "C" fn Setup(this: *mut Il2CppObject, workSupportCard: *mut Il2CppObject,
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
+    if Hachimi::instance().game.region == Region::Global {
+        return;
+    }
     get_class_or_return!(umamusume, Gallop, PartsSupportCardImproveDetail);
 
     let Setup_addr = get_method_addr(PartsSupportCardImproveDetail, c"Setup", 4);
