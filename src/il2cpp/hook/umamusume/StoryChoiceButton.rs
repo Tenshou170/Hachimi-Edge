@@ -60,7 +60,9 @@ extern "C" fn SetTextStatic(an_text: *mut Il2CppObject, text_ptr: *mut Il2CppStr
     get_orig_fn!(SetTextStatic, SetTextStaticFn)(an_text, text_ptr);
     
     if text_ptr.is_null() || an_text.is_null() { return; }
-    
+
+    AnText::set__textAnchor(an_text, 3);
+
     let text_str = unsafe { (*text_ptr).as_utf16str().to_string() };
     let config = Hachimi::instance().localized_data.load().config.story_choice_multi_line.clone();
     
@@ -81,36 +83,30 @@ extern "C" fn SetTextStatic(an_text: *mut Il2CppObject, text_ptr: *mut Il2CppStr
 fn apply_multi_line_fix(this: *mut Il2CppObject, text_ptr: *mut Il2CppString) {
     if text_ptr.is_null() { return; }
 
+    let text_objects = [
+        get__normalText(this),
+        get__pushText(this),
+        get__outlineText(this),
+    ];
+
     let text_str = unsafe { (*text_ptr).as_utf16str().to_string() };
     let config = Hachimi::instance().localized_data.load().config.story_choice_multi_line.clone();
+    let is_multiline = text_str.contains('\n');
 
-    if let Some(config) = config {
-        let text_objects = [
-            get__normalText(this),
-            get__pushText(this),
-            get__outlineText(this),
-        ];
-
-        // apply font_size if objects are found
-        if let Some(font_size) = config.font_size {
-            for &text_obj in &text_objects {
-                if !text_obj.is_null() {
-                    AnText::set__fontSize(text_obj, font_size);
-                }
-            }
+    for &text_obj in &text_objects {
+        if text_obj.is_null() {
+            continue;
         }
+        AnText::set__textAnchor(text_obj, 3);
 
-        if text_str.contains('\n') {
-            for &text_obj in &text_objects {
-                if !text_obj.is_null() {
-                    apply_multi_line_to_text(text_obj, &config);
-                }
+        if let Some(ref config) = config {
+            if let Some(font_size) = config.font_size {
+                AnText::set__fontSize(text_obj, font_size);
             }
-        } else {
-            for &text_obj in &text_objects {
-                if !text_obj.is_null() {
-                    reset_text_to_default(text_obj);
-                }
+            if is_multiline {
+                apply_multi_line_to_text(text_obj, config);
+            } else {
+                reset_text_to_default(text_obj);
             }
         }
     }

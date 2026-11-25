@@ -29,6 +29,11 @@ pub fn set__textOffset(this: *mut Il2CppObject, offset: Vector2_t) {
     _UpdatePosition(this);
 }
 
+static mut TEXT_ANCHOR_FIELD: *mut FieldInfo = null_mut();
+pub fn set__textAnchor(this: *mut Il2CppObject, anchor: i32) {
+    set_field_value(this, unsafe { TEXT_ANCHOR_FIELD }, &anchor);
+}
+
 static mut TEXT_FIELD: *mut FieldInfo = null_mut();
 
 pub fn get__text(this: *mut Il2CppObject) -> *mut Il2CppString {
@@ -204,6 +209,7 @@ pub fn init(image: *const Il2CppImage) {
 
     unsafe {
         TEXT_OFFSET_FIELD = get_field_from_name(AnText, c"_textOffset");
+        TEXT_ANCHOR_FIELD = get_field_from_name(AnText, c"_textAnchor");
         LINESPACE_FIELD = get_field_from_name(AnText, c"_lineSpace");
         FONTSIZE_FIELD = get_field_from_name(AnText, c"_fontSize");
         TEXT_FIELD = get_field_from_name(AnText, c"_text");
