@@ -96,6 +96,7 @@ mod DownloadErrorProcessor;
 mod TitleViewController;
 pub mod TitleView;
 pub mod PartsCharacterProperList;
+pub mod PartsSingleModeStartProperFrame;
 pub mod ProperIcon;
 pub mod Director;
 mod CySpringNative;
@@ -305,6 +306,7 @@ pub fn init() {
     TitleViewController::init(image);
     TitleView::init(image);
     PartsCharacterProperList::init(image);
+    PartsSingleModeStartProperFrame::init(image);
     ProperIcon::init(image);
     Director::init(image);
     CySpringNative::init(image);

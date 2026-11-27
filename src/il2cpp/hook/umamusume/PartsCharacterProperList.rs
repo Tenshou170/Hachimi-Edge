@@ -3,27 +3,20 @@ use std::ptr::null_mut;
 use crate::{
     core::{game::Region, Hachimi},
     il2cpp::{
-        ext::StringExt,
+        ext::Il2CppObjectExt,
         hook::{
-            UnityEngine_CoreModule::{Component, GameObject, Transform},
+            UnityEngine_CoreModule::{Component, RectTransform, Transform},
             UnityEngine_UI::Text,
         },
-        symbols::{get_field_from_name, get_field_object_value, get_method_addr, get_type_object_for_class},
+        symbols::{get_field_from_name, get_field_object_value, get_method_addr},
         types::*,
+        utils::get_text_component,
     },
 };
 
-use super::{ProperIcon, TextCommon};
+use super::ProperIcon;
 
 static mut CLASS: *mut Il2CppClass = null_mut();
-pub fn class() -> *mut Il2CppClass {
-    unsafe { CLASS }
-}
-
-static mut TYPE_OBJECT: *mut Il2CppObject = null_mut();
-pub fn type_object() -> *mut Il2CppObject {
-    unsafe { TYPE_OBJECT }
-}
 
 // PartsCharacterProperList backing fields
 static mut PROPER_TURF_ICON_FIELD: *mut FieldInfo = null_mut();
@@ -76,41 +69,34 @@ pub fn get_ProperOikomiIcon(this: *mut Il2CppObject) -> *mut Il2CppObject {
     get_field_object_value(this, unsafe { PROPER_OIKOMI_ICON_FIELD })
 }
 
-const ICON_GETTERS: [fn(*mut Il2CppObject) -> *mut Il2CppObject; 10] = [
-    get_ProperTurfIcon,
-    get_ProperDirtIcon,
-    get_ProperShortIcon,
-    get_ProperMileIcon,
-    get_ProperMiddleIcon,
-    get_ProperLongIcon,
-    get_ProperNigeIcon,
-    get_ProperSenkoIcon,
-    get_ProperSashiIcon,
-    get_ProperOikomiIcon,
+const LOG_RESULTS_LAYOUTS: [(&[fn(*mut Il2CppObject) -> *mut Il2CppObject], f32, f32); 2] = [
+    (&[get_ProperTurfIcon, get_ProperShortIcon, get_ProperNigeIcon], -34.0, -42.0),
+    (&[get_ProperDirtIcon, get_ProperMileIcon, get_ProperMiddleIcon, get_ProperLongIcon, get_ProperSenkoIcon, get_ProperSashiIcon, get_ProperOikomiIcon], -40.0, -22.0),
 ];
+
+fn is_log_results(tr: *mut Il2CppObject) -> bool {
+    if unsafe { &*tr }.name() != "PartsSingleModeProperList" {
+        return false;
+    }
+
+    let mut curr = Transform::get_parent(tr);
+    for _ in 0..16 {
+        if curr.is_null() {
+            break;
+        }
+        if unsafe { &*curr }.name().starts_with("PartsIdleSingleModeResultLogTopics") {
+            return true;
+        }
+        curr = Transform::get_parent(curr);
+    }
+    false
+}
 
 const HEADER_PATHS: [&str; 3] = [
     "ContentsRoot/ProperGroundRoot/ProperGroundText",
     "ContentsRoot/ProperDistanceRoot/ProperDistanceText",
     "ContentsRoot/ProperRunStyleRoot/ProperRunStyleText",
 ];
-
-fn get_text_component(tr: *mut Il2CppObject, path: &str) -> *mut Il2CppObject {
-    let child = Transform::Find(tr, path.to_il2cpp_string());
-    if child.is_null() {
-        return null_mut();
-    }
-    let go = Component::get_gameObject(child);
-    if go.is_null() {
-        return null_mut();
-    }
-    let text = GameObject::GetComponent(go, TextCommon::type_object());
-    if !text.is_null() {
-        text
-    } else {
-        GameObject::GetComponent(go, Text::type_object())
-    }
-}
 
 type SetupFn = extern "C" fn(this: *mut Il2CppObject, parameter: *mut Il2CppObject, display_type: i32);
 extern "C" fn Setup(this: *mut Il2CppObject, parameter: *mut Il2CppObject, display_type: i32) {
@@ -125,39 +111,41 @@ extern "C" fn Setup(this: *mut Il2CppObject, parameter: *mut Il2CppObject, displ
         return;
     }
 
-    // Resolve 3 header texts
-    let mut headers = [null_mut(); 3];
-    for (i, &path) in HEADER_PATHS.iter().enumerate() {
+    // apply header adjustments
+    for &path in &HEADER_PATHS {
         let text = get_text_component(tr, path);
         if text.is_null() {
             warn!("[PartsCharacterProperList] Header text not found: {path}");
-            return;
+            continue;
         }
-        headers[i] = text;
-    }
+        Text::set_resizeTextForBestFit(text, true);
+        Text::set_resizeTextMaxSize(text, 34);
 
-    // Resolve 10 icons and validate their title components
-    let mut icons = [null_mut(); 10];
-    for (i, &getter) in ICON_GETTERS.iter().enumerate() {
-        let icon = getter(this);
-        let text = ProperIcon::get_title(icon);
         let text_tr = Component::get_transform(text);
-        if text.is_null() || text_tr.is_null() {
-            warn!("[PartsCharacterProperList] Icon text at index {i} not found");
-            return;
+        if !text_tr.is_null() {
+            let mut size_delta = RectTransform::get_sizeDelta(text_tr);
+            size_delta.x = 184.93289;
+            RectTransform::set_sizeDelta(text_tr, size_delta);
+
+            let mut anchored_pos = RectTransform::get_anchoredPosition(text_tr);
+            anchored_pos.x = 96.7;
+            RectTransform::set_anchoredPosition(text_tr, anchored_pos);
         }
-        icons[i] = icon;
     }
 
-    // Apply header adjustments
-    for text in headers {
-        Text::set_fontSize(text, 32);
-        Text::set_horizontalOverflow(text, 1);
-    }
-
-    // Delegate icon title adjustments to ProperIcon
-    for icon in icons {
-        ProperIcon::apply_title_settings(icon);
+    // delegate adjustments to ProperIcon
+    if is_log_results(tr) {
+        for &(getters, anchored_pos_x, size_delta_x) in &LOG_RESULTS_LAYOUTS {
+            for &getter in getters {
+                ProperIcon::apply_title_layout(getter(this), anchored_pos_x, size_delta_x);
+            }
+        }
+    } else {
+        for &(getters, _, _) in &LOG_RESULTS_LAYOUTS {
+            for &getter in getters {
+                ProperIcon::apply_title_settings(getter(this));
+            }
+        }
     }
 }
 
@@ -170,7 +158,6 @@ pub fn init(umamusume: *const Il2CppImage) {
 
     unsafe {
         CLASS = PartsCharacterProperList;
-        TYPE_OBJECT = get_type_object_for_class(PartsCharacterProperList);
 
         PROPER_TURF_ICON_FIELD = get_field_from_name(PartsCharacterProperList, c"<ProperTurfIcon>k__BackingField");
         PROPER_DIRT_ICON_FIELD = get_field_from_name(PartsCharacterProperList, c"<ProperDirtIcon>k__BackingField");

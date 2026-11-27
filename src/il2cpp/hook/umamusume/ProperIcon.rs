@@ -32,15 +32,38 @@ pub fn get_title(this: *mut Il2CppObject) -> *mut Il2CppObject {
 
 pub fn apply_title_settings(this: *mut Il2CppObject) {
     let text = get_title(this);
+    if text.is_null() {
+        return;
+    }
     let text_tr = Component::get_transform(text);
-    if text.is_null() || text_tr.is_null() {
+    if text_tr.is_null() {
         return;
     }
 
     Text::set_resizeTextForBestFit(text, true);
-    Text::set_resizeTextMaxSize(text, 30);
-    RectTransform::set_anchoredPosition(text_tr, Vector2_t { x: -21.21, y: 1.0 });
-    RectTransform::set_sizeDelta(text_tr, Vector2_t { x: -61.61448, y: -9.05019 });
+    Text::set_resizeTextMaxSize(text, 34);
+    RectTransform::set_anchoredPosition(text_tr, Vector2_t { x: -24.21, y: 1.0 });
+    RectTransform::set_sizeDelta(text_tr, Vector2_t { x: -59.61448, y: -9.05019 });
+}
+
+pub fn apply_title_layout(this: *mut Il2CppObject, anchored_pos_x: f32, size_delta_x: f32) {
+    let text = get_title(this);
+    if text.is_null() {
+        return;
+    }
+    let text_tr = Component::get_transform(text);
+    if text_tr.is_null() {
+        return;
+    }
+
+    Text::set_resizeTextForBestFit(text, true);
+    Text::set_resizeTextMaxSize(text, 34);
+
+    let mut anchored_pos = RectTransform::get_anchoredPosition(text_tr);
+    anchored_pos.x = anchored_pos_x;
+    RectTransform::set_anchoredPosition(text_tr, anchored_pos);
+
+    RectTransform::set_sizeDelta(text_tr, Vector2_t { x: size_delta_x, y: -11.0 });
 }
 
 pub fn init(umamusume: *const Il2CppImage) {

@@ -1,10 +1,11 @@
-use std::{fs, io::Write, path::{Path, PathBuf}};
+use std::{fs, io::Write, path::{Path, PathBuf}, ptr::null_mut};
 
-use crate::{core::utils::{get_file_modified_time, load_rgba_png_file}, il2cpp::{ext::{Il2CppObjectExt, Il2CppStringExt}, hook::UnityEngine_CoreModule::{Component, Object, RectTransform}, types::*}};
+use crate::{core::utils::{get_file_modified_time, load_rgba_png_file}, il2cpp::{ext::{Il2CppObjectExt, Il2CppStringExt, StringExt}, hook::UnityEngine_CoreModule::{Component, Object, RectTransform, Transform}, types::*}};
 
 use super::{
     hook::{mscorlib, UnityEngine_CoreModule::{Texture, Texture2D},
-    UnityEngine_ImageConversionModule::ImageConversion},
+    UnityEngine_ImageConversionModule::ImageConversion,
+    UnityEngine_UI::Text},
     symbols::{get_assembly_image, get_class, get_method_addr_cached, Array}
 };
 
@@ -157,6 +158,17 @@ pub fn replace_texture_with_diff_ex<P1: AsRef<Path>, P2: AsRef<Path>>(
     ImageConversion::LoadImage(texture, png_array.this, mark_non_readable);
 
     true
+}
+
+pub fn get_text_component(tr: *mut Il2CppObject, path: &str) -> *mut Il2CppObject {
+    if tr.is_null() {
+        return null_mut();
+    }
+    let found_tr = Transform::Find(tr, path.to_il2cpp_string());
+    if found_tr.is_null() {
+        return null_mut();
+    }
+    Component::GetComponent(found_tr, Text::type_object())
 }
 
 /// Changes the "active area" of the GameObject a Component is part of.
