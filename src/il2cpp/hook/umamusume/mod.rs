@@ -65,7 +65,6 @@ pub mod GallopRenderer;
 pub mod StoryTimelineBg3DClipData;
 pub mod DialogManager;
 mod CharacterHomeTopUI;
-mod CharacterHomeTopUIController;
 mod PartsGachaButton;
 mod PartsHorizontalTextSet;
 mod GachaExecutableUnit;
@@ -272,7 +271,6 @@ pub fn init() {
     TimeUtil::init(image);
     DialogManager::init(image);
     CharacterHomeTopUI::init(image);
-    CharacterHomeTopUIController::init(image);
     PartsGachaButton::init(image);
     PartsHorizontalTextSet::init(image);
     GachaExecutableUnit::init(image);
