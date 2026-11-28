@@ -217,16 +217,25 @@ impl Hachimi {
     }
 
     // region param is unused?
+    fn finalize_loaded_config(config: &mut Config) {
+        config.ui_theme_json = None;
+        if config.ui_theme_seed == egui::Color32::from_rgb(100, 150, 240) {
+            config.ui_theme_seed = Config::default_ui_theme_seed();
+        }
+        config.render_scale = if config.render_scale.is_finite() {
+            config.render_scale.clamp(0.1, 4.0)
+        } else {
+            1.0
+        };
+    }
+
     fn load_config(data_dir: &Path, _region: &Region) -> Result<Config, Error> {
         let config_path = data_dir.join("config.json");
         if fs::metadata(&config_path).is_ok() {
             let json = fs::read_to_string(&config_path)?;
             match serde_json::from_str::<Config>(&json) {
                 Ok(mut config) => {
-                    config.ui_theme_json = None;
-                    if config.ui_theme_seed == egui::Color32::from_rgb(100, 150, 240) {
-                        config.ui_theme_seed = Config::default_ui_theme_seed();
-                    }
+                    Self::finalize_loaded_config(&mut config);
                     Ok(config)
                 }
                 Err(e) => {
@@ -236,10 +245,7 @@ impl Hachimi {
                     if Self::sanitize_config_raw(&original_text, &config_path).is_ok() {
                         let sanitized_json = fs::read_to_string(&config_path)?;
                         if let Ok(mut config) = serde_json::from_str::<Config>(&sanitized_json) {
-                            config.ui_theme_json = None;
-                            if config.ui_theme_seed == egui::Color32::from_rgb(100, 150, 240) {
-                                config.ui_theme_seed = Config::default_ui_theme_seed();
-                            }
+                            Self::finalize_loaded_config(&mut config);
                             return Ok(config);
                         }
                     }
@@ -1069,6 +1075,16 @@ impl CaptionConfig {
     fn default_pos_y() -> f32 {
         -3.0
     }
+}
+
+#[derive(Deserialize, Serialize, Copy, Clone, Default, Eq, PartialEq, Hash)]
+pub enum SmaaQuality {
+    #[default] Off,
+    Fxaa,
+    Low,
+    Medium,
+    High,
+    Ultra,
 }
 
 #[derive(Deserialize, Serialize, Clone)]

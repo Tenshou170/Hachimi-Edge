@@ -67,8 +67,8 @@ extern "C" fn eglSwapBuffers(display: EGLDisplay, surface: EGLSurface) -> EGLBoo
         }
     };
 
-    // Skip if its empty, or it's still too early
-    if gui.is_empty() || gui.start_time.elapsed().as_secs_f32() < 1.0 {
+    // Skip if it's still too early
+    if gui.start_time.elapsed().as_secs_f32() < 1.0 {
         return orig_fn(display, surface);
     }
 
@@ -77,6 +77,17 @@ extern "C" fn eglSwapBuffers(display: EGLDisplay, surface: EGLSurface) -> EGLBoo
     let mut height = 0;
     eglQuerySurface(display, surface, EGL_WIDTH, &mut width);
     eglQuerySurface(display, surface, EGL_HEIGHT, &mut height);
+
+    {
+        let cfg = Hachimi::instance().config.load();
+        if let Some(smaa) = unsafe { SMAA_PASS.as_mut() } {
+            smaa.apply(width, height, cfg.android.smaa, cfg.android.smaa_temporal);
+        }
+    }
+
+    if gui.is_empty() {
+        return orig_fn(display, surface);
+    }
 
     gui.set_screen_size(width, height);
     let output = gui.run();
@@ -130,6 +141,7 @@ extern "C" fn eglSwapBuffers(display: EGLDisplay, surface: EGLSurface) -> EGLBoo
 
 static LAST_EGL_CONTEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static mut PAINTER: Option<egui_glow::Painter> = None;
+static mut SMAA_PASS: Option<super::smaa::SmaaPass> = None;
 
 fn init_painter(context: *mut c_void) -> Result<&'static mut egui_glow::Painter, Error> {
     let ctx_usize = context as usize;
@@ -137,6 +149,7 @@ fn init_painter(context: *mut c_void) -> Result<&'static mut egui_glow::Painter,
     if last != ctx_usize {
         unsafe {
             PAINTER = None;
+            SMAA_PASS = None;
         }
         LAST_EGL_CONTEXT.store(ctx_usize, std::sync::atomic::Ordering::Release);
     }
@@ -145,9 +158,11 @@ fn init_painter(context: *mut c_void) -> Result<&'static mut egui_glow::Painter,
         return Ok(painter);
     }
 
-    let gl = init_gl();
-    let painter = egui_glow::Painter::new(Arc::new(gl), "", None, false)?;
+    let gl = Arc::new(init_gl());
+    let smaa = super::smaa::SmaaPass::new(gl.clone());
+    let painter = egui_glow::Painter::new(gl, "", None, false)?;
     unsafe {
+        SMAA_PASS = smaa;
         PAINTER = Some(painter);
         info!("Painter initialized for EGLContext {:#x}", ctx_usize);
         Ok(PAINTER.as_mut().unwrap())

@@ -1,4 +1,5 @@
 mod render_hook;
+mod smaa;
 pub mod input_hook;
 pub mod keymap;
 

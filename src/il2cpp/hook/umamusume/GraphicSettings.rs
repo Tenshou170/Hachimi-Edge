@@ -1,6 +1,14 @@
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use serde::{Deserialize, Serialize};
 
-use crate::{core::Hachimi, il2cpp::{symbols::{SingletonLike, get_field_from_name, get_method_addr}, types::*}};
+use crate::{
+    core::{gui::{dialogs::SimpleOkDialog, Gui}, Hachimi},
+    il2cpp::{
+        hook::UnityEngine_CoreModule::SystemInfo,
+        symbols::{SingletonLike, get_field_from_name, get_method_addr},
+        types::*
+    }
+};
 
 use super::{LowResolutionCamera, SingleModeStartResultCharaViewer};
 
@@ -24,25 +32,135 @@ pub fn instance() -> *mut Il2CppObject {
     singleton.instance()
 }
 
+def_field_value_accessors!(get__resolutionScale, set__resolutionScale, RESSCALE_FIELD, f32);
+def_field_value_accessors!(get__resolutionScale2D, set__resolutionScale2D, RESSCALE2D_FIELD, f32);
+
+static ORIG_RES_SCALE: AtomicU32 = AtomicU32::new(u32::MAX);
+static ORIG_RES_SCALE_2D: AtomicU32 = AtomicU32::new(u32::MAX);
+
+fn sync_render_scale_field(
+    this: *mut Il2CppObject,
+    field: *mut crate::il2cpp::types::FieldInfo,
+    orig_store: &AtomicU32,
+    get_fn: fn(*mut Il2CppObject) -> f32,
+    set_fn: fn(*mut Il2CppObject, f32),
+    bypass: bool,
+) {
+    if field.is_null() {
+        return;
+    }
+    let render_scale = if bypass {
+        1.0
+    } else {
+        Hachimi::instance().config.load().render_scale.clamp(0.1, 4.0)
+    };
+    if render_scale != 1.0 {
+        let cur = get_fn(this);
+        if orig_store.load(Ordering::Relaxed) == u32::MAX {
+            orig_store.store(cur.to_bits(), Ordering::Relaxed);
+        }
+        if cur != render_scale {
+            set_fn(this, render_scale);
+        }
+    } else {
+        let orig_bits = orig_store.swap(u32::MAX, Ordering::Relaxed);
+        if orig_bits != u32::MAX {
+            set_fn(this, f32::from_bits(orig_bits));
+        }
+    }
+}
+
 type GetVirtualResolutionFn = extern "C" fn(this: *mut Il2CppObject) -> Vector2Int_t;
 extern "C" fn GetVirtualResolution(this: *mut Il2CppObject) -> Vector2Int_t {
+    let bypass = !super::GameSystem::is_initialized();
+    unsafe {
+        sync_render_scale_field(this, RESSCALE2D_FIELD, &ORIG_RES_SCALE_2D, get__resolutionScale2D, set__resolutionScale2D, bypass);
+    }
     let mut res = get_orig_fn!(GetVirtualResolution, GetVirtualResolutionFn)(this);
     let mult = Hachimi::instance().config.load().virtual_res_mult;
-    if mult != 1.0 {
+    if !bypass && mult != 1.0 {
         res *= mult;
     }
     res
 }
 
+static VRAM_GUARD_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+fn exceeds_gpu_limits(res: Vector2Int_t, msaa: MsaaQuality) -> Option<(i32, i32, u64, u64, i32)> {
+    let msaa_samples = match msaa {
+        MsaaQuality::Disabled => 1_u64,
+        m => m as u64,
+    };
+    let pixels = (res.x.max(0) as u64) * (res.y.max(0) as u64);
+    let est_mb = (pixels * (12 * msaa_samples + 24)) / (1024 * 1024);
+
+    let max_tex = SystemInfo::max_texture_size();
+    let max_tex = if max_tex > 0 { max_tex } else { 16384 };
+
+    let vram_mb = SystemInfo::graphics_memory_size_mb();
+    let vram_mb = if vram_mb > 0 { vram_mb } else { 4096 };
+    let budget_mb = (vram_mb as u64) * 40 / 100;
+
+    if res.x > max_tex || res.y > max_tex || est_mb > budget_mb {
+        Some((max_tex, msaa_samples as i32, est_mb, budget_mb, vram_mb))
+    } else {
+        None
+    }
+}
+
+fn trigger_vram_guard_reset(res: Vector2Int_t, max_tex: i32, msaa_samples: i32, est_mb: u64, budget_mb: u64, vram_mb: i32) {
+    if VRAM_GUARD_ACTIVE.compare_exchange(false, true, Ordering::SeqCst, Ordering::Relaxed).is_err() {
+        return;
+    }
+    warn!(
+        "Resolution {}x{} ({}x MSAA, ~{} MB est. RT VRAM) exceeds GPU limits (max {} px, {}/{} MB VRAM); resetting render_scale and virtual_res_mult to 1.0",
+        res.x, res.y, msaa_samples, est_mb, max_tex, budget_mb, vram_mb
+    );
+    std::thread::spawn(move || {
+        let hachimi = Hachimi::instance();
+        let mut cfg = (*hachimi.config.load_full()).clone();
+        cfg.render_scale = 1.0;
+        cfg.virtual_res_mult = 1.0;
+        if let Err(e) = hachimi.save_and_reload_config(cfg) {
+            error!("Failed to save config after VRAM guard reset: {}", e);
+        }
+        if let Some(gui_mutex) = Gui::instance() {
+            let msg = format!(
+                "Render Scale and Virtual Resolution Multiplier were reset to 1.0 because {}x{} ({}x MSAA, ~{} MB est. RT VRAM) exceeded safe GPU limits (max {} px, {} MB / {} MB VRAM).",
+                res.x, res.y, msaa_samples, est_mb, max_tex, budget_mb, vram_mb
+            );
+            gui_mutex.lock().unwrap_or_else(|e| e.into_inner())
+                .show_window(Box::new(SimpleOkDialog::new("Graphics Guard", &msg, || {})));
+        }
+        VRAM_GUARD_ACTIVE.store(false, Ordering::Release);
+    });
+}
+
 type GetVirtualResolution3DFn = extern "C" fn(this: *mut Il2CppObject, is_forced_wide_aspect: bool) -> Vector2Int_t;
 extern "C" fn GetVirtualResolution3D(this: *mut Il2CppObject, is_forced_wide_aspect: bool) -> Vector2Int_t {
-    let mut res = get_orig_fn!(GetVirtualResolution3D, GetVirtualResolution3DFn)(this, is_forced_wide_aspect);
-    let mult = Hachimi::instance().config.load().virtual_res_mult;
-    if mult != 1.0 &&
-        !SingleModeStartResultCharaViewer::setting_up_image_effect() &&
-        !LowResolutionCamera::creating_render_texture()
-    {
-        res *= mult;
+    let bypass = !super::GameSystem::is_initialized()
+        || SingleModeStartResultCharaViewer::setting_up_image_effect()
+        || LowResolutionCamera::creating_render_texture();
+    unsafe {
+        sync_render_scale_field(this, RESSCALE_FIELD, &ORIG_RES_SCALE, get__resolutionScale, set__resolutionScale, bypass);
+    }
+    let orig_fn = get_orig_fn!(GetVirtualResolution3D, GetVirtualResolution3DFn);
+    let mut res = orig_fn(this, is_forced_wide_aspect);
+    let config = Hachimi::instance().config.load();
+    let mult = config.virtual_res_mult;
+    if !bypass {
+        if mult != 1.0 {
+            res *= mult;
+        }
+        if config.render_scale != 1.0 || mult != 1.0 {
+            if let Some((max_tex, msaa_samples, est_mb, budget_mb, vram_mb)) = exceeds_gpu_limits(res, config.msaa) {
+                unsafe {
+                    sync_render_scale_field(this, RESSCALE_FIELD, &ORIG_RES_SCALE, get__resolutionScale, set__resolutionScale, true);
+                }
+                trigger_vram_guard_reset(res, max_tex, msaa_samples, est_mb, budget_mb, vram_mb);
+                return orig_fn(this, is_forced_wide_aspect);
+            }
+        }
     }
     res
 }
@@ -118,6 +236,9 @@ type Get3DAntiAliasingLevelFn = extern "C" fn(this: *mut Il2CppObject, allowMSAA
 extern "C" fn Get3DAntiAliasingLevel(this: *mut Il2CppObject, allowMSAA: bool) -> i32 {
     let msaa = Hachimi::instance().config.load().msaa;
     if allowMSAA && msaa != MsaaQuality::Disabled {
+        if unsafe { !ISMSAA_FIELD.is_null() } {
+            set__isMSAA(this, true);
+        }
         return msaa as i32;
     }
     get_orig_fn!(Get3DAntiAliasingLevel, Get3DAntiAliasingLevelFn)(this, allowMSAA)
@@ -179,6 +300,8 @@ pub fn init(umamusume: *const Il2CppImage) {
     unsafe {
         CLASS = GraphicSettings;
         ISMSAA_FIELD = get_field_from_name(GraphicSettings, c"_isMSAA");
+        RESSCALE_FIELD = get_field_from_name(GraphicSettings, c"_resolutionScale");
+        RESSCALE2D_FIELD = get_field_from_name(GraphicSettings, c"_resolutionScale2D");
     }
 
     #[cfg(target_os = "windows")]

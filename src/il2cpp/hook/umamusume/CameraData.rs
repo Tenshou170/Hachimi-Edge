@@ -2,7 +2,7 @@ use std::ptr::null_mut;
 use serde::{Serialize, Deserialize};
 use crate::{
     core::{capabilities::{self, Capability}, Hachimi},
-    il2cpp::{symbols::{get_class_opt, get_method_addr}, types::*}
+    il2cpp::{symbols::{get_class_opt, get_field_from_name, get_method_addr}, types::*}
 };
 
 #[derive(Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -27,6 +27,8 @@ impl_addr_wrapper_fn!(set_IsOverrideShadowResolution, SET_ISOVERRIDESHADOWRESOLU
 static mut SET_OVERRIDESHADOWRESOLUTION_ADDR: usize = 0;
 impl_addr_wrapper_fn!(set_OverrideShadowResolution, SET_OVERRIDESHADOWRESOLUTION_ADDR, (), this: *mut Il2CppObject, value: ShadowResolution);
 
+def_field_value_accessors!(get_MaxShadowDistanceField, set_MaxShadowDistanceField, MAXSHADOWDISTANCE_FIELD, f32);
+
 pub fn raise_shadow_distance_to_floor(value: f32, floor: f32) -> f32 {
     if floor > 0.0 && value > 0.0 && value < floor {
         floor
@@ -42,6 +44,19 @@ extern "C" fn set_MaxShadowDistance(this: *mut Il2CppObject, value: f32) {
     get_orig_fn!(set_MaxShadowDistance, SetMaxShadowDistanceFn)(this, value)
 }
 
+type InitializeFn = extern "C" fn(this: *mut Il2CppObject, renderer_index: i32);
+extern "C" fn Initialize(this: *mut Il2CppObject, renderer_index: i32) {
+    get_orig_fn!(Initialize, InitializeFn)(this, renderer_index);
+    if unsafe { !MAXSHADOWDISTANCE_FIELD.is_null() } {
+        let floor = Hachimi::instance().config.load().shadow_distance;
+        let current = get_MaxShadowDistanceField(this);
+        let raised = raise_shadow_distance_to_floor(current, floor);
+        if raised != current {
+            set_MaxShadowDistanceField(this, raised);
+        }
+    }
+}
+
 pub fn init(umamusume: *const Il2CppImage) {
     // `Gallop.RenderPipeline` does not exist on every client (the Global build
     // renders through a different pipeline), so probe for it instead of
@@ -55,10 +70,14 @@ pub fn init(umamusume: *const Il2CppImage) {
         CLASS = CameraData;
         SET_ISOVERRIDESHADOWRESOLUTION_ADDR = get_method_addr(CameraData, c"set_IsOverrideShadowResolution", 1);
         SET_OVERRIDESHADOWRESOLUTION_ADDR = get_method_addr(CameraData, c"set_OverrideShadowResolution", 1);
+        MAXSHADOWDISTANCE_FIELD = get_field_from_name(CameraData, c"<MaxShadowDistance>k__BackingField");
     }
 
     let SetMaxShadowDistance_addr = get_method_addr(CameraData, c"set_MaxShadowDistance", 1);
     new_hook!(SetMaxShadowDistance_addr, set_MaxShadowDistance);
+
+    let Initialize_addr = get_method_addr(CameraData, c"Initialize", 1);
+    new_hook!(Initialize_addr, Initialize);
 
     // The shadow options only make sense when the whole pipeline is present:
     // resolution lives here, per-cascade resolution in CascadeShadow, and the

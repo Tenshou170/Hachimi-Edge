@@ -7,15 +7,16 @@ use windows::{core::HRESULT, Win32::Graphics::{
     Dxgi::{Common::DXGI_FORMAT_R8G8B8A8_UNORM, IDXGISwapChain}
 }};
 
-use crate::core::Error;
+use crate::{core::Error, windows::hachimi_impl::SmaaQuality};
 
-use super::d3d11_backup;
+use super::{d3d11_backup, smaa::SmaaPass};
 
 pub struct D3D11Painter {
     pub renderer: egui_directx11::Renderer,
     pub swap_chain: IDXGISwapChain,
     render_target: Option<ID3D11RenderTargetView>,
-    backup_state: d3d11_backup::BackupState
+    backup_state: d3d11_backup::BackupState,
+    smaa: Option<SmaaPass>,
 }
 
 impl D3D11Painter {
@@ -26,12 +27,14 @@ impl D3D11Painter {
         let renderer = egui_directx11::Renderer::new(&device).map_err(|e|
             Error::RuntimeError(e.to_string())
         )?;
+        let smaa = SmaaPass::new(&device);
 
         let mut painter = D3D11Painter {
             renderer,
             swap_chain,
             render_target: None,
-            backup_state: Default::default()
+            backup_state: Default::default(),
+            smaa,
         };
         painter.init_render_target();
 
@@ -57,6 +60,9 @@ impl D3D11Painter {
     /// Call this in the ResizeBuffers hook, with orig_fn calling the original function
     pub fn resize_buffers(&mut self, orig_fn: impl FnOnce() -> HRESULT) -> HRESULT {
         self.render_target = None;
+        if let Some(smaa) = &mut self.smaa {
+            smaa.reset_targets();
+        }
         if let Ok(device) = self.get_device() {
             if let Ok(ctx) = Self::get_device_context(&device) {
                 unsafe {
@@ -100,6 +106,20 @@ impl D3D11Painter {
             error!("Failed to create render target view: {}", e);
             return;
         };
+    }
+
+    pub fn apply_smaa(&mut self, quality: SmaaQuality, temporal: bool) -> Result<(), Error> {
+        if quality == SmaaQuality::Off || self.render_target.is_none() || self.smaa.is_none() {
+            return Ok(());
+        }
+        let device = self.get_device()?;
+        let device_context = Self::get_device_context(&device)?;
+        let render_target = self.render_target.as_ref().unwrap();
+        let smaa = self.smaa.as_mut().unwrap();
+        unsafe { self.backup_state.save(&device_context); }
+        smaa.apply(&device, &device_context, &self.swap_chain, render_target, quality, temporal);
+        unsafe { self.backup_state.restore(&device_context); }
+        Ok(())
     }
 
     /// Call this in the Present hook, before calling the orig fn
