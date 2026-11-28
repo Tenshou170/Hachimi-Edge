@@ -4,8 +4,13 @@ use crate::windows::free_camera::{self, CameraScene};
 #[cfg(target_os = "windows")]
 use crate::core::live_utils;
 #[cfg(target_os = "windows")]
-use super::Director;// use std::sync::atomic::{AtomicBool, Ordering};
-// pub static GAME_INITIALIZED: AtomicBool = AtomicBool::new(false);
+use std::sync::atomic::{AtomicBool, Ordering};
+use super::Director;
+
+static GAME_INITIALIZED: AtomicBool = AtomicBool::new(false);
+pub fn is_initialized() -> bool {
+    GAME_INITIALIZED.load(Ordering::Relaxed)
+}
 
 use super::GraphicSettings::{self, MsaaQuality};
 
@@ -71,6 +76,7 @@ extern "C" fn GameSystem_LateUpdate(this: *mut Il2CppObject) {
 
 // good hook for initializing values i guess
 pub fn on_game_initialized() {
+    GAME_INITIALIZED.store(true, Ordering::Relaxed);
     Hachimi::instance().init_character_data();
     #[cfg(target_os = "android")]
     crate::android::utils::set_audio_capture_policy_all();

@@ -62,6 +62,7 @@ pub mod CameraData;
 pub mod CascadeShadow;
 mod CascadeShadowForRace;
 pub mod GallopRenderer;
+mod MainLightShadowCasterPass;
 pub mod StoryTimelineBg3DClipData;
 pub mod DialogManager;
 mod CharacterHomeTopUI;
@@ -287,6 +288,7 @@ pub fn init() {
     CascadeShadow::init(image);
     CascadeShadowForRace::init(image);
     GallopRenderer::init(image);
+    MainLightShadowCasterPass::init(image);
     TweenAnimationTimelineComponent::init(image);
     TweenAnimationTimelineData::init(image);
     TweenAnimationTimelineSheetData::init(image);

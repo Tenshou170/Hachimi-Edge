@@ -57,3 +57,4 @@ Thumbs.db
 /.dump-analysis
 /dump.cs
 /*.cs
+/decrypt

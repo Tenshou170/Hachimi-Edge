@@ -27,7 +27,7 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
     ConfigEditor::list_tile_slider(ui, t!("config_editor.virtual_resolution_multiplier"), &mut config.virtual_res_mult, 1.0..=4.0, 0.1, 1);
     ConfigEditor::list_tile_slider(ui, t!("config_editor.ui_scale"), &mut config.ui_scale, 0.1..=10.0, 0.05, 2);
     ConfigEditor::list_tile_slider(ui, t!("config_editor.ui_animation_scale"), &mut config.ui_animation_scale, 0.1..=10.0, 0.1, 1);
-    ConfigEditor::list_tile_slider(ui, t!("config_editor.render_scale"), &mut config.render_scale, 0.1..=10.0, 0.1, 1);
+    ConfigEditor::list_tile_slider(ui, t!("config_editor.render_scale"), &mut config.render_scale, 0.1..=4.0, 0.1, 1);
 
     ConfigEditor::list_tile_combo(ui, t!("config_editor.msaa"), "msaa", &mut config.msaa, &[
         (MsaaQuality::Disabled, &t!("default")),

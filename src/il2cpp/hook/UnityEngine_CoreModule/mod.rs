@@ -28,6 +28,7 @@ pub mod Screen;
 pub mod SceneManager;
 pub mod Scene;
 pub mod Shader;
+pub mod SystemInfo;
 
 pub const HideFlags_DontUnloadUnusedAsset: i32 = 32;
 
@@ -62,6 +63,7 @@ pub fn init() {
     Scene::init(image);
     Shader::init(image);
     Screen::init(image);
+    SystemInfo::init(image);
     #[cfg(target_os = "android")]
     {
         TouchScreenKeyboard::init(image);

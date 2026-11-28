@@ -6,10 +6,10 @@ use crate::{
     }
 };
 
-type UpdateShadowSettingsFn = extern "C" fn(this: *mut Il2CppObject, rendering_data: *mut Il2CppObject);
-extern "C" fn UpdateShadowSettings(this: *mut Il2CppObject, rendering_data: *mut Il2CppObject) {
-    get_orig_fn!(UpdateShadowSettings, UpdateShadowSettingsFn)(this, rendering_data);
+type SetupFn = extern "C" fn(this: *mut Il2CppObject, context: usize, rendering_data: *mut Il2CppObject);
+extern "C" fn Setup(this: *mut Il2CppObject, context: usize, rendering_data: *mut Il2CppObject) {
     UniversalRenderPipelineAsset::apply_shadow_overrides();
+    get_orig_fn!(Setup, SetupFn)(this, context, rendering_data);
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
@@ -17,6 +17,6 @@ pub fn init(umamusume: *const Il2CppImage) {
         return;
     };
 
-    let UpdateShadowSettings_addr = get_method_addr(GallopRenderer, c"UpdateShadowSettings", 1);
-    new_hook!(UpdateShadowSettings_addr, UpdateShadowSettings);
+    let Setup_addr = get_method_addr(GallopRenderer, c"Setup", 2);
+    new_hook!(Setup_addr, Setup);
 }
