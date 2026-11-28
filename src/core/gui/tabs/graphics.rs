@@ -33,6 +33,18 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
         (MsaaQuality::Disabled, &t!("default")),
         (MsaaQuality::_2x, "2x"), (MsaaQuality::_4x, "4x"), (MsaaQuality::_8x, "8x"),
     ]);
+    #[cfg(target_os = "windows")]
+    {
+        use crate::windows::hachimi_impl::SmaaQuality;
+        ConfigEditor::list_tile_combo(ui, t!("config_editor.smaa"), "smaa", &mut config.windows.smaa, &[
+            (SmaaQuality::Off, &t!("off")),
+            (SmaaQuality::Low, &t!("low")),
+            (SmaaQuality::Medium, &t!("medium")),
+            (SmaaQuality::High, &t!("high")),
+            (SmaaQuality::Ultra, "Ultra"),
+        ]);
+        ConfigEditor::list_tile_switch(ui, t!("config_editor.smaa_temporal"), &mut config.windows.smaa_temporal, true);
+    }
     ConfigEditor::list_tile_combo(ui, t!("config_editor.aniso_level"), "aniso_level", &mut config.aniso_level, &[
         (AnisoLevel::Default, &t!("default")),
         (AnisoLevel::_2x, "2x"), (AnisoLevel::_4x, "4x"),
