@@ -1557,6 +1557,7 @@ pub struct CommonOverrides {
     pub position_offset_x: Option<f32>,
     pub position_offset_y: Option<f32>,
     pub text_override: Option<String>,
+    pub content_size_fitter: Option<bool>,
 }
 
 impl CommonOverrides {
@@ -1578,6 +1579,7 @@ impl CommonOverrides {
             || self.offset_max_x.is_some()
             || self.offset_max_y.is_some()
             || self.font_size.is_some()
+            || self.content_size_fitter.is_some()
     }
 }
 
@@ -1955,6 +1957,8 @@ pub struct LocalizedDataConfig {
     pub text_common_best_fit: bool,
     #[serde(default)]
     pub now_loading_comic_title_ellipsis: bool,
+    #[serde(default)]
+    pub race_entry_landscape_disable_tategaki: bool,
 
     #[serde(default)]
     pub remove_ruby: bool,

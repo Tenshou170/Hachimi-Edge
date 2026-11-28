@@ -1,8 +1,9 @@
 use crate::{
-    core::Hachimi,
+    core::{game::Region, Hachimi},
     il2cpp::{
+        ext::Il2CppObjectExt,
         hook::{
-            UnityEngine_CoreModule::Object,
+            UnityEngine_CoreModule::{Component, Object, RectTransform},
             UnityEngine_UI::Text,
         },
         sql::TextDataQuery,
@@ -42,11 +43,17 @@ fn UpdateItemCommon(this: *mut Il2CppObject, skill_info: *mut Il2CppObject, orig
 
     let name = get__nameText(this);
     let desc = get__descText(this);
+    let is_small_jp = Hachimi::instance().game.region == Region::Japan
+        && !this.is_null()
+        && unsafe { &*this }.name() == "PartsSingleModeSkillListItem_S";
 
     // Name should always exist, but let's be sure.
     if !name.is_null() && Object::op_Implicit(name) {
         Text::set_horizontalOverflow(name, 0);
         Text::set_resizeTextForBestFit(name, true);
+        if is_small_jp {
+            Text::set_resizeTextMaxSize(name, 26);
+        }
     }
 
     if !skill_info.is_null() && get_IsDrawDesc(skill_info) && !desc.is_null() && Object::op_Implicit(desc) {
@@ -54,6 +61,17 @@ fn UpdateItemCommon(this: *mut Il2CppObject, skill_info: *mut Il2CppObject, orig
         Text::set_resizeTextForBestFit(desc, true);
         Text::set_resizeTextMinSize(desc, 14);
         Text::set_resizeTextMaxSize(desc, 30);
+    }
+
+    if is_small_jp && !name.is_null() {
+        let name_tr = Component::get_transform(name);
+        if !name_tr.is_null() {
+            RectTransform::set_sizeDelta(name_tr, Vector2_t { x: -172.0, y: 68.0 });
+
+            let mut anchored_pos = RectTransform::get_anchoredPosition(name_tr);
+            anchored_pos.y = 3.29993;
+            RectTransform::set_anchoredPosition(name_tr, anchored_pos);
+        }
     }
 
     if let Some(mult) = Hachimi::instance().localized_data.load().config.skill_list_item_desc_font_size_multiplier {

@@ -13,11 +13,14 @@ use crate::{
         template, 
         Hachimi, 
         hachimi::{CommonOverrides, SiblingOverride, TextPropertyOverrides}
-    }, 
+    },
     il2cpp::{
         api::il2cpp_class_is_assignable_from, 
         ext::{Il2CppObjectExt, Il2CppStringExt, StringExt}, 
-        hook::UnityEngine_CoreModule::{GameObject, Object, RectTransform, Transform}, 
+        hook::{
+            UnityEngine_CoreModule::{Behaviour, GameObject, Object, RectTransform, Transform},
+            UnityEngine_UI::ContentSizeFitter,
+        },
         sql::{IS_SYSTEM_TEXT_QUERY, TDQ_IS_SKILL_LEARNING_QUERY}, 
         symbols::get_method_addr, 
         types::*
@@ -271,19 +274,20 @@ extern "C" fn PopulateWithErrors(
             };
 
             let path = get_path!();
+            let csf_status = get_content_size_fitter_status(context);
             if hashed_text.is_some() {
-                info!("[Hashed Text] Hash: {:X}, Original: [{}], Processed: [{}], FontSize: {}, BestFit: {}, HorizontalOverflow: {}, VerticalOverflow: {}, RichText: {}, SizeDelta: (x: {}, y: {}), AnchoredPosition: (x: {}, y: {}), AnchorMin: (x: {}, y: {}), AnchorMax: (x: {}, y: {}), Pivot: (x: {}, y: {}), TextAnchor: {}, Extents: (x: {}, y: {}), Object: {}",
+                info!("[Hashed Text] Hash: {:X}, Original: [{}], Processed: [{}], FontSize: {}, BestFit: {}, HorizontalOverflow: {}, VerticalOverflow: {}, RichText: {}, ContentSizeFitter: {}, SizeDelta: (x: {}, y: {}), AnchoredPosition: (x: {}, y: {}), AnchorMin: (x: {}, y: {}), AnchorMax: (x: {}, y: {}), Pivot: (x: {}, y: {}), TextAnchor: {}, Extents: (x: {}, y: {}), Object: {}",
                     hash, safe_orig, safe_processed, settings.fontSize, settings.resizeTextForBestFit,
                     settings.horizontalOverflow, settings.verticalOverflow,
-                    settings.richText, ctx_sd.x, ctx_sd.y, ctx_pos.x, ctx_pos.y,
+                    settings.richText, csf_status, ctx_sd.x, ctx_sd.y, ctx_pos.x, ctx_pos.y,
                     ctx_amin.x, ctx_amin.y, ctx_amax.x, ctx_amax.y, ctx_pivot.x, ctx_pivot.y,
                     settings.textAnchor,
                     settings.generationExtents.x, settings.generationExtents.y, path);
             } else {
-                info!("[Generic Text] Original: [{}], Processed: [{}], FontSize: {}, BestFit: {}, HorizontalOverflow: {}, VerticalOverflow: {}, RichText: {}, SizeDelta: (x: {}, y: {}), AnchoredPosition: (x: {}, y: {}), AnchorMin: (x: {}, y: {}), AnchorMax: (x: {}, y: {}), Pivot: (x: {}, y: {}), TextAnchor: {}, Extents: (x: {}, y: {}), Object: {}",
+                info!("[Generic Text] Original: [{}], Processed: [{}], FontSize: {}, BestFit: {}, HorizontalOverflow: {}, VerticalOverflow: {}, RichText: {}, ContentSizeFitter: {}, SizeDelta: (x: {}, y: {}), AnchoredPosition: (x: {}, y: {}), AnchorMin: (x: {}, y: {}), AnchorMax: (x: {}, y: {}), Pivot: (x: {}, y: {}), TextAnchor: {}, Extents: (x: {}, y: {}), Object: {}",
                     safe_orig, safe_processed, settings.fontSize, settings.resizeTextForBestFit,
                     settings.horizontalOverflow, settings.verticalOverflow,
-                    settings.richText, ctx_sd.x, ctx_sd.y, ctx_pos.x, ctx_pos.y,
+                    settings.richText, csf_status, ctx_sd.x, ctx_sd.y, ctx_pos.x, ctx_pos.y,
                     ctx_amin.x, ctx_amin.y, ctx_amax.x, ctx_amax.y, ctx_pivot.x, ctx_pivot.y,
                     settings.textAnchor,
                     settings.generationExtents.x, settings.generationExtents.y, path);
@@ -315,15 +319,35 @@ extern "C" fn PopulateWithErrors(
                 (Vector2_t::default(), Vector2_t::default(), Vector2_t::default(), Vector2_t::default(), Vector2_t::default())
             };
 
-            info!("[Generic Text] Original: [{}], FontSize: {}, BestFit: {}, HorizontalOverflow: {}, VerticalOverflow: {}, RichText: {}, SizeDelta: (x: {}, y: {}), AnchoredPosition: (x: {}, y: {}), AnchorMin: (x: {}, y: {}), AnchorMax: (x: {}, y: {}), Pivot: (x: {}, y: {}), TextAnchor: {}, Extents: (x: {}, y: {}), Object: {}",
+            let csf_status = get_content_size_fitter_status(context);
+            info!("[Generic Text] Original: [{}], FontSize: {}, BestFit: {}, HorizontalOverflow: {}, VerticalOverflow: {}, RichText: {}, ContentSizeFitter: {}, SizeDelta: (x: {}, y: {}), AnchoredPosition: (x: {}, y: {}), AnchorMin: (x: {}, y: {}), AnchorMax: (x: {}, y: {}), Pivot: (x: {}, y: {}), TextAnchor: {}, Extents: (x: {}, y: {}), Object: {}",
                 orig_s, settings.fontSize, settings.resizeTextForBestFit,
                 settings.horizontalOverflow, settings.verticalOverflow,
-                settings.richText, ctx_sd.x, ctx_sd.y, ctx_pos.x, ctx_pos.y,
+                settings.richText, csf_status, ctx_sd.x, ctx_sd.y, ctx_pos.x, ctx_pos.y,
                 ctx_amin.x, ctx_amin.y, ctx_amax.x, ctx_amax.y, ctx_pivot.x, ctx_pivot.y,
                 settings.textAnchor,
                 settings.generationExtents.x, settings.generationExtents.y, path);
         }
         orig_fn(this, str_, settings, context)
+    }
+}
+
+fn get_content_size_fitter_status(context: *mut Il2CppObject) -> &'static str {
+    if context.is_null() {
+        return "none";
+    }
+    let go = unsafe { (*context).game_object() };
+    if go.is_null() || !Object::IsNativeObjectAlive(go) {
+        return "none";
+    }
+    let csf = GameObject::GetComponent(go, ContentSizeFitter::type_object());
+    if csf.is_null() || !Object::IsNativeObjectAlive(csf) {
+        return "none";
+    }
+    if Behaviour::get_isActiveAndEnabled(csf) {
+        "true"
+    } else {
+        "false"
     }
 }
 
@@ -460,6 +484,16 @@ fn apply_common_overrides(
     let key = Object::get_instanceID(target);
 
     unsafe {
+        if let Some(csf_enabled) = props.content_size_fitter {
+            let go = (*target).game_object();
+            if !go.is_null() && Object::IsNativeObjectAlive(go) {
+                let csf = GameObject::GetComponent(go, ContentSizeFitter::type_object());
+                if !csf.is_null() && Object::IsNativeObjectAlive(csf) {
+                    Behaviour::set_enabled(csf, csf_enabled);
+                }
+            }
+        }
+
         let klass = (*target).klass();
         if il2cpp_class_is_assignable_from(RectTransform::class(), klass) {
             if let Some(sdx) = props.sizedelta_x {
