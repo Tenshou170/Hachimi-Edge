@@ -23,9 +23,7 @@ on:
       - 'assets/locales/**'
   workflow_dispatch:
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
 
 jobs:
   build-android:
@@ -46,14 +44,6 @@ jobs:
         env:
           HACHIMI_IGNORE_DIRTY: "false"
           RELEASE: "1"
-
-      - name: Attest Android
-        uses: actions/attest@v4
-        if: github.event_name != 'pull_request'
-        with:
-          subject-path: |
-            build/*.so
-            build/sha256.json
 
       - name: Upload Android binaries
         uses: actions/upload-artifact@v7
@@ -155,15 +145,6 @@ jobs:
             "hachimi_installer.exe": "$EXE_HASH"
           }
           EOF
-
-      - name: Attest Windows
-        uses: actions/attest@v4
-        if: github.event_name != 'pull_request'
-        with:
-          subject-path: |
-            build/blake3.json
-            build/hachimi.dll
-            build/hachimi_installer.exe
 
       - name: Upload Windows binaries
         uses: actions/upload-artifact@v7
