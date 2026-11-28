@@ -1,10 +1,10 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use crate::{core::Hachimi, il2cpp::{symbols::{IEnumerator, MoveNextFn, SingletonLike, get_method_addr}, types::*}};
 #[cfg(target_os = "windows")]
 use crate::windows::free_camera::{self, CameraScene};
 #[cfg(target_os = "windows")]
 use crate::core::live_utils;
 #[cfg(target_os = "windows")]
-use std::sync::atomic::{AtomicBool, Ordering};
 use super::Director;
 
 static GAME_INITIALIZED: AtomicBool = AtomicBool::new(false);
