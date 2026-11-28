@@ -168,15 +168,168 @@ float4 TemporalPS(TemporalVSOut i) : SV_TARGET {
 
     float3 mean = m1 / 9.0;
     float3 stddev = sqrt(max(0.0, m2 / 9.0 - mean * mean));
-    float3 clipMin = max(minC, mean - stddev);
-    float3 clipMax = min(maxC, mean + stddev);
+    float3 clipMin = max(minC, mean - stddev * 0.75);
+    float3 clipMax = min(maxC, mean + stddev * 0.75);
     float3 clampedHist = clamp(hist, clipMin, clipMax);
 
-    // Measure motion against unclamped history so moving edges aren't hidden by clamping
-    float3 rawDiff = abs(curr.rgb - hist);
-    float diff = max(max(rawDiff.r, rawDiff.g), rawDiff.b);
-    float alpha = lerp(0.20, 0.0, smoothstep(0.01, 0.07, diff));
+    // Gate temporal strength by local edge contrast so smooth moving surfaces keep crisp 60fps motion
+    float3 rangeVec = maxC - minC;
+    float localRange = max(max(rangeVec.r, rangeVec.g), rangeVec.b);
+    float edgeFactor = smoothstep(0.03, 0.12, localRange);
+
+    // Reject based on distance outside the 3x3 neighborhood so high-contrast 1px toon steps
+    // oscillating inside the neighborhood still stabilize, while real motion rejects cleanly.
+    float3 outVec = max(float3(0.0, 0.0, 0.0), max(minC - hist, hist - maxC));
+    float distOutside = max(max(outVec.r, outVec.g), outVec.b);
+    float motionReject = 1.0 - smoothstep(0.01, 0.10, distOutside);
+    float alpha = 0.50 * edgeFactor * motionReject;
     return float4(lerp(curr.rgb, clampedHist, alpha), curr.a);
+}
+"#;
+
+const FXAA_HLSL: &str = r#"
+cbuffer SmaaCB : register(b0) {
+    float4 rtMetrics;
+};
+Texture2D colorTex : register(t0);
+SamplerState LinearSampler : register(s0);
+
+struct FxaaVSOut {
+    float4 pos : SV_POSITION;
+    float2 uv  : TEXCOORD0;
+};
+
+FxaaVSOut FxaaVS(uint id : SV_VertexID) {
+    FxaaVSOut o;
+    o.uv = float2((id << 1) & 2, id & 2);
+    o.pos = float4(o.uv * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
+    return o;
+}
+
+float FxaaLuma(float3 rgb) {
+    return dot(rgb, float3(0.299, 0.587, 0.114));
+}
+
+float4 FxaaPS(FxaaVSOut i) : SV_TARGET {
+    float2 posM = i.uv;
+    float2 rcpFrame = rtMetrics.xy;
+    float4 rgbyM = colorTex.SampleLevel(LinearSampler, posM, 0);
+    float lumaM = FxaaLuma(rgbyM.rgb);
+    float lumaS = FxaaLuma(colorTex.SampleLevel(LinearSampler, posM, 0, int2(0, 1)).rgb);
+    float lumaE = FxaaLuma(colorTex.SampleLevel(LinearSampler, posM, 0, int2(1, 0)).rgb);
+    float lumaN = FxaaLuma(colorTex.SampleLevel(LinearSampler, posM, 0, int2(0, -1)).rgb);
+    float lumaW = FxaaLuma(colorTex.SampleLevel(LinearSampler, posM, 0, int2(-1, 0)).rgb);
+
+    float maxSM = max(lumaS, lumaM);
+    float minSM = min(lumaS, lumaM);
+    float maxESM = max(lumaE, maxSM);
+    float minESM = min(lumaE, minSM);
+    float maxWN = max(lumaN, lumaW);
+    float minWN = min(lumaN, lumaW);
+    float rangeMax = max(maxWN, maxESM);
+    float rangeMin = min(minWN, minESM);
+    float rangeMaxScaled = rangeMax * 0.125;
+    float range = rangeMax - rangeMin;
+    if (range < max(0.0625, rangeMaxScaled)) {
+        return rgbyM;
+    }
+
+    float lumaNW = FxaaLuma(colorTex.SampleLevel(LinearSampler, posM, 0, int2(-1, -1)).rgb);
+    float lumaSE = FxaaLuma(colorTex.SampleLevel(LinearSampler, posM, 0, int2(1, 1)).rgb);
+    float lumaNE = FxaaLuma(colorTex.SampleLevel(LinearSampler, posM, 0, int2(1, -1)).rgb);
+    float lumaSW = FxaaLuma(colorTex.SampleLevel(LinearSampler, posM, 0, int2(-1, 1)).rgb);
+
+    float lumaNS = lumaN + lumaS;
+    float lumaWE = lumaW + lumaE;
+    float subpixRcpRange = 1.0 / range;
+    float subpixNSWE = lumaNS + lumaWE;
+    float edgeHorz1 = (-2.0 * lumaM) + lumaNS;
+    float edgeVert1 = (-2.0 * lumaM) + lumaWE;
+
+    float lumaNESE = lumaNE + lumaSE;
+    float lumaNWNE = lumaNW + lumaNE;
+    float edgeHorz2 = (-2.0 * lumaE) + lumaNESE;
+    float edgeVert2 = (-2.0 * lumaN) + lumaNWNE;
+
+    float lumaNWSW = lumaNW + lumaSW;
+    float lumaSWSE = lumaSW + lumaSE;
+    float edgeHorz4 = (abs(edgeHorz1) * 2.0) + abs(edgeHorz2);
+    float edgeVert4 = (abs(edgeVert1) * 2.0) + abs(edgeVert2);
+    float edgeHorz3 = (-2.0 * lumaW) + lumaNWSW;
+    float edgeVert3 = (-2.0 * lumaS) + lumaSWSE;
+    float edgeHorz = abs(edgeHorz3) + edgeHorz4;
+    float edgeVert = abs(edgeVert3) + edgeVert4;
+
+    float subpixNWSWNESE = lumaNWSW + lumaNESE;
+    float lengthSign = rcpFrame.x;
+    bool horzSpan = edgeHorz >= edgeVert;
+    float subpixA = subpixNSWE * 2.0 + subpixNWSWNESE;
+
+    if (!horzSpan) lumaN = lumaW;
+    if (!horzSpan) lumaS = lumaE;
+    if (horzSpan) lengthSign = rcpFrame.y;
+    float subpixB = (subpixA * (1.0 / 12.0)) - lumaM;
+
+    float gradientN = lumaN - lumaM;
+    float gradientS = lumaS - lumaM;
+    float lumaNN = lumaN + lumaM;
+    float lumaSS = lumaS + lumaM;
+    bool pairN = abs(gradientN) >= abs(gradientS);
+    float gradient = max(abs(gradientN), abs(gradientS));
+    if (pairN) lengthSign = -lengthSign;
+    float subpixC = saturate(abs(subpixB) * subpixRcpRange);
+
+    float2 posB = posM;
+    float2 offNP;
+    offNP.x = (!horzSpan) ? 0.0 : rcpFrame.x;
+    offNP.y = (horzSpan) ? 0.0 : rcpFrame.y;
+    if (!horzSpan) posB.x += lengthSign * 0.5;
+    if (horzSpan) posB.y += lengthSign * 0.5;
+
+    float2 posN = posB - offNP;
+    float2 posP = posB + offNP;
+    float subpixD = ((-2.0) * subpixC) + 3.0;
+    float lumaEndN = FxaaLuma(colorTex.SampleLevel(LinearSampler, posN, 0).rgb);
+    float subpixE = subpixC * subpixC;
+    float lumaEndP = FxaaLuma(colorTex.SampleLevel(LinearSampler, posP, 0).rgb);
+
+    if (!pairN) lumaNN = lumaSS;
+    float gradientScaled = gradient * 0.25;
+    bool lumaMLTZero = (lumaM - lumaNN * 0.5) < 0.0;
+
+    float subpixF = subpixD * subpixE;
+    lumaEndN -= lumaNN * 0.5;
+    lumaEndP -= lumaNN * 0.5;
+    bool doneN = abs(lumaEndN) >= gradientScaled;
+    bool doneP = abs(lumaEndP) >= gradientScaled;
+    if (!doneN) posN -= offNP * 1.5;
+    if (!doneP) posP += offNP * 1.5;
+
+    float steps[4] = { 2.0, 2.0, 2.0, 4.0 };
+    [unroll]
+    for (int s = 0; s < 4; s++) {
+        if (doneN && doneP) break;
+        if (!doneN) lumaEndN = FxaaLuma(colorTex.SampleLevel(LinearSampler, posN, 0).rgb) - lumaNN * 0.5;
+        if (!doneP) lumaEndP = FxaaLuma(colorTex.SampleLevel(LinearSampler, posP, 0).rgb) - lumaNN * 0.5;
+        doneN = abs(lumaEndN) >= gradientScaled;
+        doneP = abs(lumaEndP) >= gradientScaled;
+        if (!doneN) posN -= offNP * steps[s];
+        if (!doneP) posP += offNP * steps[s];
+    }
+
+    float dstN = horzSpan ? (posM.x - posN.x) : (posM.y - posN.y);
+    float dstP = horzSpan ? (posP.x - posM.x) : (posP.y - posM.y);
+    bool directionN = dstN < dstP;
+    float dst = min(dstN, dstP);
+    bool goodSpan = ((directionN ? lumaEndN : lumaEndP) < 0.0) != lumaMLTZero;
+    float spanLength = dstP + dstN;
+    float pixelOffset = (dst * (-1.0 / spanLength)) + 0.5;
+    float subpixOffset = subpixF * subpixF * 0.75;
+    float finalOffset = max(goodSpan ? pixelOffset : 0.0, subpixOffset);
+
+    if (!horzSpan) posM.x += finalOffset * lengthSign;
+    if (horzSpan) posM.y += finalOffset * lengthSign;
+    return float4(colorTex.SampleLevel(LinearSampler, posM, 0).rgb, rgbyM.a);
 }
 "#;
 
@@ -208,6 +361,8 @@ struct RenderTargets {
 pub struct SmaaPass {
     compile: D3DCompileFn,
     shaders: Option<SmaaShaders>,
+    fxaa_vs: Option<ID3D11VertexShader>,
+    fxaa_ps: Option<ID3D11PixelShader>,
     temporal_vs: Option<ID3D11VertexShader>,
     temporal_ps: Option<ID3D11PixelShader>,
     linear_sampler: ID3D11SamplerState,
@@ -268,7 +423,7 @@ fn compile_shader(compile: D3DCompileFn, source: &str, entry: &CStr, target: &CS
 
 fn compile_preset(compile: D3DCompileFn, device: &ID3D11Device, quality: SmaaQuality) -> Option<SmaaShaders> {
     let preset_macro = match quality {
-        SmaaQuality::Off => return None,
+        SmaaQuality::Off | SmaaQuality::Fxaa => return None,
         SmaaQuality::Low => "#define SMAA_PRESET_LOW\n",
         SmaaQuality::Medium => "#define SMAA_PRESET_MEDIUM\n",
         SmaaQuality::High => "#define SMAA_PRESET_HIGH\n",
@@ -406,6 +561,8 @@ impl SmaaPass {
             Some(Self {
                 compile,
                 shaders: None,
+                fxaa_vs: None,
+                fxaa_ps: None,
                 temporal_vs: None,
                 temporal_ps: None,
                 linear_sampler: linear_sampler?,
@@ -502,13 +659,33 @@ impl SmaaPass {
         quality: SmaaQuality,
         temporal: bool,
     ) {
-        if quality == SmaaQuality::Off && !temporal {
+        if quality == SmaaQuality::Off {
             if let Some(t) = &mut self.targets {
                 t.has_history = false;
             }
             return;
         }
-        if quality != SmaaQuality::Off && self.shaders.as_ref().map(|s| s.quality) != Some(quality) {
+        if quality == SmaaQuality::Fxaa && (self.fxaa_vs.is_none() || self.fxaa_ps.is_none()) {
+            if let (Ok(vs_bc), Ok(ps_bc)) = (
+                compile_shader(self.compile, FXAA_HLSL, c"FxaaVS", c"vs_5_0").map_err(|e| error!("FXAA VS: {}", e)),
+                compile_shader(self.compile, FXAA_HLSL, c"FxaaPS", c"ps_5_0").map_err(|e| error!("FXAA PS: {}", e)),
+            ) {
+                unsafe {
+                    let mut vs = None;
+                    let mut ps = None;
+                    if device.CreateVertexShader(&vs_bc, None, Some(&mut vs)).is_ok()
+                        && device.CreatePixelShader(&ps_bc, None, Some(&mut ps)).is_ok()
+                    {
+                        self.fxaa_vs = vs;
+                        self.fxaa_ps = ps;
+                        info!("FXAA 3.11 compiled");
+                    }
+                }
+            }
+        }
+        if !matches!(quality, SmaaQuality::Off | SmaaQuality::Fxaa)
+            && self.shaders.as_ref().map(|s| s.quality) != Some(quality)
+        {
             self.shaders = compile_preset(self.compile, device, quality);
         }
         if temporal && (self.temporal_vs.is_none() || self.temporal_ps.is_none()) {
@@ -582,7 +759,16 @@ impl SmaaPass {
             ctx.VSSetConstantBuffers(0, Some(&[Some(self.cbuffer.clone())]));
             ctx.PSSetConstantBuffers(0, Some(&[Some(self.cbuffer.clone())]));
 
-            if let Some(sh) = self.shaders.as_ref().filter(|_| quality != SmaaQuality::Off) {
+            if quality == SmaaQuality::Fxaa {
+                if let (Some(f_vs), Some(f_ps)) = (&self.fxaa_vs, &self.fxaa_ps) {
+                    ctx.CopyResource(&t.color_copy, &backbuffer);
+                    ctx.OMSetRenderTargets(Some(&[Some(backbuffer_rtv.clone())]), None);
+                    ctx.VSSetShader(f_vs, None);
+                    ctx.PSSetShader(f_ps, None);
+                    ctx.PSSetShaderResources(0, Some(&[Some(t.color_srv.clone()), None, None]));
+                    ctx.Draw(3, 0);
+                }
+            } else if let Some(sh) = self.shaders.as_ref() {
                 ctx.CopyResource(&t.color_copy, &backbuffer);
 
                 // Pass 1: Color Edge Detection

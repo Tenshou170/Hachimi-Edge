@@ -27,23 +27,36 @@ pub fn render(editor: &ConfigEditor, config: &mut crate::core::hachimi::Config, 
     ConfigEditor::list_tile_slider(ui, t!("config_editor.virtual_resolution_multiplier"), &mut config.virtual_res_mult, 1.0..=4.0, 0.1, 1);
     ConfigEditor::list_tile_slider(ui, t!("config_editor.ui_scale"), &mut config.ui_scale, 0.1..=10.0, 0.05, 2);
     ConfigEditor::list_tile_slider(ui, t!("config_editor.ui_animation_scale"), &mut config.ui_animation_scale, 0.1..=10.0, 0.1, 1);
-    ConfigEditor::list_tile_slider(ui, t!("config_editor.render_scale"), &mut config.render_scale, 0.1..=4.0, 0.1, 1);
+    ConfigEditor::list_tile_slider(ui, t!("config_editor.render_scale"), &mut config.render_scale, 0.1..=4.0, 0.05, 2);
 
     ConfigEditor::list_tile_combo(ui, t!("config_editor.msaa"), "msaa", &mut config.msaa, &[
         (MsaaQuality::Disabled, &t!("default")),
         (MsaaQuality::_2x, "2x"), (MsaaQuality::_4x, "4x"), (MsaaQuality::_8x, "8x"),
     ]);
-    #[cfg(target_os = "windows")]
     {
-        use crate::windows::hachimi_impl::SmaaQuality;
-        ConfigEditor::list_tile_combo(ui, t!("config_editor.smaa"), "smaa", &mut config.windows.smaa, &[
-            (SmaaQuality::Off, &t!("off")),
-            (SmaaQuality::Low, &t!("low")),
-            (SmaaQuality::Medium, &t!("medium")),
-            (SmaaQuality::High, &t!("high")),
-            (SmaaQuality::Ultra, "Ultra"),
-        ]);
-        ConfigEditor::list_tile_switch(ui, t!("config_editor.smaa_temporal"), &mut config.windows.smaa_temporal, true);
+        use crate::core::hachimi::SmaaQuality;
+        #[cfg(target_os = "windows")]
+        let (smaa, smaa_temporal) = (&mut config.windows.smaa, &mut config.windows.smaa_temporal);
+        #[cfg(target_os = "android")]
+        let (smaa, smaa_temporal) = (&mut config.android.smaa, &mut config.android.smaa_temporal);
+
+        #[cfg(any(target_os = "windows", target_os = "android"))]
+        {
+            ConfigEditor::list_tile_combo(ui, t!("config_editor.smaa"), "smaa", smaa, &[
+                (SmaaQuality::Off, &t!("off")),
+                (SmaaQuality::Fxaa, "FXAA 3.11"),
+                (SmaaQuality::Low, "SMAA Low"),
+                (SmaaQuality::Medium, "SMAA Medium"),
+                (SmaaQuality::High, "SMAA High"),
+                (SmaaQuality::Ultra, "SMAA Ultra"),
+            ]);
+            if *smaa == SmaaQuality::Off {
+                *smaa_temporal = false;
+            }
+            ui.add_enabled_ui(*smaa != SmaaQuality::Off, |ui| {
+                ConfigEditor::list_tile_switch(ui, t!("config_editor.smaa_temporal"), smaa_temporal, true);
+            });
+        }
     }
     ConfigEditor::list_tile_combo(ui, t!("config_editor.aniso_level"), "aniso_level", &mut config.aniso_level, &[
         (AnisoLevel::Default, &t!("default")),

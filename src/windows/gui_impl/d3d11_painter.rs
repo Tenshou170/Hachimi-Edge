@@ -109,7 +109,7 @@ impl D3D11Painter {
     }
 
     pub fn apply_smaa(&mut self, quality: SmaaQuality, temporal: bool) -> Result<(), Error> {
-        if (quality == SmaaQuality::Off && !temporal) || self.render_target.is_none() || self.smaa.is_none() {
+        if quality == SmaaQuality::Off || self.render_target.is_none() || self.smaa.is_none() {
             return Ok(());
         }
         let device = self.get_device()?;
