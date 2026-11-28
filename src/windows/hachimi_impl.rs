@@ -218,7 +218,11 @@ pub struct Config {
     #[serde(default)]
     pub taskbar_show_progress_on_schedule_book: bool,
     #[serde(default)]
-    pub free_camera: super::free_camera::FreeCameraConfig
+    pub free_camera: super::free_camera::FreeCameraConfig,
+    #[serde(default)]
+    pub smaa: SmaaQuality,
+    #[serde(default)]
+    pub smaa_temporal: bool,
 }
 
 impl Config {
@@ -249,3 +253,5 @@ pub enum ResolutionScaling {
 impl ResolutionScaling {
     pub fn is_not_default(&self) -> bool { *self != Self::Default }
 }
+
+pub use crate::core::hachimi::SmaaQuality;

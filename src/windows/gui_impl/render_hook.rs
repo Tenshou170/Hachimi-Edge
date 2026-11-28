@@ -97,13 +97,27 @@ extern "C" fn IDXGISwapChain_Present(this: *mut c_void, sync_interval: c_uint, f
             return res;
         }
     };
-    // Skip if the GUI is empty or the window is minimized
-    if gui.is_empty() || unsafe { IsIconic(hwnd).into() } {
+    let (smaa_quality, smaa_temporal) = {
+        let cfg = hachimi.config.load();
+        (cfg.windows.smaa, cfg.windows.smaa_temporal)
+    };
+
+    // Skip if minimized
+    if unsafe { IsIconic(hwnd).into() } {
         return orig_fn(this, sync_interval, flags);
     }
     // Check if this is the right swap chain
     let mut painter = painter_mutex.lock().unwrap_or_else(|e| e.into_inner());
     if this != painter.swap_chain().as_raw() {
+        return orig_fn(this, sync_interval, flags);
+    }
+
+    if let Err(e) = painter.apply_smaa(smaa_quality, smaa_temporal) {
+        error!("Failed to apply SMAA: {}", e);
+    }
+
+    // Skip GUI rendering if the GUI is empty
+    if gui.is_empty() {
         return orig_fn(this, sync_interval, flags);
     }
 

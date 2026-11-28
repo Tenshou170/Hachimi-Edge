@@ -105,6 +105,10 @@ pub struct Config {
     pub gui_landscape_ratio: f32,
     #[serde(default)]
     pub force_orientation_mode: i32,
+    #[serde(default)]
+    pub smaa: crate::core::hachimi::SmaaQuality,
+    #[serde(default)]
+    pub smaa_temporal: bool,
 }
 
 impl Config {
